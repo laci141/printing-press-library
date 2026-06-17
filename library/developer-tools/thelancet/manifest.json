@@ -10,9 +10,9 @@
   "license": "Apache-2.0",
   "server": {
     "type": "binary",
-    "entry_point": "bin/thelancet-pp-cli",
+    "entry_point": "bin/thelancet-pp-mcp",
     "mcp_config": {
-      "command": "${__dirname}/bin/thelancet-pp-cli",
+      "command": "${__dirname}/bin/thelancet-pp-mcp",
       "args": []
     }
   },
