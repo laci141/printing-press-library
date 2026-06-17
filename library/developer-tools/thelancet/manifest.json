@@ -8,14 +8,6 @@
     "name": "CLI Printing Press"
   },
   "license": "Apache-2.0",
-  "server": {
-    "type": "binary",
-    "entry_point": "bin/thelancet-pp-mcp",
-    "mcp_config": {
-      "command": "${__dirname}/bin/thelancet-pp-mcp",
-      "args": []
-    }
-  },
   "compatibility": {
     "claude_desktop": ">=1.0.0",
     "platforms": [
