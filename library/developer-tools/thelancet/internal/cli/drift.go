@@ -1,125 +1,112 @@
+// Hand-authored Lancet analytics command. Not generated.
+
 package cli
 
 import (
 	"fmt"
-	"time"
+	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/mvanhorn/printing-press-library/library/developer-tools/thelancet/internal/lancet"
 )
 
-// driftCmd represents the drift command
-var driftCmd = &cobra.Command{
-	Use:   "drift [journal-slug] [window1] [window2]",
-	Short: "Compare a journal's topic distribution between two year windows",
-	Long: `Drift compares how a journal's topic distribution shifts between two time windows.
-
-This command analyzes the shift in topic distribution between two specified time windows,
-helping identify emerging and fading research areas within a journal.
-
-Examples:
-  # Compare topic distribution between 2020-2021 and 2022-2023
-  thelancet-pp-cli drift flagship 2020-2021 2022-2023
-
-  # Compare two single years
-  thelancet-pp-cli drift flagship 2020 2021
-
-  # Output as JSON
-  thelancet-pp-cli drift flagship 2020-2021 2022-2023 --json
-`,
-	Args: cobra.ExactArgs(3),
-	RunE: runDrift,
+// parseYearWindow parses a "YYYY:YYYY" (or "YYYY-YYYY") window into start,end.
+func parseYearWindow(s string) (int, int, error) {
+	s = strings.TrimSpace(s)
+	sep := ":"
+	if !strings.Contains(s, ":") && strings.Contains(s, "-") {
+		sep = "-"
+	}
+	parts := strings.SplitN(s, sep, 2)
+	if len(parts) != 2 {
+		return 0, 0, fmt.Errorf("window %q must be YYYY:YYYY (e.g. 2018:2020)", s)
+	}
+	start, err1 := strconv.Atoi(strings.TrimSpace(parts[0]))
+	end, err2 := strconv.Atoi(strings.TrimSpace(parts[1]))
+	if err1 != nil || err2 != nil || start == 0 || end == 0 {
+		return 0, 0, fmt.Errorf("window %q must be YYYY:YYYY (e.g. 2018:2020)", s)
+	}
+	if start > end {
+		start, end = end, start
+	}
+	return start, end, nil
 }
 
-func init() {
-	rootCmd.AddCommand(driftCmd)
-	driftCmd.Flags().Int("limit", 20, "Maximum number of topics to display")
-}
+func newNovelDriftCmd(flags *rootFlags) *cobra.Command {
+	var journal string
+	var window1 string
+	var window2 string
+	var topN int
+	var dbPath string
 
-func runDrift(cmd *cobra.Command, args []string) error {
-	journalSlug := args[0]
-	window1 := args[1]
-	window2 := args[2]
+	cmd := &cobra.Command{
+		Use:   "drift",
+		Short: "Compare a journal's topic distribution between two year windows",
+		Long: "Show how a Lancet journal's topic mix shifts between two publication-year\n" +
+			"windows (positive delta = rising in the later window). Reads the local\n" +
+			"mirror; run 'thelancet-pp-cli refresh' first.",
+		Example:     "  thelancet-pp-cli drift --journal lancet-oncology --window1 2018:2020 --window2 2023:2024\n  thelancet-pp-cli drift --window1 2015:2019 --window2 2020:2024 --top-n 15 --json",
+		Annotations: map[string]string{"mcp:read-only": "true", "pp:happy-args": "--window1=2018:2021;--window2=2022:2026"},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if dryRunOK(flags) {
+				return nil
+			}
+			if window1 == "" || window2 == "" {
+				_ = cmd.Usage()
+				return usageErr(fmt.Errorf("--window1 and --window2 are required (e.g. --window1 2018:2020 --window2 2023:2024)"))
+			}
+			w1s, w1e, err := parseYearWindow(window1)
+			if err != nil {
+				_ = cmd.Usage()
+				return usageErr(err)
+			}
+			w2s, w2e, err := parseYearWindow(window2)
+			if err != nil {
+				_ = cmd.Usage()
+				return usageErr(err)
+			}
+			if w2s <= w1e {
+				_ = cmd.Usage()
+				return usageErr(fmt.Errorf("window2 must start after window1 ends: window1 ends %d, window2 starts %d", w1e, w2s))
+			}
+			issn, err := resolveJournalISSN(journal)
+			if err != nil {
+				_ = cmd.Usage()
+				return err
+			}
+			st, err := ensureLancetStore(cmd, flags, dbPath)
+			if err != nil {
+				return err
+			}
+			defer st.Close()
 
-	// Parse and validate year windows
-	w1s, w1e, err := parseYearWindow(window1)
-	if err != nil {
-		_ = cmd.Usage()
-		return fmt.Errorf("invalid window1: %w", err)
+			rows, err := lancet.TopicDrift(cmd.Context(), st.DB(), issn, w1s, w1e, w2s, w2e, topN)
+			if err != nil {
+				return fmt.Errorf("computing drift: %w", err)
+			}
+			if rows == nil {
+				rows = []lancet.TopicShift{}
+			}
+			if done, err := emitLancet(cmd, flags, rows); done || err != nil {
+				return err
+			}
+			if len(rows) == 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), "no topic data in those windows (try wider windows or run refresh)")
+				return nil
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "%-44s %6s %6s %9s\n", "TOPIC", "W1", "W2", "ΔSHARE")
+			for _, r := range rows {
+				fmt.Fprintf(cmd.OutOrStdout(), "%-44.44s %6d %6d %+8.1f%%\n", r.Topic, r.Window1Count, r.Window2Count, r.DeltaShare*100)
+			}
+			return nil
+		},
 	}
-	w2s, w2e, err := parseYearWindow(window2)
-	if err != nil {
-		_ = cmd.Usage()
-		return fmt.Errorf("invalid window2: %w", err)
-	}
-
-	// CHECK: window2 must start after window1 ends (no overlap)
-	if w2s <= w1e {
-		return fmt.Errorf("window2 must start after window1 ends: window1 ends %d, window2 starts %d", w1e, w2s)
-	}
-
-	// Get journal ISSN from slug
-	issn, err := getJournalISSN(journalSlug)
-	if err != nil {
-		return fmt.Errorf("get journal: %w", err)
-	}
-
-	// Ensure store exists and has data
-	store, err := ensureLancetStore()
-	if err != nil {
-		return fmt.Errorf("ensure store: %w", err)
-	}
-	defer store.Close()
-
-	limit, _ := cmd.Flags().GetInt("limit")
-
-	// Query drift data
-	drift, err := store.TopicDrift(cmd.Context(), issn, w1s, w1e, w2s, w2e, limit)
-	if err != nil {
-		return fmt.Errorf("query drift: %w", err)
-	}
-
-	// Output results
-	if len(drift) == 0 {
-		fmt.Println("No topic drift data found for the specified windows.")
-		return nil
-	}
-
-	output, err := formatOutput(cmd, drift)
-	if err != nil {
-		return fmt.Errorf("format output: %w", err)
-	}
-	fmt.Print(output)
-
-	return nil
-}
-
-// yearLowerBound returns the starting year for a given number of years back from current.
-func yearLowerBound(years int) int {
-	currentYear := time.Now().Year()
-	return currentYear - years + 1
-}
-
-// getJournalISSN returns the ISSN for a given journal slug.
-func getJournalISSN(slug string) (string, error) {
-	// This is a simplified version - in real implementation, this would look up from journals registry
-	journalMap := map[string]string{
-		"flagship": "0140-6736",    // The Lancet
-		"oncology": "1470-2045",    // Lancet Oncology
-		"neurology": "1474-4422",   // Lancet Neurology
-		"infectious": "1473-3099",  // Lancet Infectious Diseases
-		"respiratory": "2213-2600", // Lancet Respiratory Medicine
-		"psychiatry": "2215-0366",  // Lancet Psychiatry
-		"child": "2352-4642",       // Lancet Child & Adolescent Health
-		"healthy": "2468-2667",     // Lancet Healthy Longevity
-		"microbe": "2666-5247",     // Lancet Microbe
-		"rheumatology": "2665-9913", // Lancet Rheumatology
-		"regional": "2666-5352",     // Lancet Regional Health
-		"digital": "2589-7500",      // Lancet Digital Health
-		"planetary": "2542-5196",    // Lancet Planetary Health
-	}
-	
-	if issn, ok := journalMap[slug]; ok {
-		return issn, nil
-	}
-	return "", fmt.Errorf("unknown journal slug: %s", slug)
+	cmd.Flags().StringVar(&journal, "journal", "", "Scope to a Lancet journal slug, or omit for all")
+	cmd.Flags().StringVar(&window1, "window1", "", "Earlier year window, YYYY:YYYY (e.g. 2018:2020)")
+	cmd.Flags().StringVar(&window2, "window2", "", "Later year window, YYYY:YYYY (e.g. 2023:2024)")
+	cmd.Flags().IntVar(&topN, "top-n", 20, "Maximum topics to return (largest absolute share change)")
+	cmd.Flags().StringVar(&dbPath, "db", "", "Database path (default ~/.local/share/thelancet-pp-cli/data.db)")
+	return cmd
 }
