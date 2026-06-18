@@ -44,6 +44,7 @@ func EnsureSchema(ctx context.Context, db *sql.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_lancet_works_year ON lancet_works(pub_year)`,
 		`CREATE INDEX IF NOT EXISTS idx_lancet_auth_author ON lancet_authorships(author_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_lancet_affil_inst ON lancet_affiliations(institution_name)`,
+		`CREATE INDEX IF NOT EXISTS idx_lancet_affil_work_author ON lancet_affiliations(work_id, author_id)`,
 	}
 	for _, s := range stmts {
 		if _, err := db.ExecContext(ctx, s); err != nil {

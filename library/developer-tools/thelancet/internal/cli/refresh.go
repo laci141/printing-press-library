@@ -4,6 +4,7 @@ package cli
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -95,11 +96,11 @@ func newLancetRefreshCmd(flags *rootFlags) *cobra.Command {
 }
 
 // yearLowerBound converts a "last N years" window into an absolute lower-bound
-// year, using a fixed current-year reference. 0 means no bound.
+// year, using the current calendar year as the reference. 0 means no bound.
 func yearLowerBound(years int) int {
 	if years <= 0 {
 		return 0
 	}
-	const currentYear = 2026
+	currentYear := time.Now().Year()
 	return currentYear - years + 1
 }

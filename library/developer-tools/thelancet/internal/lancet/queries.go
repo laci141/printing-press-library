@@ -35,8 +35,11 @@ func RankAuthors(ctx context.Context, db *sql.DB, issn, institution string, limi
 		args = append(args, issn)
 	}
 	if institution != "" {
-		q += ` JOIN lancet_affiliations af ON af.work_id = a.work_id AND af.author_id = a.author_id`
-		where = append(where, "af.institution_name LIKE ?")
+		where = append(where, `EXISTS (
+			SELECT 1 FROM lancet_affiliations af
+			WHERE af.work_id = a.work_id AND af.author_id = a.author_id
+			  AND af.institution_name LIKE ?
+		)`)
 		args = append(args, "%"+institution+"%")
 	}
 	q += whereClause(where) + `
@@ -341,6 +344,10 @@ func VisibilityGap(ctx context.Context, db *sql.DB, institution string, minWorks
 			journalAvg[issn.String] = avg.Float64
 		}
 	}
+	if err := jrows.Err(); err != nil {
+		jrows.Close()
+		return nil, err
+	}
 	jrows.Close()
 
 	q := `
@@ -349,8 +356,11 @@ func VisibilityGap(ctx context.Context, db *sql.DB, institution string, minWorks
 		JOIN lancet_works w ON w.work_id = a.work_id`
 	var args []any
 	if institution != "" {
-		q += ` JOIN lancet_affiliations af ON af.work_id = a.work_id AND af.author_id = a.author_id`
-		q += ` WHERE af.institution_name LIKE ?`
+		q += ` WHERE EXISTS (
+			SELECT 1 FROM lancet_affiliations af
+			WHERE af.work_id = a.work_id AND af.author_id = a.author_id
+			  AND af.institution_name LIKE ?
+		)`
 		args = append(args, "%"+institution+"%")
 	}
 	rows, err := db.QueryContext(ctx, q, args...)
