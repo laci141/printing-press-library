@@ -1,3 +1,26 @@
-git add -f library\developer-tools\thelancet\cmd\thelancet-pp-mcp\main.go
-git commit -m "feat: add thelancet-pp-mcp server entrypoint"
-git push myfork feat/thelancet
+package main
+
+import (
+	"fmt"
+	"os"
+
+	"github.com/mark3labs/mcp-go/server"
+	mcptools "github.com/mvanhorn/printing-press-library/library/developer-tools/thelancet/internal/mcp"
+)
+
+var version = "0.0.0-dev"
+
+func main() {
+	s := server.NewMCPServer(
+		"The Lancet",
+		version,
+		server.WithToolCapabilities(false),
+	)
+
+	mcptools.RegisterTools(s)
+
+	if err := server.ServeStdio(s); err != nil {
+		fmt.Fprintf(os.Stderr, "MCP server error: %v\n", err)
+		os.Exit(1)
+	}
+}
