@@ -194,9 +194,13 @@ func newNovelReadingListCmd(flags *rootFlags) *cobra.Command {
 			if err := ensureReadingListTable(db); err != nil {
 				return err
 			}
-			_, err = db.DB().ExecContext(ctx, `DELETE FROM reading_list WHERE doi = ?`, doi)
+			res, err := db.DB().ExecContext(ctx, `DELETE FROM reading_list WHERE doi = ?`, doi)
 			if err != nil {
 				return fmt.Errorf("removing from reading list: %w", err)
+			}
+			n, _ := res.RowsAffected()
+			if n == 0 {
+				return fmt.Errorf("%s not found in reading list", doi)
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "removed %s from reading list\n", doi)
 			return nil
