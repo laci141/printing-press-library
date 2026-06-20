@@ -16,7 +16,7 @@ func newNovelOpenAccessCmd(flags *rootFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "open-access",
 		Short:       "Surface free full-text NEJM articles in the corpus, newest first.",
-		Long:        "Lists NEJM articles marked is_free=true in the local corpus, newest first. Requires synced and enriched data (run 'nejm-pp-cli sync' then 'nejm-pp-cli sync --enrich' or fetch articles individually).",
+		Long:        "Lists NEJM articles marked is_free=true in the local corpus, newest first. Requires synced and enriched data (run 'nejm-pp-cli sync' to fetch articles, then 'nejm-pp-cli article <doi> --enrich' to enrich individual articles).",
 		Annotations: map[string]string{"mcp:read-only": "true"},
 		Example:     "  nejm-pp-cli open-access\n  nejm-pp-cli open-access --limit 20 --json",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -56,7 +56,7 @@ func newNovelOpenAccessCmd(flags *rootFlags) *cobra.Command {
 				return fmt.Errorf("querying articles: %w", err)
 			}
 			if len(items) == 0 {
-				fmt.Fprintln(cmd.ErrOrStderr(), "hint: no open-access articles found. Run 'nejm-pp-cli sync --enrich' to fetch free/paywalled flags from article detail pages.")
+				fmt.Fprintln(cmd.ErrOrStderr(), "hint: no open-access articles found. Run 'nejm-pp-cli sync' to fetch articles, then 'nejm-pp-cli article <doi> --enrich' to enrich individual articles with free/paywalled flags.")
 				return nil
 			}
 			return nejmPrintArticles(cmd, items, flags)

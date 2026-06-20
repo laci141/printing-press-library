@@ -79,7 +79,7 @@ func newNovelTrendsCmd(flags *rootFlags) *cobra.Command {
 			})
 
 			if len(results) == 0 {
-				fmt.Fprintln(cmd.ErrOrStderr(), "hint: no data. Run 'nejm-pp-cli sync' and 'nejm-pp-cli sync --enrich' to populate specialties and types.")
+				fmt.Fprintln(cmd.ErrOrStderr(), "hint: no data. Run 'nejm-pp-cli sync' to fetch articles, then 'nejm-pp-cli article <doi> --enrich' to enrich individual articles with specialties and types.")
 				return nil
 			}
 
