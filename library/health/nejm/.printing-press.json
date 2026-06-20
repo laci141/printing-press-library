@@ -11,7 +11,7 @@
   "description": "Browse, search, and triage New England Journal of Medicine articles from the terminal, backed by a local corpus and a browser-compatible transport that clears Cloudflare.",
   "display_name": "New England Journal of Medicine",
   "generated_at": "2026-06-20T04:11:01.4130548Z",
-  "mcp_binary": "nejm-pp-mcp",
+  "mcp_binary": "nejm-pp-cli",
   "mcp_public_tool_count": 2,
   "mcp_ready": "full",
   "mcp_tool_count": 2,

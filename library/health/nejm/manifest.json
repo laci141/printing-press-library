@@ -1,6 +1,6 @@
 {
   "manifest_version": "0.3",
-  "name": "nejm-pp-mcp",
+  "name": "nejm-pp-cli",
   "display_name": "New England Journal of Medicine",
   "version": "0.0.0",
   "description": "Browse, search, and triage New England Journal of Medicine articles from the terminal, backed by a local corpus and a browser-compatible transport that clears Cloudflare.",
@@ -10,9 +10,9 @@
   "license": "Apache-2.0",
   "server": {
     "type": "binary",
-    "entry_point": "bin/nejm-pp-mcp",
+    "entry_point": "bin/nejm-pp-cli",
     "mcp_config": {
-      "command": "${__dirname}/bin/nejm-pp-mcp",
+      "command": "${__dirname}/bin/nejm-pp-cli",
       "args": []
     }
   },
