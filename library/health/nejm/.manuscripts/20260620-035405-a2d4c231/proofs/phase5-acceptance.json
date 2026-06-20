@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "api_name": "nejm",
+  "run_id": "20260620-035405-a2d4c231",
+  "status": "pass",
+  "level": "full",
+  "matrix_size": 14,
+  "tests_passed": 14,
+  "accepted_at": "2026-06-20T08:30:00Z",
+  "verdicts": {
+    "sync": "PASS: 130 articles synced from etoc + axatoc RSS feeds",
+    "current": "PASS: 12 current-issue articles listed",
+    "recent": "PASS: recently published articles listed",
+    "article": "PASS: live fetch via Surf returns title/authors/abstract/type/specialties/is_free",
+    "search": "PASS: FTS finds articles by keyword after enrichment",
+    "articles": "PASS: filter by specialty/type/author/free works",
+    "since": "PASS: time-windowed query using synced_at",
+    "digest": "PASS: groups current issue by specialty",
+    "reading-list": "PASS: add/ls/read/rm subcommands work",
+    "trends": "PASS: aggregates by specialty after enrichment",
+    "open-access": "PASS: filters is_free=1 with hint to enrich",
+    "article cite": "PASS: emits valid BibTeX and RIS",
+    "sql": "PASS: arbitrary SELECT works against local SQLite",
+    "specialty list": "PASS: lists 14 NEJM specialties via Surf (false-positive CF marker fixed)"
+  },
+  "notes": "Phase 5 dogfood against live NEJM (2026-06-20). All 14 commands verified against real data. Structural verify: 29/29 PASS. Scorecard: 77/100 Grade B."
+}

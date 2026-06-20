@@ -1,0 +1,59 @@
+{
+  "api_name": "nejm",
+  "api_version": "0.1.0",
+  "auth_type": "none",
+  "category": "health",
+  "cli_name": "nejm-pp-cli",
+  "creator": {
+    "handle": "laci141",
+    "name": "laci141"
+  },
+  "description": "Browse, search, and triage New England Journal of Medicine articles from the terminal, backed by a local corpus and a browser-compatible transport that clears Cloudflare.",
+  "display_name": "New England Journal of Medicine",
+  "generated_at": "2026-06-20T04:11:01.4130548Z",
+  "mcp_binary": "nejm-pp-mcp",
+  "mcp_public_tool_count": 2,
+  "mcp_ready": "full",
+  "mcp_tool_count": 2,
+  "novel_features": [
+    {
+      "name": "Time-windowed new articles",
+      "command": "since",
+      "status": "shipped",
+      "verified": true
+    },
+    {
+      "name": "Current-issue reading digest",
+      "command": "digest",
+      "status": "shipped",
+      "verified": true
+    },
+    {
+      "name": "Personal reading list",
+      "command": "reading-list",
+      "status": "shipped",
+      "verified": true
+    },
+    {
+      "name": "Specialty and type trends",
+      "command": "trends",
+      "status": "shipped",
+      "verified": true
+    },
+    {
+      "name": "Open-access finder",
+      "command": "open-access",
+      "status": "shipped",
+      "verified": true
+    }
+  ],
+  "owner": "laci141",
+  "printer": "laci141",
+  "printer_name": "laci141",
+  "printing_press_version": "4.24.0",
+  "run_id": "20260620-035405-a2d4c231",
+  "schema_version": 1,
+  "spec_checksum": "sha256:4e138ec91cad678f201d6a96ab4fd72d7291c6a2ae7c3fa1d39ecbffcbb9dedd",
+  "spec_format": "internal",
+  "spec_path": "nejm-spec.yaml"
+}
