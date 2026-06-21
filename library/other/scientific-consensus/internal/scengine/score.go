@@ -59,7 +59,7 @@ func Consensus(works []ScoredWork) ConsensusResult {
 		res.TotalCitations += w.CitedBy
 		designs = append(designs, Classification{Design: w.Design})
 		// weight = evidence tier * log-scaled citation mass * stance confidence
-		w8 := TierWeight(w.Design) * (1 + math.Log1p(float64(maxInt(w.CitedBy, 0)))) * clamp01(w.StanceConf, 0.3)
+		w8 := TierWeight(w.Design) * (1 + math.Log1p(float64(max(w.CitedBy, 0)))) * clamp01(w.StanceConf, 0.3)
 		switch w.Stance {
 		case StanceSupporting:
 			res.Supporting++
@@ -153,10 +153,3 @@ func clamp01(v, floor float64) float64 {
 }
 
 func round2(v float64) float64 { return math.Round(v*100) / 100 }
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
