@@ -125,6 +125,10 @@ func newNovelReadingListCmd(flags *rootFlags) *cobra.Command {
 					Read:    readAt != "",
 				})
 			}
+			// 🔧 HIÁNYZÓ rows.Err() ELLENŐRZÉS HOZZÁADVA
+			if err := rows.Err(); err != nil {
+				return fmt.Errorf("reading list iteration error: %w", err)
+			}
 			if len(results) == 0 {
 				fmt.Fprintln(cmd.ErrOrStderr(), "Reading list is empty. Use 'nejm-pp-cli reading-list add <doi>' to add articles.")
 				return nil
