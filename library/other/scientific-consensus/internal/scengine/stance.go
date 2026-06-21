@@ -81,10 +81,3 @@ func confidenceFrom(dominant, total int) float64 {
 	}
 	return conf
 }
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
