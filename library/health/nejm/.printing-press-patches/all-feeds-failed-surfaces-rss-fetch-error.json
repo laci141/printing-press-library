@@ -1,0 +1,13 @@
+{
+  "schema_version": 2,
+  "id": "all-feeds-failed-surfaces-rss-fetch-error",
+  "applied_at": "2026-06-21",
+  "base_run_id": "20260620-035405-a2d4c231",
+  "base_printing_press_version": "4.24.0",
+  "summary": "nejmSyncAllFeeds aggregates per-feed errors and returns a non-nil error only when every feed fails; partial success still returns (total, nil). nejmBaseURL became a var so tests can repoint it at an httptest server.",
+  "reason": "The article list source is RSS-only (etoc + axatoc), so a total feed outage (network partition, DNS, Cloudflare block) must reach --json consumers, not just stderr. The generated loop swallowed every error with continue and always returned (total, nil), making sync.go's rss_fetch_error sync_warning branch unreachable dead code: a count:0 run was indistinguishable from completely broken feeds. A regen must keep the all-failed return path so the structured rss_fetch_error signal stays reachable.",
+  "files": [
+    "internal/cli/nejm_feeds.go"
+  ],
+  "validated_outcome": "go test ./internal/cli/ -run TestSyncNEJMFeeds: both-succeed returns (2,nil); single flaky feed returns (1,nil) with the failed feed named on the stderr writer; both-down returns (0, err) with an aggregated error naming etoc and axatoc."
+}

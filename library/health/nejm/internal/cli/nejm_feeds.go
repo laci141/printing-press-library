@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -21,8 +22,11 @@ import (
 const (
 	nejmEtocFeedURL   = "/action/showFeed?jc=nejm&type=etoc&feed=rss"
 	nejmAxatocFeedURL = "/action/showFeed?jc=nejm&type=axatoc&feed=rss"
-	nejmBaseURL       = "https://www.nejm.org"
 )
+
+// nejmBaseURL is the origin RSS feeds and article pages are fetched from. It is
+// a var rather than a const so tests can point it at an httptest server.
+var nejmBaseURL = "https://www.nejm.org"
 
 // nejmArticleRecord is the canonical shape stored in SQLite.
 // The "id" field drives UpsertArticle's primary-key lookup.
@@ -214,19 +218,31 @@ func nejmSyncAllFeeds(ctx context.Context, db *store.Store, w io.Writer) (int, e
 		return 0, fmt.Errorf("migrating local database: %w", err)
 	}
 
-	total := 0
-	for _, feed := range []struct{ path, name string }{
+	feeds := []struct{ path, name string }{
 		{nejmEtocFeedURL, "etoc"},
 		{nejmAxatocFeedURL, "axatoc"},
-	} {
+	}
+
+	total := 0
+	var errs []error
+	for _, feed := range feeds {
 		n, err := nejmSyncFeed(ctx, db, feed.path, feed.name, w)
 		if err != nil {
 			if w != nil {
 				fmt.Fprintf(w, "warning: sync feed %s: %v\n", feed.name, err)
 			}
+			errs = append(errs, fmt.Errorf("%s: %w", feed.name, err))
 			continue
 		}
 		total += n
+	}
+
+	// Only surface a hard error when every feed failed (e.g. network partition,
+	// DNS outage, Cloudflare block). Partial success returns (total, nil) so a
+	// single flaky feed doesn't fail the whole sync. The returned error lets the
+	// caller emit a structured rss_fetch_error sync_warning in --json mode.
+	if len(errs) == len(feeds) && len(errs) > 0 {
+		return total, fmt.Errorf("all NEJM feeds failed: %w", errors.Join(errs...))
 	}
 	return total, nil
 }
