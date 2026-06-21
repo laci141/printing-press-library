@@ -49,9 +49,9 @@ func newNovelDriftCmd(flags *rootFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if fromYear == 0 || toYear == 0 || toYear < fromYear+2 {
+			if fromYear == 0 || toYear == 0 || toYear <= fromYear {
 				_ = cmd.Usage()
-				return usageErr(fmt.Errorf("--from and --to are required and the span must be at least 2 years (--to >= --from+2)"))
+				return usageErr(fmt.Errorf("--from and --to are required and --to must be greater than --from"))
 			}
 			ctx, cancel := boundCtx(cmd.Context(), flags)
 			defer cancel()
