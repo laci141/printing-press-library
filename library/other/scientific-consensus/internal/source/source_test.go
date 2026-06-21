@@ -2,6 +2,23 @@ package source
 
 import "testing"
 
+func TestRedactURL(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{"https://eutils.ncbi.nlm.nih.gov/x?db=pubmed&api_key=SECRET123", "https://eutils.ncbi.nlm.nih.gov/x?db=pubmed&api_key=REDACTED"},
+		{"https://h/x?api_key=abc&db=pubmed", "https://h/x?api_key=REDACTED&db=pubmed"},
+		{"https://h/x?token=xyz", "https://h/x?token=REDACTED"},
+		{"https://h/x?db=pubmed", "https://h/x?db=pubmed"},
+	}
+	for _, tt := range tests {
+		if got := redactURL(tt.in); got != tt.want {
+			t.Errorf("redactURL(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
 func TestNormDOI(t *testing.T) {
 	tests := []struct {
 		in   string

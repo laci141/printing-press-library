@@ -7,10 +7,22 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/mvanhorn/printing-press-library/library/other/scientific-consensus/internal/cliutil"
 )
+
+// sensitiveParamRe matches credential-bearing query params so their values can
+// be redacted before a URL is placed in an error message or log line.
+var sensitiveParamRe = regexp.MustCompile(`(?i)([?&](?:api_key|apikey|key|token|access_token)=)[^&]*`)
+
+// redactURL replaces credential query-param values with REDACTED so an optional
+// API key (e.g. NCBI_API_KEY appended to E-utilities URLs) never leaks into
+// error output. Returns the input unchanged when no match is present.
+func redactURL(u string) string {
+	return sensitiveParamRe.ReplaceAllString(u, "${1}REDACTED")
+}
 
 // normDOI lowercases and strips any URL/scheme prefix from a DOI for stable
 // cross-source joins.
@@ -46,11 +58,11 @@ func getJSONWithKey(ctx context.Context, limiter *cliutil.AdaptiveLimiter, url s
 	if resp.StatusCode == http.StatusTooManyRequests {
 		limiter.OnRateLimit()
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return &cliutil.RateLimitError{URL: url, Body: string(body)}
+		return &cliutil.RateLimitError{URL: redactURL(url), Body: string(body)}
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return fmt.Errorf("GET %s: HTTP %d: %s", url, resp.StatusCode, string(body))
+		return fmt.Errorf("GET %s: HTTP %d: %s", redactURL(url), resp.StatusCode, string(body))
 	}
 	limiter.OnSuccess()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))

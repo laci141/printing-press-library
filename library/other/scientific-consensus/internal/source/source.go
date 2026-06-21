@@ -98,11 +98,11 @@ func getJSON(ctx context.Context, limiter *cliutil.AdaptiveLimiter, url string, 
 	if resp.StatusCode == http.StatusTooManyRequests {
 		limiter.OnRateLimit()
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return &cliutil.RateLimitError{URL: url, Body: string(body)}
+		return &cliutil.RateLimitError{URL: redactURL(url), Body: string(body)}
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return fmt.Errorf("GET %s: HTTP %d: %s", url, resp.StatusCode, string(body))
+		return fmt.Errorf("GET %s: HTTP %d: %s", redactURL(url), resp.StatusCode, string(body))
 	}
 	limiter.OnSuccess()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
