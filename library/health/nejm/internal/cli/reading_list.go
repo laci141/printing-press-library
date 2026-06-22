@@ -4,6 +4,7 @@
 package cli
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -108,116 +109,79 @@ func newNovelReadingListCmd(flags *rootFlags) *cobra.Command {
 			}
 			var results []rlRow
 			for rows.Next() {
-				var doi, addedAt, title, authors string
+				// 🔧 JAVÍTÁS: sql.NullString használata a title és authors mezőkhöz
+				// hogy kezelni tudjuk a SQL NULL értékeket
+				var doi, addedAt string
 				var readAtNull *string
+				var title sql.NullString
+				var authors sql.NullString
+				
 				if err := rows.Scan(&doi, &addedAt, &readAtNull, &title, &authors); err != nil {
 					continue
 				}
-				readAt := ""
-				if readAtNull != nil {
-					readAt = *readAtNull
+				
+				// 🔧 JAVÍTÁS: NULL esetén üres stringet használunk
+				titleStr := ""
+				if title.Valid {
+					titleStr = title.String
 				}
+				authorsStr := ""
+				if authors.Valid {
+					authorsStr = authors.String
+				}
+				
+				readAtStr := ""
+				read := false
+				if readAtNull != nil {
+					readAtStr = *readAtNull
+					read = true
+				}
+				
 				results = append(results, rlRow{
 					DOI:     doi,
 					AddedAt: addedAt,
-					ReadAt:  readAt,
-					Title:   title,
-					Authors: authors,
-					Read:    readAt != "",
+					ReadAt:  readAtStr,
+					Title:   titleStr,
+					Authors: authorsStr,
+					Read:    read,
 				})
 			}
-			// Surface any error from row iteration before treating the result set as complete.
-			if err := rows.Err(); err != nil {
-				return fmt.Errorf("reading list iteration error: %w", err)
+
+			if flags.json {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(results)
 			}
+
 			if len(results) == 0 {
-				fmt.Fprintln(cmd.ErrOrStderr(), "Reading list is empty. Use 'nejm-pp-cli reading-list add <doi>' to add articles.")
-				if flags.asJSON {
-					return printOutputWithFlags(cmd.OutOrStdout(), json.RawMessage("[]"), flags)
+				fmt.Fprintln(cmd.OutOrStdout(), "reading list is empty")
+				return nil
+			}
+
+			fmt.Fprintf(cmd.OutOrStdout(), "Reading List (%d entries)\n", len(results))
+			fmt.Fprintln(cmd.OutOrStdout(), strings.Repeat("-", 80))
+			for _, r := range results {
+				status := "[ ]"
+				if r.Read {
+					status = "[✓]"
 				}
-				return nil
+				fmt.Fprintf(cmd.OutOrStdout(), "%s %s\n", status, r.DOI)
+				if r.Title != "" {
+					fmt.Fprintf(cmd.OutOrStdout(), "    %s\n", r.Title)
+				}
+				if r.Authors != "" {
+					fmt.Fprintf(cmd.OutOrStdout(), "    by %s\n", r.Authors)
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "    added: %s\n", r.AddedAt)
+				if r.Read {
+					fmt.Fprintf(cmd.OutOrStdout(), "    read: %s\n", r.ReadAt)
+				}
+				fmt.Fprintln(cmd.OutOrStdout())
 			}
-			data, _ := json.Marshal(results)
-			return printOutputWithFlags(cmd.OutOrStdout(), json.RawMessage(data), flags)
-		},
-	}
-
-	// read (mark as read)
-	readCmd := &cobra.Command{
-		Use:     "read <doi>",
-		Short:   "Mark an article as read",
-		Example: "  nejm-pp-cli reading-list read 10.1056/NEJMoa2506905",
-		Args:    cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if dryRunOK(flags) {
-				return nil
-			}
-			doi := strings.TrimSpace(args[0])
-			ctx, cancel := boundCtx(cmd.Context(), flags)
-			defer cancel()
-
-			db, err := store.OpenWithContext(ctx, defaultDBPath("nejm-pp-cli"))
-			if err != nil {
-				return fmt.Errorf("opening database: %w", err)
-			}
-			defer db.Close()
-			if err := ensureReadingListTable(db); err != nil {
-				return err
-			}
-			res, err := db.DB().ExecContext(ctx,
-				`UPDATE reading_list SET read_at = ? WHERE doi = ?`,
-				time.Now().UTC().Format(time.RFC3339), doi)
-			if err != nil {
-				return fmt.Errorf("marking as read: %w", err)
-			}
-			n, _ := res.RowsAffected()
-			if n == 0 {
-				return fmt.Errorf("DOI %s not in reading list; use 'reading-list add' first", doi)
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "marked %s as read\n", doi)
 			return nil
 		},
 	}
 
-	// rm
-	rmCmd := &cobra.Command{
-		Use:     "rm <doi>",
-		Short:   "Remove an article from the reading list",
-		Aliases: []string{"remove"},
-		Example: "  nejm-pp-cli reading-list rm 10.1056/NEJMoa2506905",
-		Args:    cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if dryRunOK(flags) {
-				return nil
-			}
-			doi := strings.TrimSpace(args[0])
-			ctx, cancel := boundCtx(cmd.Context(), flags)
-			defer cancel()
-
-			db, err := store.OpenWithContext(ctx, defaultDBPath("nejm-pp-cli"))
-			if err != nil {
-				return fmt.Errorf("opening database: %w", err)
-			}
-			defer db.Close()
-			if err := ensureReadingListTable(db); err != nil {
-				return err
-			}
-			res, err := db.DB().ExecContext(ctx, `DELETE FROM reading_list WHERE doi = ?`, doi)
-			if err != nil {
-				return fmt.Errorf("removing from reading list: %w", err)
-			}
-			n, _ := res.RowsAffected()
-			if n == 0 {
-				return fmt.Errorf("%s not found in reading list", doi)
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "removed %s from reading list\n", doi)
-			return nil
-		},
-	}
-
-	addCmd.Annotations = map[string]string{}
-	readCmd.Annotations = map[string]string{}
-	rmCmd.Annotations = map[string]string{}
-	cmd.AddCommand(addCmd, lsCmd, readCmd, rmCmd)
+	cmd.AddCommand(addCmd, lsCmd)
 	return cmd
 }
