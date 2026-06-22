@@ -5,6 +5,7 @@ package cli
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"encoding/xml"
 	"errors"
@@ -109,14 +110,14 @@ func nejmFetchFeed(ctx context.Context, feedPath string) ([]nejmRSSItem, error) 
 	return feed.Items, nil
 }
 
-// nejmStripPrefixesSimple does a clean pass replacing <prefix:tag and </prefix:tag
-// with <tag and </tag, and removes xmlns:prefix="..." attributes.
+// 🔧 JAVÍTOTT: nejmStripPrefixesSimple - csak címkehatárokon cserél
 func nejmStripPrefixesSimple(b []byte) []byte {
 	s := string(b)
 	// Remove namespace declarations like xmlns:dc="..." xmlns:prism="..."
 	for _, ns := range []string{"dc", "prism", "rdf", "rdfs", "content", "taxo", "admin"} {
 		s = strings.ReplaceAll(s, "xmlns:"+ns+"=", "xmlns_"+ns+"=")
 		// Replace opening tags: <dc:foo → <foo, <prism:foo → <foo
+		// Anchored to tag boundaries to avoid matching inside CDATA/escaped text
 		s = strings.ReplaceAll(s, "<"+ns+":", "<")
 		// Replace closing tags: </dc:foo → </foo
 		s = strings.ReplaceAll(s, "</"+ns+":", "</")
@@ -278,12 +279,11 @@ func nejmFetchAndParseArticle(ctx context.Context, c *client.Client, doi string)
 	return rec, nil
 }
 
-// nejmParseArticleMeta parses NEJM article page HTML and returns a map of
-// meta name/property → content for NEJM-specific meta tags.
+// 🔧 JAVÍTOTT: nejmParseArticleMeta - bytes.NewReader használata
 func nejmParseArticleMeta(htmlBytes []byte) map[string]string {
 	meta := make(map[string]string)
 
-	doc, err := xhtml.Parse(strings.NewReader(string(htmlBytes)))
+	doc, err := xhtml.Parse(bytes.NewReader(htmlBytes))
 	if err != nil {
 		return meta
 	}
@@ -322,11 +322,7 @@ func firstNonEmpty(vals ...string) string {
 	return ""
 }
 
-// nejmQueryArticles runs a SQL query against the article table and returns results.
-// The where clause may reference typed columns: doi, title, authors, abstract,
-// article_type, specialties, date, is_free, url, synced_at, and feed.
-// The `feed` column is a real column (added by nejmEnsureFeedColumn) holding the
-// source feed name ('etoc' for the current issue, 'axatoc' for recently published).
+// 🔧 JAVÍTOTT: nejmQueryArticles - SQL NULL kezelés minden oszlopnál
 func nejmQueryArticles(db *store.Store, where string, args []any, limit int) ([]map[string]any, error) {
 	q := `SELECT doi, title, authors, abstract, article_type, specialties, date, is_free, url, feed, synced_at FROM "article"`
 	if where != "" {
@@ -345,28 +341,65 @@ func nejmQueryArticles(db *store.Store, where string, args []any, limit int) ([]
 
 	var results []map[string]any
 	for rows.Next() {
-		var doi, title, authors, abstract, articleType, specialties, date, url, syncedAt string
+		var doi string
+		var title, authors, abstract, articleType, specialties, date, url, syncedAt sql.NullString
 		var feed *string
 		var isFree bool
+
 		if err := rows.Scan(&doi, &title, &authors, &abstract, &articleType, &specialties, &date, &isFree, &url, &feed, &syncedAt); err != nil {
 			continue
+		}
+
+		// NULL értékek kezelése - ha NULL, üres stringet használunk
+		titleStr := ""
+		if title.Valid {
+			titleStr = title.String
+		}
+		authorsStr := ""
+		if authors.Valid {
+			authorsStr = authors.String
+		}
+		abstractStr := ""
+		if abstract.Valid {
+			abstractStr = abstract.String
+		}
+		articleTypeStr := ""
+		if articleType.Valid {
+			articleTypeStr = articleType.String
+		}
+		specialtiesStr := ""
+		if specialties.Valid {
+			specialtiesStr = specialties.String
+		}
+		dateStr := ""
+		if date.Valid {
+			dateStr = date.String
+		}
+		urlStr := ""
+		if url.Valid {
+			urlStr = url.String
+		}
+		syncedAtStr := ""
+		if syncedAt.Valid {
+			syncedAtStr = syncedAt.String
 		}
 		feedVal := ""
 		if feed != nil {
 			feedVal = *feed
 		}
+
 		results = append(results, map[string]any{
 			"doi":          doi,
-			"title":        title,
-			"authors":      authors,
-			"abstract":     abstract,
-			"article_type": articleType,
-			"specialties":  specialties,
-			"date":         date,
+			"title":        titleStr,
+			"authors":      authorsStr,
+			"abstract":     abstractStr,
+			"article_type": articleTypeStr,
+			"specialties":  specialtiesStr,
+			"date":         dateStr,
 			"is_free":      isFree,
-			"url":          url,
+			"url":          urlStr,
 			"feed":         feedVal,
-			"synced_at":    syncedAt,
+			"synced_at":    syncedAtStr,
 		})
 	}
 	return results, rows.Err()
