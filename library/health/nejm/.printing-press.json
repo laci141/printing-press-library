@@ -25,10 +25,10 @@
   "api_version": "0.1.0",
   "auth_type": "none",
   "novel_features": [
-    {"name": "Time-windowed new articles", "command": "since", "status": "shipped", "verified": true},
-    {"name": "Current-issue reading digest", "command": "digest", "status": "shipped", "verified": true},
-    {"name": "Personal reading list", "command": "reading-list", "status": "shipped", "verified": true},
-    {"name": "Specialty and type trends", "command": "trends", "status": "shipped", "verified": true},
-    {"name": "Open-access finder", "command": "open-access", "status": "shipped", "verified": true}
+    {"name": "Time-windowed new articles", "command": "since", "status": "shipped", "verified": true, "description": "List new NEJM articles published within a specified time window."},
+    {"name": "Current-issue reading digest", "command": "digest", "status": "shipped", "verified": true, "description": "Generate a reading digest of the current issue."},
+    {"name": "Personal reading list", "command": "reading-list", "status": "shipped", "verified": true, "description": "Manage a personal reading list of NEJM articles."},
+    {"name": "Specialty and type trends", "command": "trends", "status": "shipped", "verified": true, "description": "Show specialty and type trends across NEJM publications."},
+    {"name": "Open-access finder", "command": "open-access", "status": "shipped", "verified": true, "description": "Find open-access articles in NEJM."}
   ]
 }
