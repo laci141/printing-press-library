@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/spf13/cobra"
 )
@@ -63,35 +64,63 @@ func newNovelDigestCmd(flags *rootFlags) *cobra.Command {
 					groupOrder = append(groupOrder, key)
 					seen[key] = true
 				}
-				// Trim abstract to 200 chars for digest view
-				if abs, ok := item["abstract"].(string); ok && len(abs) > 200 {
-					item["abstract"] = abs[:197] + "..."
+				
+				// 🔧 JAVÍTÁS: UTF-8 biztos csonkítás 200 karakterre
+				if abs, ok := item["abstract"].(string); ok {
+					// UTF-8 karakterek számlálása, nem bájtoké
+					runeCount := utf8.RuneCountInString(abs)
+					if runeCount > 200 {
+						// 197 karakter + "..." (összesen 200)
+						runes := []rune(abs)
+						item["abstract"] = string(runes[:197]) + "..."
+					}
 				}
+				
 				groups[key] = append(groups[key], item)
 			}
 
-			type digestGroup struct {
-				Group    string           `json:"group"`
-				Count    int              `json:"count"`
-				Articles []map[string]any `json:"articles"`
-			}
-			var result []digestGroup
-			for _, key := range groupOrder {
-				result = append(result, digestGroup{
-					Group:    key,
-					Count:    len(groups[key]),
-					Articles: groups[key],
-				})
+			if flags.json {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(groups)
 			}
 
-			data, err := json.Marshal(result)
-			if err != nil {
-				return err
+			fmt.Fprintf(cmd.OutOrStdout(), "Current Issue Digest (%d articles)\n\n", len(items))
+			for _, key := range groupOrder {
+				groupItems := groups[key]
+				fmt.Fprintf(cmd.OutOrStdout(), "📂 %s (%d)\n", key, len(groupItems))
+				fmt.Fprintln(cmd.OutOrStdout(), strings.Repeat("-", 40))
+				
+				for _, item := range groupItems {
+					title, _ := item["title"].(string)
+					authors, _ := item["authors"].(string)
+					abstract, _ := item["abstract"].(string)
+					free, _ := item["free"].(bool)
+					doi, _ := item["doi"].(string)
+					
+					freeFlag := "🔒"
+					if free {
+						freeFlag = "🔓"
+					}
+					
+					fmt.Fprintf(cmd.OutOrStdout(), "  %s %s\n", freeFlag, title)
+					if authors != "" {
+						fmt.Fprintf(cmd.OutOrStdout(), "    by %s\n", authors)
+					}
+					if abstract != "" {
+						fmt.Fprintf(cmd.OutOrStdout(), "    %s\n", abstract)
+					}
+					fmt.Fprintf(cmd.OutOrStdout(), "    DOI: %s\n", doi)
+					fmt.Fprintln(cmd.OutOrStdout())
+				}
+				fmt.Fprintln(cmd.OutOrStdout())
 			}
-			return printOutputWithFlags(cmd.OutOrStdout(), json.RawMessage(data), flags)
+			return nil
 		},
 	}
-	cmd.Flags().StringVar(&groupBy, "group", "specialty", "Group by: specialty or type")
-	cmd.Flags().IntVar(&limit, "limit", 0, "Maximum number of articles (0 = all)")
+
+	cmd.Flags().StringVar(&groupBy, "group", "specialty", "Group by 'specialty' or 'type'")
+	cmd.Flags().IntVar(&limit, "limit", 0, "Limit number of articles")
+	
 	return cmd
 }
