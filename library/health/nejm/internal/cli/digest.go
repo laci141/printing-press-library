@@ -79,7 +79,7 @@ func newNovelDigestCmd(flags *rootFlags) *cobra.Command {
 				groups[key] = append(groups[key], item)
 			}
 
-			if flags.json {
+			if flags.asJSON {
 				enc := json.NewEncoder(cmd.OutOrStdout())
 				enc.SetIndent("", "  ")
 				return enc.Encode(groups)
@@ -95,7 +95,7 @@ func newNovelDigestCmd(flags *rootFlags) *cobra.Command {
 					title, _ := item["title"].(string)
 					authors, _ := item["authors"].(string)
 					abstract, _ := item["abstract"].(string)
-					free, _ := item["free"].(bool)
+					free, _ := item["is_free"].(bool)
 					doi, _ := item["doi"].(string)
 					
 					freeFlag := "🔒"

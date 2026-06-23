@@ -147,7 +147,7 @@ func newNovelReadingListCmd(flags *rootFlags) *cobra.Command {
 				})
 			}
 
-			if flags.json {
+			if flags.asJSON {
 				enc := json.NewEncoder(cmd.OutOrStdout())
 				enc.SetIndent("", "  ")
 				return enc.Encode(results)
