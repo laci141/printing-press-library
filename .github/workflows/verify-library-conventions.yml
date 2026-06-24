@@ -258,6 +258,7 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: '1.26.4'
+          cache-dependency-path: tools/generate-registry/go.sum
 
       - name: Validate registry source descriptions
         # Reject PRs whose .printing-press.json + .goreleaser.yaml sources would
