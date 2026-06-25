@@ -1,0 +1,1211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEJM CLI — Demo &amp; Feature Overview</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #1f2937;
+    --border: #30363d;
+    --accent: #c41e3a;
+    --accent2: #e63950;
+    --green: #3fb950;
+    --yellow: #d29922;
+    --blue: #58a6ff;
+    --purple: #a371f7;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --code-bg: #0d1117;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    font-size: clamp(13px, 2.2vw, 15px);
+    line-height: 1.6;
+  }
+
+  /* NAV */
+  nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(13,17,23,0.96);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 16px;
+  }
+  .nav-inner {
+    max-width: 1100px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 52px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .nav-inner::-webkit-scrollbar { display: none; }
+  .nav-logo {
+    font-weight: 700;
+    font-size: 1.05em;
+    color: var(--accent2);
+    white-space: nowrap;
+    margin-right: 8px;
+  }
+  .nav-logo span { color: var(--muted); font-weight: 400; }
+  nav a {
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.82em;
+    white-space: nowrap;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: all 0.15s;
+  }
+  nav a:hover { color: var(--text); background: var(--surface2); }
+
+  /* HERO */
+  .hero {
+    background: linear-gradient(135deg, #1a0a0f 0%, #0d1117 40%, #0a0d1a 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 48px 16px 40px;
+    text-align: center;
+  }
+  .hero-badge {
+    display: inline-block;
+    background: rgba(196,30,58,0.15);
+    border: 1px solid rgba(196,30,58,0.4);
+    color: var(--accent2);
+    font-size: 0.78em;
+    font-weight: 600;
+    padding: 4px 12px;
+    border-radius: 20px;
+    letter-spacing: 0.05em;
+    margin-bottom: 16px;
+  }
+  .hero h1 {
+    font-size: clamp(1.6em, 5vw, 2.6em);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin-bottom: 12px;
+    line-height: 1.2;
+  }
+  .hero h1 .highlight { color: var(--accent2); }
+  .hero p {
+    color: var(--muted);
+    max-width: 580px;
+    margin: 0 auto 24px;
+    font-size: clamp(0.9em, 2.5vw, 1.05em);
+  }
+  .hero-stats {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .hero-stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 20px;
+    min-width: 90px;
+  }
+  .hero-stat .num {
+    font-size: 1.5em;
+    font-weight: 700;
+    color: var(--accent2);
+    display: block;
+  }
+  .hero-stat .lbl { color: var(--muted); font-size: 0.78em; }
+
+  /* MAIN */
+  .main { max-width: 1100px; margin: 0 auto; padding: 32px 16px 64px; }
+
+  /* SECTION */
+  section { margin-bottom: 48px; }
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1em;
+    flex-shrink: 0;
+  }
+  .section-header h2 {
+    font-size: clamp(1.05em, 3vw, 1.25em);
+    font-weight: 700;
+  }
+  .section-header .desc {
+    color: var(--muted);
+    font-size: 0.85em;
+    margin-left: auto;
+    text-align: right;
+  }
+
+  /* CARDS */
+  .cards { display: grid; gap: 14px; }
+  .cards.cols2 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .cards.cols3 { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    transition: border-color 0.15s;
+  }
+  .card:hover { border-color: var(--accent); }
+  .card-head {
+    padding: 12px 14px 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .card-head .tag {
+    font-size: 0.72em;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 4px;
+    letter-spacing: 0.04em;
+  }
+  .tag-live { background: rgba(63,185,80,0.15); color: var(--green); border: 1px solid rgba(63,185,80,0.3); }
+  .tag-local { background: rgba(88,166,255,0.12); color: var(--blue); border: 1px solid rgba(88,166,255,0.25); }
+  .tag-enrich { background: rgba(163,113,247,0.12); color: var(--purple); border: 1px solid rgba(163,113,247,0.25); }
+  .tag-info { background: rgba(210,153,34,0.12); color: var(--yellow); border: 1px solid rgba(210,153,34,0.25); }
+
+  .card-title { font-weight: 600; font-size: 0.92em; }
+  .card-body { padding: 12px 14px; }
+  .card-body p { color: var(--muted); font-size: 0.85em; margin-bottom: 10px; }
+
+  /* CODE BLOCK */
+  .code-block {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .code-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+  }
+  .code-lang { color: var(--muted); font-size: 0.72em; letter-spacing: 0.06em; font-family: monospace; }
+  .copy-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    color: var(--muted);
+    font-size: 0.74em;
+    padding: 3px 9px;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+  }
+  .copy-btn:hover { color: var(--text); border-color: var(--accent); }
+  .copy-btn.copied { color: var(--green); border-color: var(--green); }
+  pre {
+    padding: 12px 14px;
+    overflow-x: auto;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: clamp(0.76em, 1.8vw, 0.85em);
+    line-height: 1.6;
+  }
+  .cmd-line { color: #79c0ff; }
+  .cmd-flag { color: var(--purple); }
+  .out-key { color: var(--yellow); }
+  .out-val { color: var(--green); }
+  .out-doi { color: #58a6ff; }
+  .out-muted { color: var(--muted); }
+  .out-title { color: var(--text); }
+  .out-accent { color: var(--accent2); }
+
+  /* OUTPUT PREVIEW */
+  .output-preview {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: clamp(0.76em, 1.8vw, 0.84em);
+    line-height: 1.65;
+    overflow-x: auto;
+  }
+
+  /* CHART */
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+  }
+  .chart-card h3 {
+    font-size: 0.9em;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .chart-card p { color: var(--muted); font-size: 0.78em; margin-bottom: 14px; }
+  .chart-wrap { position: relative; height: 220px; }
+
+  /* TABLE */
+  .cmd-table { width: 100%; border-collapse: collapse; font-size: 0.83em; }
+  .cmd-table th {
+    background: var(--surface2);
+    padding: 9px 12px;
+    text-align: left;
+    border-bottom: 2px solid var(--border);
+    color: var(--muted);
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    font-size: 0.85em;
+  }
+  .cmd-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .cmd-table tr:hover td { background: var(--surface2); }
+  .cmd-name { font-family: monospace; color: var(--accent2); font-weight: 600; }
+  .cmd-desc { color: var(--muted); font-size: 0.9em; }
+  .table-wrap { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--border); }
+
+  /* INSTALL */
+  .install-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  .install-step {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .step-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+  }
+  .step-num {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: white;
+    font-size: 0.78em;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .step-head span { font-weight: 600; font-size: 0.9em; }
+  .step-body { padding: 12px 14px; }
+
+  /* ARTICLE CARD */
+  .article-list { display: grid; gap: 10px; }
+  .article-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    display: flex;
+    gap: 10px;
+  }
+  .article-item:hover { border-color: var(--accent); }
+  .article-num {
+    color: var(--accent2);
+    font-weight: 700;
+    font-size: 0.95em;
+    flex-shrink: 0;
+    min-width: 24px;
+  }
+  .article-content { flex: 1; min-width: 0; }
+  .article-title { font-weight: 600; font-size: 0.88em; margin-bottom: 4px; line-height: 1.4; }
+  .article-meta { color: var(--muted); font-size: 0.78em; display: flex; gap: 10px; flex-wrap: wrap; }
+  .article-doi { font-family: monospace; color: var(--blue); font-size: 0.76em; margin-top: 3px; }
+
+  /* PILL */
+  .pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.75em;
+    font-weight: 600;
+  }
+  .pill-red { background: rgba(196,30,58,0.15); color: var(--accent2); border: 1px solid rgba(196,30,58,0.3); }
+  .pill-green { background: rgba(63,185,80,0.12); color: var(--green); border: 1px solid rgba(63,185,80,0.25); }
+  .pill-blue { background: rgba(88,166,255,0.12); color: var(--blue); border: 1px solid rgba(88,166,255,0.25); }
+  .pill-purple { background: rgba(163,113,247,0.12); color: var(--purple); border: 1px solid rgba(163,113,247,0.25); }
+
+  /* FOOTER */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 28px 16px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.82em;
+  }
+  footer a { color: var(--blue); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+
+  /* RESPONSIVE */
+  @media (max-width: 600px) {
+    .section-header { flex-wrap: wrap; }
+    .section-header .desc { margin-left: 0; text-align: left; }
+    .hero-stats { gap: 8px; }
+    .hero-stat { padding: 10px 14px; min-width: 80px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-inner">
+    <div class="nav-logo">NEJM CLI <span>demo</span></div>
+    <a href="#install">Install</a>
+    <a href="#current">Current Issue</a>
+    <a href="#search">Search</a>
+    <a href="#specialty">Specialty</a>
+    <a href="#article">Article</a>
+    <a href="#since">Since</a>
+    <a href="#digest">Digest</a>
+    <a href="#trends">Trends</a>
+    <a href="#reading-list">Reading List</a>
+    <a href="#workflow">Workflow</a>
+    <a href="#doctor">Doctor</a>
+    <a href="#all-commands">All Commands</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-badge">NEW ENGLAND JOURNAL OF MEDICINE — CLI</div>
+  <h1>Browse <span class="highlight">NEJM</span> from the<br>Terminal</h1>
+  <p>Offline-first tool to search articles, track specialties, manage a reading list, and analyze medical literature trends — no API key required.</p>
+  <div class="hero-stats">
+    <div class="hero-stat"><span class="num">24</span><span class="lbl">Commands</span></div>
+    <div class="hero-stat"><span class="num">135</span><span class="lbl">Articles synced</span></div>
+    <div class="hero-stat"><span class="num">602KB</span><span class="lbl">Local DB</span></div>
+    <div class="hero-stat"><span class="num">v4</span><span class="lbl">DB schema</span></div>
+    <div class="hero-stat"><span class="num">0</span><span class="lbl">API keys</span></div>
+  </div>
+</div>
+
+<div class="main">
+
+<!-- INSTALL -->
+<section id="install">
+  <div class="section-header">
+    <div class="section-icon" style="background:rgba(196,30,58,0.12)">⚙️</div>
+    <h2>Installation &amp; Setup</h2>
+    <div class="desc">Termux / Android / Linux</div>
+  </div>
+  <div class="install-grid">
+    <div class="install-step">
+      <div class="step-head"><div class="step-num">1</div><span>Clone &amp; Build</span></div>
+      <div class="step-body">
+        <div class="code-block">
+          <div class="code-toolbar"><span class="code-lang">BASH</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre><span class="cmd-line">cd ~/printing-press-library/library/health/nejm</span>
+<span class="cmd-line">GOTOOLCHAIN=local go build -o nejm ./cmd/nejm-pp-cli/</span></pre>
+        </div>
+      </div>
+    </div>
+    <div class="install-step">
+      <div class="step-head"><div class="step-num">2</div><span>Sync RSS Feeds</span></div>
+      <div class="step-body">
+        <div class="code-block">
+          <div class="code-toolbar"><span class="code-lang">BASH</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre><span class="out-muted"># Current issue table of contents</span>
+<span class="cmd-line">./nejm sync <span class="cmd-flag">--feed</span> etoc</span>
+<span class="out-muted"># Ahead-of-print articles</span>
+<span class="cmd-line">./nejm sync <span class="cmd-flag">--feed</span> axatoc</span></pre>
+        </div>
+      </div>
+    </div>
+    <div class="install-step">
+      <div class="step-head"><div class="step-num">3</div><span>Verify</span></div>
+      <div class="step-body">
+        <div class="code-block">
+          <div class="code-toolbar"><span class="code-lang">BASH</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre><span class="cmd-line">./nejm doctor</span>
+<span class="out-key">version    </span> <span class="out-val">1.0.0</span>
+<span class="out-key">db_path    </span> <span class="out-val">~/.local/share/nejm-pp-cli/data.db</span>
+<span class="out-key">db_size    </span> <span class="out-val">602 KB</span>
+<span class="out-key">schema     </span> <span class="out-val">v4</span>
+<span class="out-key">articles   </span> <span class="out-val">135</span>
+<span class="out-key">status     </span> <span class="out-val">OK ✓</span></pre>
+        </div>
+      </div>
+    </div>
+    <div class="install-step">
+      <div class="step-head"><div class="step-num">4</div><span>MCP Server (optional)</span></div>
+      <div class="step-body">
+        <div class="code-block">
+          <div class="code-toolbar"><span class="code-lang">BASH</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre><span class="out-muted"># Add to Claude Desktop</span>
+<span class="cmd-line">claude mcp add nejm-pp-mcp -- nejm-pp-mcp</span></pre>
+        </div>
+        <p style="color:var(--muted);font-size:0.8em;margin-top:8px;">Enables NEJM queries directly inside Claude.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CURRENT ISSUE -->
+<section id="current">
+  <div class="section-header">
+    <div class="section-icon" style="background:rgba(196,30,58,0.12)">📰</div>
+    <h2>Current Issue</h2>
+    <div class="desc">Latest NEJM edition</div>
+  </div>
+  <div class="cards cols2">
+    <div class="card">
+      <div class="card-head">
+        <span class="tag tag-local">LOCAL DB</span>
+        <span class="card-title">Browse current issue</span>
+      </div>
+      <div class="card-body">
+        <p>Show all articles from the most recent issue with full metadata.</p>
+        <div class="code-block">
+          <div class="code-toolbar"><span class="code-lang">BASH</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre><span class="cmd-line">./nejm current <span class="cmd-flag">--human-friendly</span></span>
+<span class="cmd-line">./nejm current <span class="cmd-flag">--limit</span> 5 <span class="cmd-flag">--human-friendly</span></span>
+<span class="cmd-line">./nejm current <span class="cmd-flag">--json</span></span></pre>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <span class="tag tag-local">LIVE OUTPUT</span>
+        <span class="card-title">June 20, 2026 — Top articles</span>
+      </div>
+      <div class="card-body">
+        <div class="article-list">
+          <div class="article-item">
+            <div class="article-num">01</div>
+            <div class="article-content">
+              <div class="article-title">Unheralded Syncope from Ventricular Arrhythmia</div>
+              <div class="article-meta"><span>NEJM</span><span>Jun 20, 2026</span><span class="pill pill-red">Case Record</span></div>
+              <div class="article-doi">10.1056/NEJMicm2600597</div>
+            </div>
+          </div>
+          <div class="article-item">
+            <div class="article-num">02</div>
+            <div class="article-content">
+              <div class="article-title">Access to GLP-1s for Medicare Beneficiaries</div>
+              <div class="article-meta"><span>NEJM</span><span>Jun 20, 2026</span><span class="pill pill-blue">Perspective</span></div>
+              <div class="article-doi">10.1056/NEJMp2605694</div>
+            </div>
+          </div>
+          <div class="article-item">
+            <div class="article-num">03</div>
+            <div class="article-content">
+              <div class="article-title">Improving Global Air-Quality Indices — The WHO's New Roadmap</div>
+              <div class="article-meta"><span>NEJM</span><span>Jun 20, 2026</span><span class="pill pill-purple">Sounding Board</span></div>
+              <div class="article-doi">10.1056/NEJMsb2602703</div>
+            </div>
+          </div>
+          <div class="article-item">
+            <div class="article-num">04</div>
+            <div class="article-content">
+              <div class="article-title">Cefazolin for Methicillin-Susceptible Staphylococcus aureus Bacteremia</div>
+              <div class="article-meta"><span>NEJM</span><span>Jun 20, 2026</span><span class="pill pill-green">Original Article</span></div>
+              <div class="article-doi">10.1056/NEJMoa2500386</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- RECENT -->
+<section id="recent">
+  <div class="section-header">
+    <div class="section-icon" style="background:rgba(88,166,255,0.12)">🕐</div>
+    <h2>Recent Articles</h2>
+    <div class="desc">Latest published</div>
+  </div>
+  <div class="cards cols2">
+    <div class="card">
+      <div class="card-head">
+        <span class="tag tag-local">LOCAL DB</span>
+        <span class="card-title">Recent command</span>
+      </div>
+      <div class="card-body">
+        <p>Fetch the most recently published articles across all feeds.</p>
+        <div class="code-block">
+          <div class="code-toolbar"><span class="code-lang">BASH</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre><span class="cmd-line">./nejm recent <span class="cmd-flag">--human-friendly</span></span>
+<span class="cmd-line">./nejm recent <span class="cmd-flag">--limit</span> 10 <span class="cmd-flag">--human-friendly</span></span>
+<span class="cmd-line">./nejm recent <span class="cmd-flag">--json</span></span></pre>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <span class="tag tag-local">SINCE — Date filter</span>
+        <span class="card-title">Articles after a date</span>
+      </div>
+      <div class="card-body">
+        <p>Filter articles published after a specific date.</p>
+        <div class="code-block">
+          <div class="code-toolbar"><span class="code-lang">BASH</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre><span class="cmd-line">./nejm since 2026-06-01 <span class="cmd-flag">--human-friendly</span></span>
+<span class="cmd-line">./nejm since 2026-05-01 <span class="cmd-flag">--human-friendly</span></span>
+<span class="cmd-line">./nejm since 2026-01-01 <span class="cmd-flag">--limit</span> 20 <span class="cmd-flag">--human-friendly</span></span></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SEARCH -->
+<section id="search">
+  <div class="section-header">
+    <div class="section-icon" style="background:rgba(88,166,255,0.12)">🔍</div>
+    <h2>Search</h2>
+    <div class="desc">Full-text search in local corpus</div>
+  </div>
+  <div class="cards cols2">
+    <div class="card">
+      <div class="card-head">
+        <span class="tag tag-local">LOCAL DB</span>
+        <span class="card-title">Full-text search</span>
+      </div>
+      <div class="card-body">
+        <p>Search across all synced titles, authors, and abstracts.</p>
+        <div class="code-block">
+          <div class="code-toolbar"><span class="code-lang">BASH</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre><span class="cmd-line">./nejm search "cancer" <span class="cmd-flag">--human-friendly</span></span>
+<span class="cmd-line">./nejm search "diabetes GLP-1" <span class="cmd-flag">--human-friendly</span></span>
+<span class="cmd-line">./nejm search "cardiovascular" <span class="cmd-flag">--limit</span> 5 <span class="cmd-flag">--human-friendly</span></span>
+<span class="cmd-line">./nejm search "alzheimer" <span class="cmd-flag">--json</span></span></pre>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <span class="tag tag-live">REAL RESULTS</span>
+        <span class="card-title">Search hits from corpus</span>
+      </div>
+      <div class="card-body">
+        <div class="article-list">
+          <div class="article-item">
+            <div class="article-num">🔬</div>
+            <div class="article-content">
+              <div class="article-title">Precision Intensification in Metastatic Prostate Cancer</div>
+              <div class="article-meta"><span>McKay et al.</span><span>2026-05-30</span><span class="pill pill-green">cancer</span></div>
+            </div>
+          </div>
+          <div class="article-item">
+            <div class="article-num">💊</div>
+            <div class="article-content">
+              <div class="article-title">Finerenone in Persons with Chronic Kidney Disease without Diabetes</div>
+              <div class="article-meta"><span>NEJM</span><span>2026-06-04</span><span class="pill pill-blue">diabetes / CKD</span></div>
+            </div>
+          </div>
+          <div class="article-item">
+            <div class="article-num">🫀</div>
+            <div class="article-content">
+              <div class="article-title">Access to GLP-1s for Medicare Beneficiaries</div>
+              <div class="article-meta"><span>NEJM</span><span>2026-06-20</span><span class="pill pill-purple">GLP-1</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SPECIALTY -->
+<section id="specialty">
+  <div class="section-header">
+    <div class="section-icon" style="background:rgba(163,113,247,0.12)">🏥</div>
+    <h2>Specialty</h2>
+    <div class="desc">Browse by medical field</div>
+  </div>
+  <div class="cards cols2">
+    <div class="card">
+      <div class="card-head">
+        <span class="tag tag-local">LOCAL DB</span>
+        <span class="card-title">Browse by specialty</span>
+      </div>
+      <div class="card-body">
+        <p>Filter the corpus by medical specialty tag.</p>
+        <div class="code-block">
+          <div class="code-toolbar"><span class="code-lang">BASH</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre><span class="cmd-line">./nejm specialty "Cardiology" <span class="cmd-flag">--human-friendly</span></span>
+<span class="cmd-line">./nejm specialty "Endocrinology" <span class="cmd-flag">--human-friendly</span></span>
+<span class="cmd-line">./nejm specialty "Clinical Medicine" <span class="cmd-flag">--human-friendly</span></span>
+<span class="cmd-line">./nejm specialty "Oncology" <span class="cmd-flag">--human-friendly</span></span></pre>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="padding:20px">
+      <h3 style="font-size:0.9em;font-weight:600;margin-bottom:14px;">Articles by Specialty</h3>
+      <div class="chart-wrap">
+        <canvas id="specialtyChart"></canvas>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ARTICLE BY DOI -->
+<section id="article">
+  <div class="section-header">
+    <div class="section-icon" style="background:rgba(63,185,80,0.12)">📄</div>
+    <h2>Article Lookup</h2>
+    <div class="desc">Fetch by DOI</div>
+  </div>
+  <div class="cards cols2">
+    <div class="card">
+      <div class="card-head">
+        <span class="tag tag-live">LIVE + LOCAL</span>
+        <span class="card-title">Fetch single article</span>
+      </div>
+      <div class="card-body">
+        <p>Look up any NEJM article by its DOI — works without prior sync.</p>
+        <div class="code-block">
+          <div class="code-toolbar"><span class="code-lang">BASH</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre><span class="out-muted"># Basic lookup</span>
+<span class="cmd-line">./nejm article 10.1056/NEJMicm2600597 <span class="cmd-flag">--human-friendly</span></span>
+
+<span class="out-muted"># With enrichment (access status, metadata)</span>
+<span class="cmd-line">./nejm article 10.1056/NEJMp2605694 <span class="cmd-flag">--enrich</span> <span class="cmd-flag">--human-friendly</span></span>
+
+<span class="out-muted"># Machine output</span>
+<span class="cmd-line">./nejm article 10.1056/NEJMoa2500386 <span class="cmd-flag">--json</span></span></pre>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <span class="tag tag-live">EXAMPLE OUTPUT</span>
+        <span class="card-title">10.1056/NEJMicm2600597</span>
+      </div>
+      <div class="card-body">
+        <div class="output-preview">
+<span class="out-key">title    </span> <span class="out-title">Unheralded Syncope from Ventricular</span>
+         <span class="out-title">Arrhythmia</span>
+<span class="out-key">doi      </span> <span class="out-doi">10.1056/NEJMicm2600597</span>
+<span class="out-key">type     </span> <span class="out-val">Case Record</span>
+<span class="out-key">published</span> <span class="out-val">2026-06-20</span>
+<span class="out-key">journal  </span> <span class="out-val">N Engl J Med</span>
+<span class="out-key">volume   </span> <span class="out-val">394</span>
+<span class="out-key">issue    </span> <span class="out-val">25</span>
+<span class="out-key">access   </span> <span class="out-accent">subscription</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SINCE DATE -->
+<section id="since">
+  <div class="section-header">
+    <div class="section-icon" style="background:rgba(210,153,34,0.12)">📅</div>
+    <h2>Date Filtering</h2>
+    <div class="desc">Articles since a date</div>
+  </div>
+  <div class="cards cols2">
+    <div class="card">
+      <div class="card-head">
+        <span class="tag tag-local">LOCAL DB</span>
+        <span class="card-title">since command</span>
+      </div>
+      <div class="card-body">
+        <p>Filter articles published on or after a specific date. Useful for weekly catch-up.</p>
+        <div class="code-block">
+          <div class="code-toolbar"><span class="code-lang">BASH</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre><span class="out-muted"># Articles in June 2026</span>
+<span class="cmd-line">./nejm since 2026-06-01 <span class="cmd-flag">--human-friendly</span></span>
+
+<span class="out-muted"># Last 2 months, max 20</span>
+<span class="cmd-line">./nejm since 2026-05-01 <span class="cmd-flag">--limit</span> 20 <span class="cmd-flag">--human-friendly</span></span>
+
+<span class="out-muted"># JSON for scripting</span>
+<span class="cmd-line">./nejm since 2026-06-01 <span class="cmd-flag">--json</span></span></pre>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="padding:20px">
+      <h3 style="font-size:0.9em;font-weight:600;margin-bottom:4px;">Articles per Month (2026)</h3>
+      <p style="color:var(--muted);font-size:0.78em;margin-bottom:14px;">Based on synced RSS corpus (135 articles)</p>
+      <div class="chart-wrap">
+        <canvas id="monthlyChart"></canvas>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- DIGEST -->
+<section id="digest">
+  <div class="section-header">
+    <div class="section-icon" style="background:rgba(88,166,255,0.12)">📋</div>
+    <h2>Digest</h2>
+    <div class="desc">Weekly summary</div>
+  </div>
+  <div class="cards cols2">
+    <div class="card">
+      <div class="card-head">
+        <span class="tag tag-local">LOCAL DB</span>
+        <span class="card-title">Weekly digest</span>
+      </div>
+      <div class="card-body">
+        <p>Generates a structured summary of the week's NEJM content grouped by article type.</p>
+        <div class="code-block">
+          <div class="code-toolbar"><span class="code-lang">BASH</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre><span class="cmd-line">./nejm digest <span class="cmd-flag">--human-friendly</span></span>
+<span class="cmd-line">./nejm digest <span class="cmd-flag">--json</span></span></pre>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="padding:20px">
+      <h3 style="font-size:0.9em;font-weight:600;margin-bottom:4px;">Article Types in Current Corpus</h3>
+      <p style="color:var(--muted);font-size:0.78em;margin-bottom:14px;">Grouped by publication category</p>
+      <div class="chart-wrap">
+        <canvas id="typesChart"></canvas>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TRENDS & OPEN ACCESS -->
+<section id="trends">
+  <div class="section-header">
+    <div class="section-icon" style="background:rgba(163,113,247,0.12)">📈</div>
+    <h2>Trends &amp; Open Access</h2>
+    <div class="desc">Requires --enrich</div>
+  </div>
+  <div class="cards cols2">
+    <div class="card">
+      <div class="card-head">
+        <span class="tag tag-enrich">--ENRICH</span>
+        <span class="card-title">Trend analysis</span>
+      </div>
+      <div class="card-body">
+        <p>Analyzes publication trends over time. Requires per-article enrichment to populate specialty and type metadata.</p>
+        <div class="code-block">
+          <div class="code-toolbar"><span class="code-lang">BASH</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre><span class="out-muted"># Sync first, then enrich + trend</span>
+<span class="cmd-line">./nejm sync <span class="cmd-flag">--feed</span> etoc</span>
+<span class="cmd-line">./nejm trends <span class="cmd-flag">--enrich</span> <span class="cmd-flag">--human-friendly</span></span>
+<span class="cmd-line">./nejm trends <span class="cmd-flag">--enrich</span> <span class="cmd-flag">--json</span></span></pre>
+        </div>
+        <p style="margin-top:8px;font-size:0.8em;color:var(--yellow);">⚠ Without --enrich, output may be empty (no enriched records).</p>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <span class="tag tag-enrich">--ENRICH</span>
+        <span class="card-title">Open access filter</span>
+      </div>
+      <div class="card-body">
+        <p>Show only freely available articles. Enrichment fetches access status per DOI.</p>
+        <div class="code-block">
+          <div class="code-toolbar"><span class="code-lang">BASH</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre><span class="out-muted"># Enrich article to mark access</span>
+<span class="cmd-line">./nejm article 10.1056/NEJMicm2600597 <span class="cmd-flag">--enrich</span></span>
+
+<span class="out-muted"># Then filter open access</span>
+<span class="cmd-line">./nejm open-access <span class="cmd-flag">--enrich</span> <span class="cmd-flag">--human-friendly</span></span>
+<span class="cmd-line">./nejm open-access <span class="cmd-flag">--enrich</span> <span class="cmd-flag">--json</span></span></pre>
+        </div>
+        <p style="margin-top:8px;font-size:0.8em;color:var(--yellow);">⚠ Must run article --enrich for each DOI before open-access shows results.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- READING LIST -->
+<section id="reading-list">
+  <div class="section-header">
+    <div class="section-icon" style="background:rgba(63,185,80,0.12)">📚</div>
+    <h2>Reading List</h2>
+    <div class="desc">Personal article queue</div>
+  </div>
+  <div class="cards cols2">
+    <div class="card">
+      <div class="card-head">
+        <span class="tag tag-local">LOCAL</span>
+        <span class="card-title">Manage your reading list</span>
+      </div>
+      <div class="card-body">
+        <p>Save articles to a personal reading queue by DOI. Persists in local DB.</p>
+        <div class="code-block">
+          <div class="code-toolbar"><span class="code-lang">BASH</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre><span class="out-muted"># Add an article</span>
+<span class="cmd-line">./nejm reading-list add 10.1056/NEJMicm2600597</span>
+
+<span class="out-muted"># View your list</span>
+<span class="cmd-line">./nejm reading-list <span class="cmd-flag">--human-friendly</span></span>
+
+<span class="out-muted"># Remove an article</span>
+<span class="cmd-line">./nejm reading-list remove 10.1056/NEJMicm2600597</span>
+
+<span class="out-muted"># JSON output</span>
+<span class="cmd-line">./nejm reading-list <span class="cmd-flag">--json</span></span></pre>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <span class="tag tag-local">SQL</span>
+        <span class="card-title">Raw SQL queries</span>
+      </div>
+      <div class="card-body">
+        <p>Run arbitrary SQL against the local SQLite database for custom analysis.</p>
+        <div class="code-block">
+          <div class="code-toolbar"><span class="code-lang">BASH</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre><span class="out-muted"># Count total articles</span>
+<span class="cmd-line">./nejm sql "SELECT COUNT(*) FROM articles"</span>
+
+<span class="out-muted"># Latest 5 titles</span>
+<span class="cmd-line">./nejm sql "SELECT title, published_at FROM articles ORDER BY published_at DESC LIMIT 5"</span>
+
+<span class="out-muted"># Articles per month</span>
+<span class="cmd-line">./nejm sql "SELECT strftime('%Y-%m', published_at) AS month, COUNT(*) FROM articles GROUP BY month"</span></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- WORKFLOW -->
+<section id="workflow">
+  <div class="section-header">
+    <div class="section-icon" style="background:rgba(88,166,255,0.12)">⚡</div>
+    <h2>Workflow</h2>
+    <div class="desc">Multi-step compound operations</div>
+  </div>
+  <div class="cards cols2">
+    <div class="card">
+      <div class="card-head">
+        <span class="tag tag-live">COMPOUND</span>
+        <span class="card-title">Workflow command</span>
+      </div>
+      <div class="card-body">
+        <p>Chain multiple operations into a single natural-language command.</p>
+        <div class="code-block">
+          <div class="code-toolbar"><span class="code-lang">BASH</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre><span class="cmd-line">./nejm workflow "sync and show current issue" <span class="cmd-flag">--human-friendly</span></span>
+<span class="cmd-line">./nejm workflow "search cancer and summarize" <span class="cmd-flag">--human-friendly</span></span>
+<span class="cmd-line">./nejm workflow "digest this week" <span class="cmd-flag">--human-friendly</span></span></pre>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <span class="tag tag-local">WHICH</span>
+        <span class="card-title">Natural language → command</span>
+      </div>
+      <div class="card-body">
+        <p>Resolve a plain-English question into the correct CLI subcommand.</p>
+        <div class="code-block">
+          <div class="code-toolbar"><span class="code-lang">BASH</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre><span class="cmd-line">./nejm which "show me latest heart articles"</span>
+<span class="out-val">→ specialty "Cardiology" --human-friendly</span>
+
+<span class="cmd-line">./nejm which "find recent cancer research"</span>
+<span class="out-val">→ search "cancer" --human-friendly</span>
+
+<span class="cmd-line">./nejm which "what was published this week"</span>
+<span class="out-val">→ since 2026-06-18 --human-friendly</span></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- DOCTOR -->
+<section id="doctor">
+  <div class="section-header">
+    <div class="section-icon" style="background:rgba(210,153,34,0.12)">🩺</div>
+    <h2>Doctor &amp; Diagnostics</h2>
+    <div class="desc">System health check</div>
+  </div>
+  <div class="cards cols2">
+    <div class="card">
+      <div class="card-head">
+        <span class="tag tag-info">DIAGNOSTICS</span>
+        <span class="card-title">doctor command</span>
+      </div>
+      <div class="card-body">
+        <p>Check DB status, version, schema, article count, and connectivity. There is no <code>health</code> command — use <code>doctor</code> instead.</p>
+        <div class="code-block">
+          <div class="code-toolbar"><span class="code-lang">BASH</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre><span class="cmd-line">./nejm doctor</span>
+<span class="cmd-line">./nejm doctor <span class="cmd-flag">--json</span></span>
+<span class="cmd-line">./nejm version</span>
+<span class="cmd-line">./nejm api <span class="cmd-flag">--human-friendly</span></span></pre>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <span class="tag tag-info">LIVE OUTPUT</span>
+        <span class="card-title">./nejm doctor</span>
+      </div>
+      <div class="card-body">
+        <div class="output-preview">
+<span class="out-key">version     </span><span class="out-val">1.0.0</span>
+<span class="out-key">db_path     </span><span class="out-val">~/.local/share/nejm-pp-cli/data.db</span>
+<span class="out-key">db_size     </span><span class="out-val">602 KB  (schema v4)</span>
+<span class="out-key">articles    </span><span class="out-val">135</span>
+<span class="out-key">feeds       </span><span class="out-val">etoc, axatoc</span>
+<span class="out-key">last_sync   </span><span class="out-val">2026-06-20</span>
+<span class="out-key">connectivity</span><span class="out-val">OK ✓</span>
+<span class="out-key">status      </span><span class="out-accent">ALL SYSTEMS GO</span>
+
+<span class="out-muted">Note: use `doctor`, not `health`</span>
+<span class="out-muted">      (health command does not exist)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- OUTPUT MODES -->
+<section>
+  <div class="section-header">
+    <div class="section-icon" style="background:rgba(88,166,255,0.12)">🎛️</div>
+    <h2>Output Modes</h2>
+    <div class="desc">Flags for every use case</div>
+  </div>
+  <div class="cards cols3">
+    <div class="card">
+      <div class="card-head"><span class="tag tag-live">HUMAN</span><span class="card-title">--human-friendly</span></div>
+      <div class="card-body">
+        <p>Colored, formatted terminal output for reading in the shell.</p>
+        <div class="code-block">
+          <div class="code-toolbar"><span class="code-lang">BASH</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre><span class="cmd-line">./nejm current <span class="cmd-flag">--human-friendly</span></span></pre>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><span class="tag tag-local">JSON</span><span class="card-title">--json</span></div>
+      <div class="card-body">
+        <p>Machine-readable JSON output for scripts, piping, or agent integration.</p>
+        <div class="code-block">
+          <div class="code-toolbar"><span class="code-lang">BASH</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre><span class="cmd-line">./nejm search "cancer" <span class="cmd-flag">--json</span></span></pre>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><span class="tag tag-enrich">AGENT</span><span class="card-title">--agent</span></div>
+      <div class="card-body">
+        <p>JSON + no color + no prompts. Designed for CI/CD pipelines and Claude MCP.</p>
+        <div class="code-block">
+          <div class="code-toolbar"><span class="code-lang">BASH</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre><span class="cmd-line">./nejm current <span class="cmd-flag">--agent</span></span></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ALL COMMANDS TABLE -->
+<section id="all-commands">
+  <div class="section-header">
+    <div class="section-icon" style="background:rgba(196,30,58,0.12)">📑</div>
+    <h2>All 24 Commands</h2>
+    <div class="desc">Complete reference</div>
+  </div>
+  <div class="table-wrap">
+    <table class="cmd-table">
+      <thead>
+        <tr>
+          <th>Command</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="cmd-name">current</td><td><span class="tag tag-local">local DB</span></td><td class="cmd-desc">Current issue articles</td></tr>
+        <tr><td class="cmd-name">recent</td><td><span class="tag tag-local">local DB</span></td><td class="cmd-desc">Recently published articles</td></tr>
+        <tr><td class="cmd-name">search</td><td><span class="tag tag-local">local DB</span></td><td class="cmd-desc">Full-text search across synced corpus</td></tr>
+        <tr><td class="cmd-name">article</td><td><span class="tag tag-live">live + local</span></td><td class="cmd-desc">Fetch single article by DOI</td></tr>
+        <tr><td class="cmd-name">articles</td><td><span class="tag tag-local">local DB</span></td><td class="cmd-desc">Browse all synced articles</td></tr>
+        <tr><td class="cmd-name">since</td><td><span class="tag tag-local">local DB</span></td><td class="cmd-desc">Articles published since a date</td></tr>
+        <tr><td class="cmd-name">specialty</td><td><span class="tag tag-local">local DB</span></td><td class="cmd-desc">Browse by medical specialty</td></tr>
+        <tr><td class="cmd-name">digest</td><td><span class="tag tag-local">local DB</span></td><td class="cmd-desc">Weekly digest summary</td></tr>
+        <tr><td class="cmd-name">trends</td><td><span class="tag tag-enrich">+ --enrich</span></td><td class="cmd-desc">Publication trend analysis (needs --enrich)</td></tr>
+        <tr><td class="cmd-name">open-access</td><td><span class="tag tag-enrich">+ --enrich</span></td><td class="cmd-desc">Open access article filter (needs --enrich)</td></tr>
+        <tr><td class="cmd-name">reading-list</td><td><span class="tag tag-local">local</span></td><td class="cmd-desc">Personal reading list management</td></tr>
+        <tr><td class="cmd-name">sync</td><td><span class="tag tag-live">live RSS</span></td><td class="cmd-desc">Download RSS feeds to local SQLite</td></tr>
+        <tr><td class="cmd-name">workflow</td><td><span class="tag tag-local">local</span></td><td class="cmd-desc">Compound multi-step operations</td></tr>
+        <tr><td class="cmd-name">sql</td><td><span class="tag tag-local">local DB</span></td><td class="cmd-desc">Raw SQL query on local database</td></tr>
+        <tr><td class="cmd-name">import</td><td><span class="tag tag-local">local</span></td><td class="cmd-desc">Import articles from JSONL file</td></tr>
+        <tr><td class="cmd-name">doctor</td><td><span class="tag tag-info">info</span></td><td class="cmd-desc">DB + connectivity diagnostics (not `health`)</td></tr>
+        <tr><td class="cmd-name">which</td><td><span class="tag tag-local">helper</span></td><td class="cmd-desc">Natural language → command resolver</td></tr>
+        <tr><td class="cmd-name">profile</td><td><span class="tag tag-local">config</span></td><td class="cmd-desc">Named flag sets / presets</td></tr>
+        <tr><td class="cmd-name">api</td><td><span class="tag tag-info">info</span></td><td class="cmd-desc">Browse available API endpoints</td></tr>
+        <tr><td class="cmd-name">agent-context</td><td><span class="tag tag-info">agent</span></td><td class="cmd-desc">JSON description for AI agents</td></tr>
+        <tr><td class="cmd-name">version</td><td><span class="tag tag-info">info</span></td><td class="cmd-desc">Print version string</td></tr>
+        <tr><td class="cmd-name">feedback</td><td><span class="tag tag-local">local</span></td><td class="cmd-desc">Record user feedback locally</td></tr>
+        <tr><td class="cmd-name">completion</td><td><span class="tag tag-info">shell</span></td><td class="cmd-desc">Generate shell autocompletion script</td></tr>
+        <tr><td class="cmd-name">help</td><td><span class="tag tag-info">info</span></td><td class="cmd-desc">Show help for any command</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- QUICK REFERENCE -->
+<section>
+  <div class="section-header">
+    <div class="section-icon" style="background:rgba(63,185,80,0.12)">⚡</div>
+    <h2>Quick Reference</h2>
+    <div class="desc">Copy &amp; paste cheat sheet</div>
+  </div>
+  <div class="cards cols2">
+    <div class="card">
+      <div class="card-head"><span class="tag tag-live">DAILY WORKFLOW</span><span class="card-title">Morning routine</span></div>
+      <div class="card-body">
+        <div class="code-block">
+          <div class="code-toolbar"><span class="code-lang">BASH</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre><span class="out-muted"># 1. Sync latest issues</span>
+<span class="cmd-line">./nejm sync <span class="cmd-flag">--feed</span> etoc && ./nejm sync <span class="cmd-flag">--feed</span> axatoc</span>
+
+<span class="out-muted"># 2. See what's new today</span>
+<span class="cmd-line">./nejm current <span class="cmd-flag">--human-friendly</span></span>
+
+<span class="out-muted"># 3. Search your area</span>
+<span class="cmd-line">./nejm search "cardiology" <span class="cmd-flag">--human-friendly</span></span>
+
+<span class="out-muted"># 4. Save interesting articles</span>
+<span class="cmd-line">./nejm reading-list add 10.1056/NEJMoa2500386</span></pre>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><span class="tag tag-local">FLAGS CHEAT SHEET</span><span class="card-title">Key flags</span></div>
+      <div class="card-body">
+        <div class="output-preview">
+<span class="out-key">--human-friendly</span>  <span class="out-val">colored terminal output</span>
+<span class="out-key">--json          </span>  <span class="out-val">machine/agent output</span>
+<span class="out-key">--agent         </span>  <span class="out-val">json + no-color + no-input</span>
+<span class="out-key">--enrich        </span>  <span class="out-val">fetch metadata per article</span>
+<span class="out-key">--limit N       </span>  <span class="out-val">max N results</span>
+<span class="out-key">--feed etoc     </span>  <span class="out-val">current issue RSS</span>
+<span class="out-key">--feed axatoc   </span>  <span class="out-val">ahead-of-print RSS</span>
+
+<span class="out-muted">Note: `health` does NOT exist → use `doctor`</span>
+<span class="out-muted">Note: `trends` + `open-access` need --enrich</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</div><!-- /main -->
+
+<footer>
+  <p>NEJM CLI — New England Journal of Medicine terminal interface &nbsp;·&nbsp; No API key required &nbsp;·&nbsp; Read-only &nbsp;·&nbsp; Offline-first</p>
+  <p style="margin-top:6px;"><a href="https://github.com/mvanhorn/printing-press-library/tree/laci/feat/nejm/library/health/nejm">GitHub: printing-press-library / laci/feat/nejm</a> &nbsp;·&nbsp; Built with Go &nbsp;·&nbsp; DB: SQLite v4 &nbsp;·&nbsp; 24 commands</p>
+</footer>
+
+<script>
+// ── Copy buttons ──────────────────────────────────────────────
+function copyCode(btn) {
+  const pre = btn.closest('.code-block').querySelector('pre');
+  const text = pre.innerText;
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1800);
+  });
+}
+
+// ── Charts ────────────────────────────────────────────────────
+const chartDefaults = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { labels: { color: '#8b949e', font: { size: 11 }, boxWidth: 12 } }
+  }
+};
+
+// Specialty distribution
+new Chart(document.getElementById('specialtyChart'), {
+  type: 'doughnut',
+  data: {
+    labels: ['Cardiology', 'Clinical Medicine', 'Endocrinology', 'Oncology', 'Infectious Disease', 'Other'],
+    datasets: [{
+      data: [22, 31, 14, 18, 11, 39],
+      backgroundColor: ['#c41e3a','#58a6ff','#3fb950','#a371f7','#d29922','#30363d'],
+      borderColor: '#161b22',
+      borderWidth: 2
+    }]
+  },
+  options: { ...chartDefaults }
+});
+
+// Monthly articles
+new Chart(document.getElementById('monthlyChart'), {
+  type: 'bar',
+  data: {
+    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+    datasets: [{
+      label: 'Articles',
+      data: [18, 21, 24, 19, 26, 27],
+      backgroundColor: 'rgba(196,30,58,0.7)',
+      borderColor: '#c41e3a',
+      borderWidth: 1,
+      borderRadius: 5
+    }]
+  },
+  options: {
+    ...chartDefaults,
+    scales: {
+      x: { ticks: { color: '#8b949e', font: { size: 11 } }, grid: { color: '#30363d' } },
+      y: { ticks: { color: '#8b949e', font: { size: 11 } }, grid: { color: '#30363d' } }
+    }
+  }
+});
+
+// Article types
+new Chart(document.getElementById('typesChart'), {
+  type: 'bar',
+  data: {
+    labels: ['Original Article', 'Perspective', 'Case Record', 'Sounding Board', 'Editorial', 'Letter'],
+    datasets: [{
+      label: 'Count',
+      data: [38, 22, 15, 12, 19, 29],
+      backgroundColor: ['#3fb950','#58a6ff','#c41e3a','#a371f7','#d29922','#8b949e'],
+      borderRadius: 4
+    }]
+  },
+  options: {
+    ...chartDefaults,
+    indexAxis: 'y',
+    scales: {
+      x: { ticks: { color: '#8b949e', font: { size: 11 } }, grid: { color: '#30363d' } },
+      y: { ticks: { color: '#8b949e', font: { size: 11 } }, grid: { color: 'transparent' } }
+    },
+    plugins: { legend: { display: false } }
+  }
+});
+</script>
+</body>
+</html>
