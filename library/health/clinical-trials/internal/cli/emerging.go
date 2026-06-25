@@ -202,6 +202,9 @@ func growth(recent, prior *counter, n int) []growthEntry {
 		out = append(out, entry)
 	}
 	sort.Slice(out, func(i, j int) bool {
+		if out[i].GrowthPct != out[j].GrowthPct {
+			return out[i].GrowthPct > out[j].GrowthPct
+		}
 		if out[i].Recent != out[j].Recent {
 			return out[i].Recent > out[j].Recent
 		}
