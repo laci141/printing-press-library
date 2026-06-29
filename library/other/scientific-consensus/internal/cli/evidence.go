@@ -4,6 +4,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"math"
 
 	"github.com/mvanhorn/printing-press-library/library/other/scientific-consensus/internal/scengine"
 	"github.com/spf13/cobra"
@@ -130,5 +131,5 @@ func renderEvidence(w io.Writer, o evidenceOutput) {
 }
 
 func round1(v float64) float64 {
-	return float64(int(v*10+0.5)) / 10
+	return math.Round(v*10) / 10
 }
