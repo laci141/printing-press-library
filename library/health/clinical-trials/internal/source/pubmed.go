@@ -56,7 +56,7 @@ func SearchPubMed(ctx context.Context, c *Client, term string, limit int, apiKey
 	searchURL := fmt.Sprintf("%s/esearch.fcgi?db=pubmed&retmode=json&retmax=%d&term=%s%s",
 		EutilsBase, limit, url.QueryEscape(term), keyParam)
 	if err := c.GetJSON(ctx, searchURL, nil, &search); err != nil {
-		return res, err
+		return res, redactAPIKey(err, apiKey)
 	}
 	if n := strings.TrimSpace(search.ESearchResult.Count); n != "" {
 		_, _ = fmt.Sscanf(n, "%d", &res.Count)

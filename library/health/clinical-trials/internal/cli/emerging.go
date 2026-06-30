@@ -54,6 +54,9 @@ func newNovelEmergingCmd(flags *rootFlags) *cobra.Command {
 				fmt.Fprintln(cmd.OutOrStdout(), "would analyze emerging trends from ClinicalTrials.gov")
 				return nil
 			}
+			if sample < 1 {
+				return usageErr(fmt.Errorf("--sample must be at least 1"))
+			}
 			category := strings.TrimSpace(strings.Join(args, " "))
 			ctx, cancel := boundCtx(cmd.Context(), flags)
 			defer cancel()
@@ -228,7 +231,7 @@ func renderEmergingHuman(cmd *cobra.Command, v emergingView) error {
 	if len(v.FastestGrowing) > 0 {
 		fmt.Fprintln(w, "Fastest-growing interventions (recent vs prior cohort):")
 		for _, g := range v.FastestGrowing {
-			tag := fmt.Sprintf("+%d%%", g.GrowthPct)
+			tag := fmt.Sprintf("%+d%%", g.GrowthPct)
 			if g.NewlyAdded {
 				tag = "new"
 			}
