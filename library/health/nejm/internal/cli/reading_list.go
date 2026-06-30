@@ -109,18 +109,15 @@ func newNovelReadingListCmd(flags *rootFlags) *cobra.Command {
 			}
 			var results []rlRow
 			for rows.Next() {
-				// 🔧 JAVÍTÁS: sql.NullString használata a title és authors mezőkhöz
-				// hogy kezelni tudjuk a SQL NULL értékeket
 				var doi, addedAt string
 				var readAtNull *string
 				var title sql.NullString
 				var authors sql.NullString
-				
+
 				if err := rows.Scan(&doi, &addedAt, &readAtNull, &title, &authors); err != nil {
 					continue
 				}
-				
-				// 🔧 JAVÍTÁS: NULL esetén üres stringet használunk
+
 				titleStr := ""
 				if title.Valid {
 					titleStr = title.String
@@ -129,14 +126,14 @@ func newNovelReadingListCmd(flags *rootFlags) *cobra.Command {
 				if authors.Valid {
 					authorsStr = authors.String
 				}
-				
+
 				readAtStr := ""
 				read := false
 				if readAtNull != nil {
 					readAtStr = *readAtNull
 					read = true
 				}
-				
+
 				results = append(results, rlRow{
 					DOI:     doi,
 					AddedAt: addedAt,
@@ -145,6 +142,11 @@ func newNovelReadingListCmd(flags *rootFlags) *cobra.Command {
 					Authors: authorsStr,
 					Read:    read,
 				})
+			}
+
+			// 🔧 JAVÍTÁS: ellenőrizzük az iteráció során fellépő adatbázis-hibákat
+			if err := rows.Err(); err != nil {
+				return fmt.Errorf("reading list rows error: %w", err)
 			}
 
 			if flags.asJSON {
