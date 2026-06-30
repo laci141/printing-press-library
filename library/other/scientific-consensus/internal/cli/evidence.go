@@ -74,6 +74,7 @@ func newNovelEvidenceCmd(flags *rootFlags) *cobra.Command {
 			cs := make([]scengine.Classification, len(works))
 			byPub := 0
 			exemplar := map[scengine.Design]string{}
+			prog := newProgress(flags, "classifying", len(works))
 			for i, wk := range works {
 				cls := scengine.ClassifyDesign(wk.Title, wk.Abstract, wk.Type, wk.PubTypes)
 				cs[i] = cls
@@ -83,7 +84,9 @@ func newNovelEvidenceCmd(flags *rootFlags) *cobra.Command {
 				if _, ok := exemplar[cls.Design]; !ok {
 					exemplar[cls.Design] = wk.Title
 				}
+				prog.update(i + 1)
 			}
+			prog.done()
 			levels := scengine.Pyramid(cs)
 			out := evidenceOutput{
 				Query: query, StudyCount: len(works), ApexDesign: scengine.ApexDesign(cs),

@@ -97,7 +97,13 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 				enrichPubTypes(ctx, works, 50)
 			}
 
+			// Status line on stderr while stance classification runs (which can
+			// be slow when an AI key drives per-work LLM calls). Auto-disabled
+			// for --json/pipes so machine output stays clean.
+			prog := newProgress(flags, "analyzing works", len(works))
+			prog.update(len(works))
 			scored, stances := scoreWorks(works, claim)
+			prog.done()
 			result := scengine.Consensus(scored)
 
 			out := consensusOutput{

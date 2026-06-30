@@ -78,7 +78,8 @@ func newNovelGapsCmd(flags *rootFlags) *cobra.Command {
 			out.HasRCT = apexRank <= scengine.TierRank(scengine.DesignRCT)
 
 			combined := strings.Builder{}
-			for _, wk := range works {
+			prog := newProgress(flags, "scanning works", len(works))
+			for i, wk := range works {
 				if wk.Year > out.LatestYear {
 					out.LatestYear = wk.Year
 				}
@@ -86,7 +87,9 @@ func newNovelGapsCmd(flags *rootFlags) *cobra.Command {
 				combined.WriteByte(' ')
 				combined.WriteString(strings.ToLower(wk.Abstract))
 				combined.WriteByte(' ')
+				prog.update(i + 1)
 			}
+			prog.done()
 			hay := combined.String()
 
 			// Finding: no strong designs.
