@@ -19,8 +19,10 @@ const (
 
 var (
 	// Positive/effect cues: the intervention did something beneficial or a
-	// positive association was found.
-	supportCues = regexp.MustCompile(`(?i)\b(improv\w+|increas\w+|reduc\w+ (the )?risk|lower\w* (the )?risk|effective\b|efficac\w+|beneficial|benefit\w*|protect\w+|associated with (a )?(reduc\w+|lower|decreas\w+)|significant\w* (improv|increas|reduc|benefit)|positive (effect|association|impact)|enhanc\w+|alleviat\w+|prevent\w+)`)
+	// positive association was found. Negative lookahead excludes "increas*
+	// the risk" / "increas* risk" so harm-context phrasing is not counted
+	// as supporting (that belongs to harmCues instead).
+	supportCues = regexp.MustCompile(`(?i)\b(improv\w+|increas\w+(?!\s+(the\s+)?risk)|reduc\w+ (the )?risk|lower\w* (the )?risk|effective\b|efficac\w+|beneficial|benefit\w*|protect\w+|associated with (a )?(reduc\w+|lower|decreas\w+)|significant\w* (improv|increas|reduc|benefit)|positive (effect|association|impact)|enhanc\w+|alleviat\w+|prevent\w+)`)
 
 	// Null / no-effect cues.
 	nullCues = regexp.MustCompile(`(?i)\b(no (significant )?(association|effect|difference|benefit|evidence|impact|correlation)|not (significant\w*|associated|effective)|did not (significantly )?(improv|increas|reduc|affect|differ|change)|ineffective|no statistically significant|failed to|without (a )?(significant )?(effect|benefit)|null (result|effect|finding))`)
@@ -34,7 +36,6 @@ var (
 // stance from the reported finding's polarity. confidence is 0..1.
 func ClassifyStance(title, abstract, claim string) (Stance, float64) {
 	hay := strings.ToLower(title + ". " + abstract)
-
 	support := len(supportCues.FindAllString(hay, -1))
 	null := len(nullCues.FindAllString(hay, -1))
 	harm := len(harmCues.FindAllString(hay, -1))
@@ -43,8 +44,8 @@ func ClassifyStance(title, abstract, claim string) (Stance, float64) {
 	// reduction in risk"); count net.
 	pos := support
 	neg := null + harm
-
 	total := pos + neg
+
 	if total == 0 {
 		return StanceInconclusive, 0.2
 	}
