@@ -203,9 +203,9 @@ func scoreWorks(works []scWork, claim string) ([]scengine.ScoredWork, []workStan
 	stances := make([]workStance, len(works))
 	for i, w := range works {
 		cls := scengine.ClassifyDesign(w.Title, w.Abstract, w.Type, w.PubTypes)
-		st, conf := scengine.ClassifyStance(w.Title, w.Abstract, claim)
+		st, conf, stMethod := scengine.ClassifyStanceAuto(w.Title, w.Abstract, claim)
 		scored[i] = scengine.ScoredWork{Stance: st, StanceConf: conf, Design: cls.Design, CitedBy: w.CitedBy}
-		stances[i] = workStance{Work: w, Stance: st, Confidence: conf, Design: cls.Design, Method: cls.Method}
+		stances[i] = workStance{Work: w, Stance: st, Confidence: conf, Design: cls.Design, Method: cls.Method, StanceMethod: stMethod}
 	}
 	return scored, stances
 }
@@ -216,6 +216,9 @@ type workStance struct {
 	Confidence float64         `json:"stance_confidence"`
 	Design     scengine.Design `json:"design"`
 	Method     scengine.Method `json:"classification_method"`
+	// StanceMethod records how stance was derived: "heuristic" or
+	// "llm:<provider>". Empty for callers that don't run the dispatcher.
+	StanceMethod string `json:"stance_method,omitempty"`
 }
 
 // extractPMID pulls the numeric PMID out of an OpenAlex pmid URL.

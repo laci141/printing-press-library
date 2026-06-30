@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 
 	"github.com/mvanhorn/printing-press-library/library/other/scientific-consensus/internal/scengine"
 	"github.com/spf13/cobra"
@@ -50,7 +51,18 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 		Long: "Fetch the most relevant works for a claim, classify each study's design and\n" +
 			"stance, and compute a tier- and citation-weighted Consensus Score, Confidence,\n" +
 			"and Evidence Strength. Stance is heuristic without an AI key. Do NOT treat the\n" +
-			"score as a peer-reviewed conclusion; use `evidence` to inspect study designs.",
+			"score as a peer-reviewed conclusion; use `evidence` to inspect study designs.\n\n" +
+			"Optional LLM-assisted stance classification: set one of these API keys (checked\n" +
+			"in this priority order, first one set wins) to classify stance with that model\n" +
+			"instead of the lexical heuristic:\n" +
+			"  1. ANTHROPIC_API_KEY  (claude-haiku-4-5-20251001)\n" +
+			"  2. OPENAI_API_KEY     (gpt-4o-mini)\n" +
+			"  3. GEMINI_API_KEY     (gemini-2.0-flash)\n" +
+			"  4. GROQ_API_KEY       (llama-3.3-70b-versatile)\n" +
+			"  5. MISTRAL_API_KEY    (mistral-small-latest)\n" +
+			"The LLM path is best-effort: a single attempt with a 15s timeout, and any error\n" +
+			"silently falls back to the heuristic. The method used is reported as\n" +
+			"stance_method (heuristic or llm:<provider>).",
 		Example:     "  scientific-consensus-pp-cli consensus \"vitamin D reduces respiratory infections\" --agent",
 		Annotations: map[string]string{"mcp:read-only": "true", "pp:no-error-path-probe": "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -94,7 +106,7 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 				ApexDesign: result.ApexDesign, StudyCount: result.StudyCount,
 				Supporting: result.Supporting, Refuting: result.Refuting, Mixed: result.Mixed,
 				Inconclusive: result.Inconclusive, TotalCitations: result.TotalCitations,
-				Method: "heuristic",
+				Method: stanceMethodLabel(stances),
 			}
 			out.TopSupporting = topByStance(stances, scengine.StanceSupporting, 3)
 			out.TopRefuting = topByStance(stances, scengine.StanceRefuting, 3)
@@ -111,6 +123,26 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 	cmd.Flags().IntVar(&yearFrom, "year-from", 0, "only include works published from this year onward")
 	cmd.Flags().BoolVar(&enrich, "enrich", true, "enrich study-design classification with PubMed publication types")
 	return cmd
+}
+
+// stanceMethodLabel summarizes how stance was classified across the analyzed
+// works. Without an AI key every work is "heuristic"; with a key configured the
+// dispatcher uses the LLM and falls back to heuristic per-work on any error, so
+// we report the LLM provider when at least one work was classified by it.
+func stanceMethodLabel(stances []workStance) string {
+	if len(stances) == 0 {
+		// No works classified: reflect the configured upgrade path, if any.
+		if name := scengine.LLMProviderName(); name != "" {
+			return "llm:" + name
+		}
+		return "heuristic"
+	}
+	for _, s := range stances {
+		if strings.HasPrefix(s.StanceMethod, "llm:") {
+			return s.StanceMethod
+		}
+	}
+	return "heuristic"
 }
 
 func topByStance(stances []workStance, stance scengine.Stance, n int) []workBrief {
