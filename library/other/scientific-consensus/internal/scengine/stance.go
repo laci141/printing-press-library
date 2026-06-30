@@ -19,10 +19,17 @@ const (
 
 var (
 	// Positive/effect cues: the intervention did something beneficial or a
-	// positive association was found. Negative lookahead excludes "increas*
-	// the risk" / "increas* risk" so harm-context phrasing is not counted
-	// as supporting (that belongs to harmCues instead).
-	supportCues = regexp.MustCompile(`(?i)\b(improv\w+|increas\w+(?!\s+(the\s+)?risk)|reduc\w+ (the )?risk|lower\w* (the )?risk|effective\b|efficac\w+|beneficial|benefit\w*|protect\w+|associated with (a )?(reduc\w+|lower|decreas\w+)|significant\w* (improv|increas|reduc|benefit)|positive (effect|association|impact)|enhanc\w+|alleviat\w+|prevent\w+)`)
+	// positive association was found. "increas*" is matched plainly here; Go's
+	// RE2 engine has no negative lookahead, so harm-context phrasing like
+	// "increas* the risk" / "increas* risk" is excluded by netting out
+	// increaseRiskCue matches in ClassifyStance (that phrasing belongs to
+	// harmCues instead).
+	supportCues = regexp.MustCompile(`(?i)\b(improv\w+|increas\w+|reduc\w+ (the )?risk|lower\w* (the )?risk|effective\b|efficac\w+|beneficial|benefit\w*|protect\w+|associated with (a )?(reduc\w+|lower|decreas\w+)|significant\w* (improv|increas|reduc|benefit)|positive (effect|association|impact)|enhanc\w+|alleviat\w+|prevent\w+)`)
+
+	// increaseRiskCue matches the harm-context "increas* (the) risk" phrasing
+	// that supportCues would otherwise count as positive. Subtracted from the
+	// support tally to reproduce the intended negative-lookahead exclusion.
+	increaseRiskCue = regexp.MustCompile(`(?i)\bincreas\w+\s+(the\s+)?risk`)
 
 	// Null / no-effect cues.
 	nullCues = regexp.MustCompile(`(?i)\b(no (significant )?(association|effect|difference|benefit|evidence|impact|correlation)|not (significant\w*|associated|effective)|did not (significantly )?(improv|increas|reduc|affect|differ|change)|ineffective|no statistically significant|failed to|without (a )?(significant )?(effect|benefit)|null (result|effect|finding))`)
@@ -36,7 +43,12 @@ var (
 // stance from the reported finding's polarity. confidence is 0..1.
 func ClassifyStance(title, abstract, claim string) (Stance, float64) {
 	hay := strings.ToLower(title + ". " + abstract)
-	support := len(supportCues.FindAllString(hay, -1))
+	// Net out harm-context "increas* (the) risk" hits that supportCues matched
+	// via its plain "increas*" alternative (RE2 has no negative lookahead).
+	support := len(supportCues.FindAllString(hay, -1)) - len(increaseRiskCue.FindAllString(hay, -1))
+	if support < 0 {
+		support = 0
+	}
 	null := len(nullCues.FindAllString(hay, -1))
 	harm := len(harmCues.FindAllString(hay, -1))
 
