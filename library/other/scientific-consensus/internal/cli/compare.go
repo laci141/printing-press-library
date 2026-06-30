@@ -18,7 +18,7 @@ type compareOutput struct {
 }
 
 // computeConsensus runs the full fetch -> classify -> score -> consensus pass
-// for one claim. Shared by `consensus` and `compare`.
+// for one claim. Shared by `compare` and `batch`.
 func computeConsensus(ctx context.Context, c apiGetter, claim string, limit, yearFrom int, enrich bool) (consensusOutput, error) {
 	filter := ""
 	if yearFrom > 0 {
@@ -37,7 +37,7 @@ func computeConsensus(ctx context.Context, c apiGetter, claim string, limit, yea
 		Claim: claim, Verdict: r.Verdict, ConsensusScore: r.ConsensusScore, Confidence: r.Confidence,
 		EvidenceStrength: r.EvidenceStrength, ApexDesign: r.ApexDesign, StudyCount: r.StudyCount,
 		Supporting: r.Supporting, Refuting: r.Refuting, Mixed: r.Mixed, Inconclusive: r.Inconclusive,
-		TotalCitations: r.TotalCitations, Method: "heuristic",
+		TotalCitations: r.TotalCitations, Method: stanceMethodLabel(stances),
 		TopSupporting: topByStance(stances, scengine.StanceSupporting, 2),
 		TopRefuting:   topByStance(stances, scengine.StanceRefuting, 2),
 	}
@@ -74,14 +74,18 @@ func newNovelCompareCmd(flags *rootFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			prog := newProgress(flags, "analyzing claims", 2)
+			prog.update(1)
 			a, err := computeConsensus(ctx, c, args[0], limit, 0, enrich)
 			if err != nil {
 				return classifyAPIError(err, flags)
 			}
+			prog.update(2)
 			b, err := computeConsensus(ctx, c, args[1], limit, 0, enrich)
 			if err != nil {
 				return classifyAPIError(err, flags)
 			}
+			prog.done()
 			out := compareOutput{ClaimA: a, ClaimB: b}
 			switch {
 			case a.ConsensusScore > b.ConsensusScore+0.05:
