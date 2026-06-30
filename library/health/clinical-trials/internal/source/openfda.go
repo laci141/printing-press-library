@@ -59,7 +59,7 @@ func AdverseEvents(ctx context.Context, c *Client, drug string, limit int, apiKe
 			res.Note = "no adverse-event reports found in FAERS for this drug name"
 			return res, nil
 		}
-		return res, err
+		return res, redactAPIKey(err, apiKey)
 	}
 	res.TotalReports = meta.Meta.Results.Total
 
@@ -76,12 +76,25 @@ func AdverseEvents(ctx context.Context, c *Client, drug string, limit int, apiKe
 		if isNotFound(err) {
 			return res, nil
 		}
-		return res, err
+		return res, redactAPIKey(err, apiKey)
 	}
 	for _, r := range counts.Results {
 		res.TopReactions = append(res.TopReactions, rankedReaction{Reaction: strings.ToLower(r.Term), Count: r.Count})
 	}
 	return res, nil
+}
+
+// redactAPIKey returns err with any occurrence of the raw API key (and its
+// URL-escaped form) replaced by a redaction marker, so a transport error that
+// echoes the failing URL never leaks the key into logs or terminal output.
+func redactAPIKey(err error, apiKey string) error {
+	if err == nil || apiKey == "" {
+		return err
+	}
+	msg := err.Error()
+	msg = strings.ReplaceAll(msg, apiKey, "REDACTED")
+	msg = strings.ReplaceAll(msg, url.QueryEscape(apiKey), "REDACTED")
+	return fmt.Errorf("%s", msg)
 }
 
 // isNotFound reports whether err is an openFDA 404 (no matching records), which

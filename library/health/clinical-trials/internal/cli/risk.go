@@ -150,12 +150,19 @@ func scoreRisk(t Trial, sponsorTrials int) riskView {
 		v.Factors = append(v.Factors, riskFactor{Name: "sponsor_track_record", Detail: fmt.Sprintf("experienced sponsor (%d trials)", sponsorTrials), Points: 0})
 	}
 
-	// 5. Phase attrition (early-phase trials fail more often).
+	// 5. Phase attrition (early-phase trials fail more often). Every branch
+	// — including Phase 2 and unknown/unposted phase — records an explicit
+	// factor so the score stays auditable; a missing entry should never be
+	// the way a reviewer learns "no phase signal was applied."
 	switch {
 	case hasAnyPhase(t.Phases, "EARLY_PHASE1", "PHASE1"):
 		v.Factors = append(v.Factors, riskFactor{Name: "phase", Detail: "early-phase trial (higher historical attrition)", Points: 10})
+	case hasAnyPhase(t.Phases, "PHASE2"):
+		v.Factors = append(v.Factors, riskFactor{Name: "phase", Detail: "phase 2 trial (most common attrition point)", Points: 5})
 	case hasAnyPhase(t.Phases, "PHASE3", "PHASE4"):
 		v.Factors = append(v.Factors, riskFactor{Name: "phase", Detail: "late-phase trial", Points: 0})
+	default:
+		v.Factors = append(v.Factors, riskFactor{Name: "phase", Detail: "trial phase not posted or not applicable", Points: 5})
 	}
 
 	score := 0

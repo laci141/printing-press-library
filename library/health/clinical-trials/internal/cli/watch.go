@@ -3,7 +3,7 @@
 // watch.go implements the `watch` command: track a search term across runs and
 // report what changed since last time — newly-appeared trials, trials whose
 // last-update date moved, and trials that have since been terminated. State is a
-// per-term JSON snapshot under the user config dir; the command is read-write
+// per-term JSON snapshot under the resolved state dir; the command is read-write
 // (it persists the new snapshot) so successive runs form a change feed.
 package cli
 
@@ -17,6 +17,8 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/mvanhorn/printing-press-library/library/health/clinical-trials/internal/cliutil"
 )
 
 // watchSnapshot is the persisted per-term state: one entry per trial.
@@ -58,8 +60,9 @@ func newNovelWatchCmd(flags *rootFlags) *cobra.Command {
 		Short: "Track a term and report new, changed, and terminated trials since the last run.",
 		Long: "Snapshot the trials matching a term and, on each subsequent run, report which\n" +
 			"trials are new, which had their last-update date change, and which have since\n" +
-			"been terminated/withdrawn/suspended. State persists per term under the user\n" +
-			"config directory. The first run establishes the baseline.",
+			"been terminated/withdrawn/suspended. State persists per term under the resolved\n" +
+			"state directory (respects --home and XDG_STATE_HOME). The first run establishes\n" +
+			"the baseline.",
 		Example: "  clinical-trials-pp-cli watch \"vitamin d\" --json\n" +
 			"  clinical-trials-pp-cli watch alzheimer --reset",
 		Annotations: map[string]string{"mcp:read-only": "false", "pp:data-source": "live"},
@@ -172,14 +175,16 @@ func isTerminalStatus(status string) bool {
 	return false
 }
 
-// watchStatePath returns the per-term snapshot path under the user config dir,
-// using a slug plus a short hash so distinct terms never collide.
+// watchStatePath returns the per-term snapshot path under the resolved state
+// directory (cliutil.StateDir, which honours --home, XDG_STATE_HOME, and the
+// CLI's own env overrides), using a slug plus a short hash so distinct terms
+// never collide.
 func watchStatePath(term string) (string, error) {
-	home, err := os.UserHomeDir()
+	dir, err := cliutil.KindDir(cliutil.PathKindState)
 	if err != nil {
-		return "", fmt.Errorf("resolving home directory: %w", err)
+		return "", fmt.Errorf("resolving state directory: %w", err)
 	}
-	dir := filepath.Join(home, ".clinical-trials-pp-cli", "watch")
+	dir = filepath.Join(dir, "watch")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", fmt.Errorf("creating state directory: %w", err)
 	}
@@ -211,7 +216,7 @@ func slugForFilename(term string) string {
 
 func loadWatchSnapshot(path string) (watchSnapshot, bool) {
 	// #nosec G304 -- path comes from watchStatePath: a sha256-derived filename
-	// under the user's own config dir, never raw user input.
+	// under the resolved state dir, never raw user input.
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return watchSnapshot{}, false
