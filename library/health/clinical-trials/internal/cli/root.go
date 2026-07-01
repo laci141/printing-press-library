@@ -265,6 +265,7 @@ See README.md or the bundled SKILL.md for recipes.`,
 	rootCmd.AddCommand(newNovelForecastCmd(flags))
 	rootCmd.AddCommand(newNovelSimilarCmd(flags))
 	rootCmd.AddCommand(newNovelTimelineCmd(flags))
+	rootCmd.AddCommand(newNovelEnrollmentCheckCmd(flags))
 	rootCmd.AddCommand(newNovelSafetyCmd(flags))
 	rootCmd.AddCommand(newNovelSponsorsCmd(flags))
 	rootCmd.AddCommand(newNovelVelocityCmd(flags))
