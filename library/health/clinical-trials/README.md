@@ -172,12 +172,59 @@ These capabilities aren't available in any other tool for this API.
   ```bash
   clinical-trials-pp-cli risk NCT07011732 --json
   ```
+- **`forecast`** — Forward-looking completion outlook for a trial, derived from the same deterministic signals as `risk`.
+
+  _Use to get a plain-language outlook band and the primary concerns behind it. **Caveat:** heuristic only — a read of registry signals, not a clinical prediction._
+
+  ```bash
+  clinical-trials-pp-cli forecast NCT07011732 --json
+  ```
 - **`sponsors`** — Rank who runs the most trials in an area, classified as industry, academic, or government.
 
   _Use to see who controls research in a field._
 
   ```bash
   clinical-trials-pp-cli sponsors "diabetes" --json
+  ```
+- **`digest`** — Compact "what's notable" snapshot for a condition or search term: total matched, recruiting count, newest trials, and recently-stopped ones.
+
+  _Use for a fast read on a topic's current state; a read-only point-in-time snapshot (use `watch` for a persistent change feed). `--limit` bounds the newest and recently-stopped lists._
+
+  ```bash
+  clinical-trials-pp-cli digest "type 2 diabetes" --limit 5 --json
+  ```
+
+### Single-trial analysis
+- **`similar`** — Find trials similar to a given NCT ID by shared condition, phase, and intervention profile.
+
+  _Use to surface comparable trials from registry signals only (no ML matching); `--limit` caps how many matches are returned._
+
+  ```bash
+  clinical-trials-pp-cli similar NCT04280705 --limit 5 --json
+  ```
+- **`timeline`** — Show a trial's key dates in chronological order: start, primary completion, completion, and last-update posted.
+
+  _Use to see a single trial's schedule at a glance; dates with no posted value are omitted._
+
+  ```bash
+  clinical-trials-pp-cli timeline NCT04280705 --json
+  ```
+- **`enrollment-check`** — Heuristic plausibility check on a trial's posted enrollment target relative to its phase.
+
+  _Reuses the `risk` command's enrollment signal. **Caveat:** this is a heuristic from observable registry signals only — not a clinical judgment or a prediction of whether the trial will enroll._
+
+  ```bash
+  clinical-trials-pp-cli enrollment-check NCT04280705 --json
+  ```
+
+### Interoperability
+- **`export-fhir`** — Export a trial's registry metadata as a minimal FHIR R4 ResearchStudy resource (JSON) or a flat CSV row.
+
+  _Use to hand a trial's core metadata to a FHIR-aware system or a spreadsheet. `--format fhir` (default) emits the ResearchStudy JSON; `--format csv` emits one flat row. **Caveat:** this is a lightweight metadata export, not a full FHIR-conformant clinical dataset, and is not validated against a FHIR profile._
+
+  ```bash
+  clinical-trials-pp-cli export-fhir NCT04280705
+  clinical-trials-pp-cli export-fhir NCT04280705 --format csv
   ```
 
 ### Local state that compounds

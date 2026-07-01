@@ -17,6 +17,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// digestFetchCap is the maximum number of trials fetched (and reflected in the
+// totals) for a single digest. One page is enough for a "what's notable" read.
+const digestFetchCap = 200
+
 // digestTrial is a condensed trial row in the digest output.
 type digestTrial struct {
 	NCTID      string `json:"id"`
@@ -61,6 +65,10 @@ func newNovelDigestCmd(flags *rootFlags) *cobra.Command {
 				return nil
 			}
 			term := strings.TrimSpace(strings.Join(args, " "))
+			if term == "" {
+				_ = cmd.Usage()
+				return usageErr(fmt.Errorf("a term argument is required"))
+			}
 			ctx, cancel := boundCtx(cmd.Context(), flags)
 			defer cancel()
 			c, err := flags.newClient()
@@ -68,8 +76,8 @@ func newNovelDigestCmd(flags *rootFlags) *cobra.Command {
 				return err
 			}
 
-			// Fetch up to 200 trials for the term; one page is enough for a digest.
-			trials, err := ctgovFetch(ctx, c, ctgovParams("term", term), 200, 1)
+			// Fetch up to digestFetchCap trials for the term; one page is enough.
+			trials, err := ctgovFetch(ctx, c, ctgovParams("term", term), digestFetchCap, 1)
 			if err != nil {
 				return classifyAPIError(err, flags)
 			}
@@ -77,62 +85,7 @@ func newNovelDigestCmd(flags *rootFlags) *cobra.Command {
 				return noResultsErr(term)
 			}
 
-			// Partition: all trials, recruiting subset, terminated subset.
-			recruitingCount := 0
-			var terminated []Trial
-			for _, t := range trials {
-				upper := strings.ToUpper(t.Status)
-				if upper == "RECRUITING" || upper == "ENROLLING_BY_INVITATION" {
-					recruitingCount++
-				}
-				if isTerminalStatus(t.Status) {
-					terminated = append(terminated, t)
-				}
-			}
-
-			// Sort all trials by LastUpdate descending to find newest.
-			sorted := make([]Trial, len(trials))
-			copy(sorted, trials)
-			sort.SliceStable(sorted, func(i, j int) bool {
-				return sorted[i].LastUpdate > sorted[j].LastUpdate
-			})
-
-			// Newest N (up to limit).
-			n := limit
-			if n > len(sorted) {
-				n = len(sorted)
-			}
-			newest := make([]digestTrial, 0, n)
-			for _, t := range sorted[:n] {
-				newest = append(newest, trialToDigest(t))
-			}
-
-			// Recently-terminated: sort terminated by LastUpdate descending, take up to limit.
-			sort.SliceStable(terminated, func(i, j int) bool {
-				return terminated[i].LastUpdate > terminated[j].LastUpdate
-			})
-			nt := limit
-			if nt > len(terminated) {
-				nt = len(terminated)
-			}
-			recentlyTerminated := make([]digestTrial, 0, nt)
-			for _, t := range terminated[:nt] {
-				recentlyTerminated = append(recentlyTerminated, trialToDigest(t))
-			}
-
-			note := ""
-			if len(trials) == 200 {
-				note = "result set capped at 200 trials; totals reflect the first 200 matched"
-			}
-
-			view := digestView{
-				Term:               term,
-				Total:              len(trials),
-				Recruiting:         recruitingCount,
-				Newest:             newest,
-				RecentlyTerminated: recentlyTerminated,
-				Note:               note,
-			}
+			view := buildDigest(term, trials, limit)
 
 			if flags.asJSON || !isTerminal(cmd.OutOrStdout()) {
 				return printJSONFiltered(cmd.OutOrStdout(), view, flags)
@@ -144,15 +97,68 @@ func newNovelDigestCmd(flags *rootFlags) *cobra.Command {
 	return cmd
 }
 
-func trialToDigest(t Trial) digestTrial {
-	return digestTrial{
-		NCTID:      t.NCTID,
-		Title:      t.Title,
-		Status:     t.Status,
-		Phase:      t.Phase,
-		Sponsor:    t.Sponsor,
-		LastUpdate: t.LastUpdate,
+// buildDigest is the pure core of the `digest` command: it partitions the
+// matched trials into a recruiting count and a stopped subset, then assembles
+// the newest and recently-stopped lists (each capped at limit). It performs no
+// I/O so it can be unit-tested directly.
+func buildDigest(term string, trials []Trial, limit int) digestView {
+	recruitingCount := 0
+	var stopped []Trial
+	for _, t := range trials {
+		upper := strings.ToUpper(t.Status)
+		if upper == "RECRUITING" || upper == "ENROLLING_BY_INVITATION" {
+			recruitingCount++
+		}
+		if isTerminalStatus(t.Status) {
+			stopped = append(stopped, t)
+		}
 	}
+
+	// Newest N: sort a copy of all trials by LastUpdate desc, take up to limit.
+	sorted := make([]Trial, len(trials))
+	copy(sorted, trials)
+	newest := topDigestTrials(sorted, limit)
+
+	// Recently-stopped: same treatment over the stopped subset.
+	recentlyTerminated := topDigestTrials(stopped, limit)
+
+	note := ""
+	if len(trials) >= digestFetchCap {
+		note = fmt.Sprintf("result set capped at %d trials; totals reflect the first %d matched", digestFetchCap, digestFetchCap)
+	}
+
+	return digestView{
+		Term:               term,
+		Total:              len(trials),
+		Recruiting:         recruitingCount,
+		Newest:             newest,
+		RecentlyTerminated: recentlyTerminated,
+		Note:               note,
+	}
+}
+
+// topDigestTrials sorts a copy of the given trials by LastUpdate descending
+// (newest first) and returns at most limit of them as condensed digest rows.
+// Callers pass a slice they own; the sort is in place on that slice.
+func topDigestTrials(trials []Trial, limit int) []digestTrial {
+	sort.SliceStable(trials, func(i, j int) bool {
+		return trials[i].LastUpdate > trials[j].LastUpdate
+	})
+	if len(trials) > limit {
+		trials = trials[:limit]
+	}
+	out := make([]digestTrial, 0, len(trials))
+	for _, t := range trials {
+		out = append(out, digestTrial{
+			NCTID:      t.NCTID,
+			Title:      t.Title,
+			Status:     t.Status,
+			Phase:      t.Phase,
+			Sponsor:    t.Sponsor,
+			LastUpdate: t.LastUpdate,
+		})
+	}
+	return out
 }
 
 func renderDigestHuman(cmd *cobra.Command, v digestView) error {
@@ -170,14 +176,14 @@ func renderDigestHuman(cmd *cobra.Command, v digestView) error {
 	}
 
 	if len(v.RecentlyTerminated) > 0 {
-		fmt.Fprintln(w, "Recently terminated/withdrawn:")
+		fmt.Fprintln(w, "Recently stopped (terminated/withdrawn/suspended):")
 		for _, t := range v.RecentlyTerminated {
 			fmt.Fprintf(w, "  %-14s %-18s %s\n",
 				t.NCTID, truncate(t.Status, 18), truncate(t.Title, 60))
 		}
 		fmt.Fprintln(w)
 	} else {
-		fmt.Fprintln(w, "No recently terminated/withdrawn trials in this result set.")
+		fmt.Fprintln(w, "No recently stopped (terminated/withdrawn/suspended) trials in this result set.")
 	}
 
 	if v.Note != "" {

@@ -128,13 +128,13 @@ func newNovelSimilarCmd(flags *rootFlags) *cobra.Command {
 			// a broad text search on the first word of the title.
 			matchBasis := ""
 			var params map[string]string
+			titleWords := strings.Fields(seed.Title)
 			if len(seed.Conditions) > 0 {
 				matchBasis = fmt.Sprintf("condition: %s", seed.Conditions[0])
 				params = ctgovParams("cond", seed.Conditions[0])
-			} else if seed.Title != "" {
-				words := strings.Fields(seed.Title)
-				matchBasis = fmt.Sprintf("title keyword: %s (seed has no conditions posted)", words[0])
-				params = ctgovParams("term", words[0])
+			} else if len(titleWords) > 0 {
+				matchBasis = fmt.Sprintf("title keyword: %s (seed has no conditions posted)", titleWords[0])
+				params = ctgovParams("term", titleWords[0])
 			} else {
 				matchBasis = "broad search (seed has no conditions or title)"
 				params = ctgovParams("term", "")
