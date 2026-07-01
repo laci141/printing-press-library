@@ -171,6 +171,17 @@ func truncateForErr(s string) string {
 	return s
 }
 
+// credentialParamRe matches credential query-param values so an API key carried
+// in a URL (e.g. Gemini's ?key=…) never leaks into error text sent to stderr.
+var credentialParamRe = regexp.MustCompile(`(?i)([?&](?:api_key|apikey|key|token|access_token)=)[^&\s"]*`)
+
+// redactCredentials replaces credential query-param values in s with REDACTED,
+// leaving s unchanged when no credential param is present. Used to scrub the
+// *url.Error transport-failure messages returned by doJSON.
+func redactCredentials(s string) string {
+	return credentialParamRe.ReplaceAllString(s, "${1}REDACTED")
+}
+
 // httpClient is the single-attempt client shared by all providers.
 var httpClient = &http.Client{Timeout: llmTimeout}
 
@@ -191,7 +202,11 @@ func doJSON(ctx context.Context, url string, body any, headers map[string]string
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		// Transport failures (DNS/timeout/TLS) yield a *url.Error whose Error()
+		// embeds the full request URL. Gemini carries its API key in the query
+		// string (?key=…), so return a redacted message to keep the key out of
+		// stderr. See redactCredentials.
+		return nil, errors.New(redactCredentials(err.Error()))
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(resp.Body)
