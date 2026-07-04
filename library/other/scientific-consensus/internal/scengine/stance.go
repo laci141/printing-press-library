@@ -21,21 +21,24 @@ var (
 	// Positive/effect cues: the intervention did something beneficial or a
 	// positive association was found. "increas*" is matched plainly here; Go's
 	// RE2 engine has no negative lookahead, so harm-context phrasing like
-	// "increas* the risk" / "increas* risk" is excluded by netting out
-	// increaseRiskCue matches in ClassifyStance (that phrasing belongs to
-	// harmCues instead).
+	// "increased risk" / "increased mortality" is excluded per-match in
+	// ClassifyStance by re-inspecting the matched window against
+	// increaseHarmContext (that phrasing belongs to harmCues instead).
 	supportCues = regexp.MustCompile(`(?i)\b(improv\w+|increas\w+|reduc\w+ (the )?risk|lower\w* (the )?risk|effective\b|efficac\w+|beneficial|benefit\w*|protect\w+|associated with (a )?(reduc\w+|lower|decreas\w+)|significant\w* (improv|increas|reduc|benefit)|positive (effect|association|impact)|enhanc\w+|alleviat\w+|prevent\w+)`)
 
-	// increaseRiskCue matches the harm-context "increas* (the) risk" phrasing
-	// that supportCues would otherwise count as positive. Subtracted from the
-	// support tally to reproduce the intended negative-lookahead exclusion.
-	increaseRiskCue = regexp.MustCompile(`(?i)\bincreas\w+\s+(the\s+)?risk`)
+	// increaseHarmContext detects when an "increas*" support match is actually
+	// harm-context phrasing ("increased risk", "increases the mortality",
+	// "increased incidence of ..."). Applied to a short window starting at the
+	// support match; a hit means the match is not counted as support. This is
+	// the RE2-safe replacement for a negative lookahead — do not reintroduce
+	// (?!...) here.
+	increaseHarmContext = regexp.MustCompile(`(?i)\bincreas\w+\s+(the\s+|a\s+)?(risk|mortality|morbidity|incidence|harm\w*|adverse|complication\w*|death\w*|odds of)`)
 
 	// Null / no-effect cues.
 	nullCues = regexp.MustCompile(`(?i)\b(no (significant )?(association|effect|difference|benefit|evidence|impact|correlation)|not (significant\w*|associated|effective)|did not (significantly )?(improv|increas|reduc|affect|differ|change)|ineffective|no statistically significant|failed to|without (a )?(significant )?(effect|benefit)|null (result|effect|finding))`)
 
 	// Harm / negative-effect cues (treated as refuting an intervention claim).
-	harmCues = regexp.MustCompile(`(?i)\b(increas\w+ (the )?risk|harmful|adverse (effect|event|outcome)|worsen\w*|associated with (a )?(higher|increas\w+|greater) (risk|mortality|incidence)|detrimental|toxic\w*|negative (effect|impact|association)|deteriorat\w+)`)
+	harmCues = regexp.MustCompile(`(?i)\b(increas\w+ (the )?(risk|mortality|morbidity|incidence)|harmful|adverse (effect|event|outcome)|worsen\w*|associated with (a )?(higher|increas\w+|greater) (risk|mortality|incidence)|detrimental|toxic\w*|negative (effect|impact|association)|deteriorat\w+)`)
 )
 
 // ClassifyStance scores a single work's title+abstract. claim is currently used
@@ -43,11 +46,21 @@ var (
 // stance from the reported finding's polarity. confidence is 0..1.
 func ClassifyStance(title, abstract, claim string) (Stance, float64) {
 	hay := strings.ToLower(title + ". " + abstract)
-	// Net out harm-context "increas* (the) risk" hits that supportCues matched
-	// via its plain "increas*" alternative (RE2 has no negative lookahead).
-	support := len(supportCues.FindAllString(hay, -1)) - len(increaseRiskCue.FindAllString(hay, -1))
-	if support < 0 {
-		support = 0
+	// Count support matches, excluding "increas*" hits whose immediate context
+	// is a harm claim ("increased risk/mortality/..."). RE2 has no negative
+	// lookahead, so each match window is re-inspected instead.
+	support := 0
+	for _, loc := range supportCues.FindAllStringIndex(hay, -1) {
+		if strings.Contains(hay[loc[0]:loc[1]], "increas") {
+			end := loc[1] + 24 // room for "increased" + " the mortality" etc.
+			if end > len(hay) {
+				end = len(hay)
+			}
+			if increaseHarmContext.MatchString(hay[loc[0]:end]) {
+				continue
+			}
+		}
+		support++
 	}
 	null := len(nullCues.FindAllString(hay, -1))
 	harm := len(harmCues.FindAllString(hay, -1))

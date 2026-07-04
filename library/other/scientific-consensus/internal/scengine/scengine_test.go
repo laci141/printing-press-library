@@ -76,6 +76,15 @@ func TestClassifyStance(t *testing.T) {
 		{"refuting", "Vitamin D trial", "There was no significant association and supplementation did not reduce infection rates.", StanceRefuting},
 		{"harm", "Beta-carotene trial", "Supplementation was associated with a higher risk of lung cancer and adverse outcomes.", StanceRefuting},
 		{"inconclusive", "A descriptive paper", "We describe the prevalence of a condition across regions.", StanceInconclusive},
+		// Regression: harm-context "increas*" phrasing must not count as a
+		// positive/support cue (RE2 has no lookahead; excluded per-match).
+		{"increased risk is harm", "Processed meat and cancer", "Consumption was associated with increased risk of colorectal cancer.", StanceRefuting},
+		{"increased the risk is harm", "Smoking study", "Smoking increased the risk of stroke in all age groups.", StanceRefuting},
+		{"increased mortality is harm", "Drug X trial", "Treatment with drug X increased mortality compared with placebo.", StanceRefuting},
+		{"increased incidence is harm", "Screening cohort", "Exposure increased incidence of adverse events.", StanceRefuting},
+		// True positive-increase claims must still count as support.
+		{"increased survival supports", "Exercise program", "The program significantly increased survival rates and improved quality of life.", StanceSupporting},
+		{"increase in remission supports", "Therapy trial", "Therapy led to an increase in remission and improved adherence.", StanceSupporting},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -123,6 +132,30 @@ func TestConsensus_Insufficient(t *testing.T) {
 	empty := Consensus(nil)
 	if empty.Verdict != VerdictInsufficient || empty.StudyCount != 0 {
 		t.Errorf("empty consensus wrong: %+v", empty)
+	}
+}
+
+// strength labels the evidence base from apex design + volume only.
+func TestStrength(t *testing.T) {
+	tests := []struct {
+		name    string
+		apex    Design
+		studies int
+		want    EvidenceStrength
+	}{
+		{"meta-analysis with volume", DesignMetaAnalysis, 5, StrengthHigh},
+		{"meta-analysis thin volume", DesignMetaAnalysis, 4, StrengthModerate},
+		{"rct with volume", DesignRCT, 3, StrengthModerate},
+		{"rct thin volume", DesignRCT, 2, StrengthLow},
+		{"cohort apex", DesignCohort, 10, StrengthLow},
+		{"case report apex", DesignCaseReport, 10, StrengthVeryLow},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := strength(tt.apex, tt.studies); got != tt.want {
+				t.Errorf("strength(%q, %d) = %q, want %q", tt.apex, tt.studies, got, tt.want)
+			}
+		})
 	}
 }
 
