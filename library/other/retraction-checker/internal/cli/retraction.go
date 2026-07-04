@@ -121,9 +121,12 @@ var sharedHTTP = &http.Client{Timeout: 30 * time.Second}
 
 // resolvePMIDToDOI maps a PubMed ID to a DOI via the NCBI E-utilities esummary
 // endpoint (free, keyless). It covers all of PubMed, not just the PMC subset.
-// Returns an empty string if the record has no DOI.
-func resolvePMIDToDOI(ctx context.Context, pmid string) (string, error) {
+// Returns an empty string if the record has no DOI. limiter paces requests
+// against NCBI's unauthenticated 3 req/s ceiling; pass nil to disable
+// (methods on a nil *AdaptiveLimiter no-op).
+func resolvePMIDToDOI(ctx context.Context, pmid string, limiter *cliutil.AdaptiveLimiter) (string, error) {
 	endpoint := "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&retmode=json&id=" + url.QueryEscape(pmid)
+	limiter.Wait()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return "", err
@@ -133,6 +136,10 @@ func resolvePMIDToDOI(ctx context.Context, pmid string) (string, error) {
 		return "", err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusTooManyRequests {
+		limiter.OnRateLimit()
+		return "", fmt.Errorf("pubmed esummary returned status %d", resp.StatusCode)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("pubmed esummary returned status %d", resp.StatusCode)
 	}
@@ -223,12 +230,13 @@ func checkDOI(ctx context.Context, c crossrefGetter, mailto, doi string) (retrac
 	return v, nil
 }
 
-// resolveAndCheck resolves a DOI or PMID and returns the verdict.
-func resolveAndCheck(ctx context.Context, c crossrefGetter, mailto, id string) retractionVerdict {
+// resolveAndCheck resolves a DOI or PMID and returns the verdict. limiter
+// paces the NCBI PMID-resolution call; pass nil to disable.
+func resolveAndCheck(ctx context.Context, c crossrefGetter, mailto, id string, limiter *cliutil.AdaptiveLimiter) retractionVerdict {
 	input := strings.TrimSpace(id)
 	if looksLikePMID(input) {
 		pmid := cleanPMID(input)
-		doi, err := resolvePMIDToDOI(ctx, pmid)
+		doi, err := resolvePMIDToDOI(ctx, pmid, limiter)
 		if err != nil {
 			return retractionVerdict{Input: input, Error: fmt.Sprintf("resolving PMID %s: %v", pmid, err)}
 		}

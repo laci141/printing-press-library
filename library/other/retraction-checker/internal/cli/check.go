@@ -6,6 +6,7 @@ package cli
 import (
 	"fmt"
 
+	"github.com/mvanhorn/printing-press-library/library/other/retraction-checker/internal/cliutil"
 	"github.com/spf13/cobra"
 )
 
@@ -37,7 +38,8 @@ func newNovelCheckCmd(flags *rootFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			v := resolveAndCheck(ctx, c, mailto, args[0])
+			limiter := cliutil.NewAdaptiveLimiter(flags.rateLimit)
+			v := resolveAndCheck(ctx, c, mailto, args[0], limiter)
 			if v.Error != "" && v.DOI == "" {
 				return fmt.Errorf("%s", v.Error)
 			}

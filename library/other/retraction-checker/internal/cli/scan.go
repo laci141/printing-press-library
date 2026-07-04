@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/mvanhorn/printing-press-library/library/other/retraction-checker/internal/cliutil"
 	"github.com/spf13/cobra"
 )
 
@@ -104,6 +105,10 @@ func newNovelScanCmd(flags *rootFlags) *cobra.Command {
 			}
 
 			verdicts := make([]retractionVerdict, len(ids))
+			// One shared limiter across all goroutines: NCBI's unauthenticated
+			// PMID-resolution endpoint allows only 3 req/s, well below the
+			// concurrency of 6 in-flight resolveAndCheck calls below.
+			limiter := cliutil.NewAdaptiveLimiter(flags.rateLimit)
 			sem := make(chan struct{}, 6)
 			var wg sync.WaitGroup
 			for i, id := range ids {
@@ -112,7 +117,7 @@ func newNovelScanCmd(flags *rootFlags) *cobra.Command {
 				go func() {
 					defer wg.Done()
 					defer func() { <-sem }()
-					verdicts[i] = resolveAndCheck(ctx, c, mailto, id)
+					verdicts[i] = resolveAndCheck(ctx, c, mailto, id, limiter)
 				}()
 			}
 			wg.Wait()
