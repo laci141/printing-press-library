@@ -22,9 +22,10 @@ type supersededResult struct {
 
 func newNovelSupersededCmd(flags *rootFlags) *cobra.Command {
 	var (
-		mailto string
-		limit  int
-		query  string
+		mailto       string
+		limit        int
+		query        string
+		fromYearFlag int // Holds the user-provided value for --from-year
 	)
 	cmd := &cobra.Command{
 		Use:   "superseded <doi>",
@@ -66,12 +67,21 @@ func newNovelSupersededCmd(flags *rootFlags) *cobra.Command {
 			if search == "" {
 				return fmt.Errorf("no title found for %s; pass --query to search explicitly", doi)
 			}
-			fromYear := 0
-			if len(v.Published) >= 4 {
-				if y, convErr := strconv.Atoi(v.Published[:4]); convErr == nil {
-					fromYear = y
+
+			// Determine the cutoff year.
+			// Use the user-provided --from-year flag if set; otherwise, fall back to the publication year.
+			var fromYear int
+			if cmd.Flags().Changed("from-year") {
+				fromYear = fromYearFlag
+			} else {
+				// Default: extract the year from the published date string.
+				if len(v.Published) >= 4 {
+					if y, convErr := strconv.Atoi(v.Published[:4]); convErr == nil {
+						fromYear = y
+					}
 				}
 			}
+
 			related, err := fetchOpenAlexRelated(ctx, search, mailto, fromYear, limit, cliutil.NewAdaptiveLimiter(flags.rateLimit))
 			if err != nil {
 				return fmt.Errorf("fetching related research: %w", err)
@@ -80,7 +90,7 @@ func newNovelSupersededCmd(flags *rootFlags) *cobra.Command {
 				DOI:       v.DOI,
 				Title:     v.Title,
 				Retracted: v.Retracted,
-				FromYear:  fromYear,
+				FromYear:  fromYear, // reflects the actual year used in the query
 				Query:     search,
 				Related:   related,
 			}
@@ -102,5 +112,7 @@ func newNovelSupersededCmd(flags *rootFlags) *cobra.Command {
 	cmd.Flags().StringVar(&mailto, "mailto", "", "Contact email for the Crossref/OpenAlex polite pool")
 	cmd.Flags().IntVar(&limit, "limit", 10, "Maximum related works to return")
 	cmd.Flags().StringVar(&query, "query", "", "Override the topic search terms (defaults to the paper's title)")
+	// Register the previously missing --from-year flag so it appears in --help and is functional.
+	cmd.Flags().IntVar(&fromYearFlag, "from-year", 0, "Cutoff year for related research (defaults to publication year of the paper)")
 	return cmd
 }
