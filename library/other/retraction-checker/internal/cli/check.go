@@ -40,11 +40,17 @@ func newNovelCheckCmd(flags *rootFlags) *cobra.Command {
 			}
 			limiter := cliutil.NewAdaptiveLimiter(flags.rateLimit)
 			v := resolveAndCheck(ctx, c, mailto, args[0], limiter)
-			if v.Error != "" && v.DOI == "" {
-				return fmt.Errorf("%s", v.Error)
-			}
+			// JSON/agent output serializes the full verdict, including any
+			// error field, so structured consumers already see failures.
 			if flags.asJSON || flags.agent || !isTerminal(cmd.OutOrStdout()) {
 				return printJSONFiltered(cmd.OutOrStdout(), v, flags)
+			}
+			// Human-readable path: surface any check failure instead of
+			// silently printing "NOT retracted". checkDOI sets v.DOI before
+			// the network call, so a transient error or 404 leaves both
+			// v.Error and v.DOI populated — the old v.DOI == "" gate swallowed it.
+			if v.Error != "" {
+				return fmt.Errorf("%s", v.Error)
 			}
 			status := "NOT retracted"
 			if v.Retracted {
