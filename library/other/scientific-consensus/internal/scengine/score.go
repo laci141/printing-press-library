@@ -85,7 +85,7 @@ func Consensus(works []ScoredWork) ConsensusResult {
 
 	directional := res.Supporting + res.Refuting
 	res.Confidence = round2(confidence(res, directional))
-	res.EvidenceStrength = strength(res.ApexDesign, res.StudyCount, directional)
+	res.EvidenceStrength = strength(res.ApexDesign, res.StudyCount)
 	res.Verdict = verdict(res, directional)
 	return res
 }
@@ -128,7 +128,10 @@ func confidence(r ConsensusResult, directional int) float64 {
 	return math.Min(0.97, conf)
 }
 
-func strength(apex Design, studies, directional int) EvidenceStrength {
+// strength labels the evidence base from design tier and volume alone.
+// Directional agreement is deliberately not an input — that signal is
+// carried by Confidence and Verdict.
+func strength(apex Design, studies int) EvidenceStrength {
 	rank := TierRank(apex)
 	switch {
 	case rank <= TierRank(DesignMetaAnalysis) && studies >= 5:

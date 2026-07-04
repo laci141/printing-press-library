@@ -26,6 +26,15 @@ type driftOutput struct {
 	Note       string       `json:"note,omitempty"`
 }
 
+// validateDriftSpan enforces that both bounds are set and the analysis span is
+// at least 2 years — the midpoint split needs a non-empty year on each side.
+func validateDriftSpan(fromYear, toYear int) error {
+	if fromYear == 0 || toYear == 0 || toYear < fromYear+2 {
+		return usageErr(fmt.Errorf("--from and --to are required and the span must be at least 2 years (--to >= --from+2)"))
+	}
+	return nil
+}
+
 func newNovelDriftCmd(flags *rootFlags) *cobra.Command {
 	var fromYear, toYear, limit int
 
@@ -49,9 +58,9 @@ func newNovelDriftCmd(flags *rootFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if fromYear == 0 || toYear == 0 || toYear < fromYear+2 {
+			if err := validateDriftSpan(fromYear, toYear); err != nil {
 				_ = cmd.Usage()
-				return usageErr(fmt.Errorf("--from and --to are required and the span must be at least 2 years (--to >= --from+2)"))
+				return err
 			}
 			ctx, cancel := boundCtx(cmd.Context(), flags)
 			defer cancel()
