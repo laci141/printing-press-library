@@ -198,12 +198,14 @@ func classifyWorks(works []scWork) []scengine.Classification {
 }
 
 // scoreWorks builds the consensus engine input from works + per-work stance.
-func scoreWorks(works []scWork, claim string) ([]scengine.ScoredWork, []workStance) {
+// ctx bounds the optional per-work LLM stance calls so --timeout and Ctrl+C
+// propagate; the heuristic path never blocks on it.
+func scoreWorks(ctx context.Context, works []scWork, claim string) ([]scengine.ScoredWork, []workStance) {
 	scored := make([]scengine.ScoredWork, len(works))
 	stances := make([]workStance, len(works))
 	for i, w := range works {
 		cls := scengine.ClassifyDesign(w.Title, w.Abstract, w.Type, w.PubTypes)
-		st, conf, stMethod := scengine.ClassifyStanceAuto(w.Title, w.Abstract, claim)
+		st, conf, stMethod := scengine.ClassifyStanceAuto(ctx, w.Title, w.Abstract, claim)
 		scored[i] = scengine.ScoredWork{Stance: st, StanceConf: conf, Design: cls.Design, CitedBy: w.CitedBy}
 		stances[i] = workStance{Work: w, Stance: st, Confidence: conf, Design: cls.Design, Method: cls.Method, StanceMethod: stMethod}
 	}

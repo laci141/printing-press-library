@@ -56,7 +56,7 @@ func buildReportData(ctx context.Context, c apiGetter, query, filter, claim stri
 	if err != nil {
 		return nil, err
 	}
-	_, stances := scoreWorks(works, claim)
+	_, stances := scoreWorks(ctx, works, claim)
 
 	data := &reportData{
 		Query:        query,

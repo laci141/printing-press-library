@@ -31,7 +31,7 @@ func computeConsensus(ctx context.Context, c apiGetter, claim string, limit, yea
 	if enrich {
 		enrichPubTypes(ctx, works, 50)
 	}
-	scored, stances := scoreWorks(works, claim)
+	scored, stances := scoreWorks(ctx, works, claim)
 	r := scengine.Consensus(scored)
 	out := consensusOutput{
 		Claim: claim, Verdict: r.Verdict, ConsensusScore: r.ConsensusScore, Confidence: r.Confidence,

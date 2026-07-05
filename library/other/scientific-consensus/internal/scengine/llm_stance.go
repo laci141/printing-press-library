@@ -80,16 +80,18 @@ func LLMProviderName() string {
 }
 
 // ClassifyStanceWithLLM classifies a single work's stance toward claim using the
-// first configured provider. It returns an error (so the caller falls back to
-// the heuristic) if no key is set, the HTTP call fails, or the response can't be
-// parsed into a valid {stance, confidence} pair. confidence is clamped to 0..1.
-func ClassifyStanceWithLLM(title, abstract, claim string) (Stance, float64, error) {
+// first configured provider. ctx carries the caller's deadline/cancellation; the
+// per-call llmTimeout still applies on top as an upper bound. It returns an
+// error (so the caller falls back to the heuristic) if no key is set, the HTTP
+// call fails, or the response can't be parsed into a valid {stance, confidence}
+// pair. confidence is clamped to 0..1.
+func ClassifyStanceWithLLM(ctx context.Context, title, abstract, claim string) (Stance, float64, error) {
 	p, key := activeProvider()
 	if p == nil {
 		return "", 0, errors.New("no LLM provider configured (set one of ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, GROQ_API_KEY, MISTRAL_API_KEY)")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), llmTimeout)
+	ctx, cancel := context.WithTimeout(ctx, llmTimeout)
 	defer cancel()
 
 	raw, err := p.call(ctx, key, stancePrompt(title, abstract, claim))

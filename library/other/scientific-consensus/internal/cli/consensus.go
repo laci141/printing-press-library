@@ -102,7 +102,7 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 			// for --json/pipes so machine output stays clean.
 			prog := newProgress(flags, "analyzing works", len(works))
 			prog.update(len(works))
-			scored, stances := scoreWorks(works, claim)
+			scored, stances := scoreWorks(ctx, works, claim)
 			prog.done()
 			result := scengine.Consensus(scored)
 

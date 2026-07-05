@@ -61,7 +61,7 @@ func newNovelControversiesCmd(flags *rootFlags) *cobra.Command {
 			}
 			prog := newProgress(flags, "analyzing works", len(works))
 			prog.update(len(works))
-			_, stances := scoreWorks(works, query)
+			_, stances := scoreWorks(ctx, works, query)
 			prog.done()
 
 			out := controversyOutput{Query: query, StudyCount: len(works)}
