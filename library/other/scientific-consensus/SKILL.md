@@ -132,6 +132,14 @@ These capabilities aren't available in any other tool for this API.
   scientific-consensus batch claims.txt --agent
   scientific-consensus batch claims*.txt --limit 20 --json
   ```
+- **`report`** — Export an analyzed works report for a topic as an Excel (`.xlsx`) workbook: a `Works` sheet (one row per study with title, first author, year, DOI, PMID, venue, design, stance, stance confidence, citations, open access) and a `Summary` sheet (query metadata plus stance/design aggregates). Uses the same design/stance engine as `consensus` and `evidence`. Unlike `export` (raw JSONL/JSON API dumps), `report` writes analyzed, spreadsheet-ready results.
+
+  _Reach for this when a researcher wants to hand off results to Excel, Google Sheets, or any spreadsheet-based screening workflow._
+
+  ```bash
+  scientific-consensus report "vitamin D respiratory infections" --output report.xlsx
+  scientific-consensus report "microplastics" -o mp.xlsx --claim "microplastics harm human health" --limit 100 --agent
+  ```
 - **`citations`** — Build a citation network around a seed work (by `--doi`, `--pmid`, or `--id`): the works citing it (`cited-by`), the works it references (`references`), or both. Bounded by `--depth` (max 2 hops) and `--max-nodes` (hard cap). `--json` returns flat `nodes` + `edges` arrays ready for a web graph renderer; the human default is a compact summary.
 
   _Reach for this to trace influence, find high-impact neighbors, or feed a network-visualization tool._
@@ -202,6 +210,10 @@ These capabilities aren't available in any other tool for this API.
 **batch** — Batch consensus over claim files
 
 - `scientific-consensus-pp-cli batch <file|glob> [...]` — Run consensus analysis for every claim in one or more files (blank lines and `# comments` skipped; globs and duplicate files are handled automatically)
+
+**report** — Excel report export
+
+- `scientific-consensus-pp-cli report <query> --output <file.xlsx>` — Export analyzed works (design + stance classified) as a two-sheet Excel workbook; `--claim` overrides the stance target, `--filter` narrows with an OpenAlex filter, `--limit` caps the works analyzed
 
 **citations** — Citation-network graph
 

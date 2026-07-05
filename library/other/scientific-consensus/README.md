@@ -220,6 +220,14 @@ These capabilities aren't available in any other tool for this API.
   scientific-consensus batch claims.txt
   scientific-consensus batch claims*.txt --limit 20 --json
   ```
+- **`report`** — Export an analyzed works report for a topic as an Excel (`.xlsx`) workbook. The `Works` sheet has one row per study (title, first author, year, DOI, PMID, venue, design, stance, stance confidence, citations, open access); the `Summary` sheet carries the query metadata and stance/design aggregates. Same classification engine as `consensus` and `evidence` — but the destination is a spreadsheet, not a terminal.
+
+  _Reach for this to hand results to Excel, Google Sheets, or any spreadsheet-based literature-screening workflow._
+
+  ```bash
+  scientific-consensus report "vitamin D respiratory infections" --output report.xlsx
+  scientific-consensus report "microplastics" -o mp.xlsx --claim "microplastics harm human health" --limit 100
+  ```
 - **`citations`** — Build a citation network around a seed work (by `--doi`, `--pmid`, or OpenAlex `--id`). `--depth` (max 2) controls hop count; `--max-nodes` caps total nodes and API calls. `--direction` selects `cited-by`, `references`, or `both`. `--json` emits flat `nodes` + `edges` arrays for a web graph renderer; the default is a compact human summary.
 
   _Reach for this to trace influence, find high-impact neighbors, or build a network visualization._
@@ -381,6 +389,23 @@ Batch consensus over claim files
 - **`scientific-consensus-pp-cli batch <file|glob> [...]`** - Score every claim in one or more files
 
 One claim per line; blank lines and lines beginning with `#` are skipped. Multiple arguments are expanded as globs and deduplicated. Supports `--limit`, `--year-from`, and `--enrich` (same as `consensus`). `--json` output is a flat array of `{"claim","result":{...}}` objects; items with lookup failures carry `"error"` instead of `"result"`.
+
+### report
+
+Excel report export (keyless, via OpenAlex)
+
+- **`scientific-consensus-pp-cli report <query> --output <file.xlsx>`** - Export analyzed works as a two-sheet Excel workbook
+
+Key flags:
+
+| Flag | Default | Notes |
+|------|---------|-------|
+| `--output`, `-o` | (required) | Path of the `.xlsx` file to write |
+| `--claim` | the query | Claim the stance classifier scores each work against |
+| `--filter` | none | OpenAlex filter expression (e.g. `from_publication_date:2020-01-01`) |
+| `--limit` | 50 | Maximum works to analyze and export (max 200) |
+
+The workbook always contains both sheets; an empty result set still produces a valid file with headers so downstream tooling never sees a missing artifact. With `--json`/`--agent` the command prints a machine-readable summary (`file`, `works`, `total_matches`, stance counts, `apex_design`, `stance_method`) instead of prose.
 
 ### citations
 
