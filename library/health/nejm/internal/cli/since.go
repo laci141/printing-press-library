@@ -5,9 +5,18 @@ package cli
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/spf13/cobra"
 )
+
+// nejmSinceCutoffString renders a cutoff instant in the exact shape the store
+// writes synced_at (UTC RFC3339). The explicit .UTC() matters: the cutoff
+// comes from time.Now() in local time, and formatting a local instant with a
+// literal "Z" suffix would silently shift the window for any non-UTC user.
+func nejmSinceCutoffString(t time.Time) string {
+	return t.UTC().Format(time.RFC3339)
+}
 
 func newNovelSinceCmd(flags *rootFlags) *cobra.Command {
 	var freeOnly bool
@@ -39,7 +48,7 @@ func newNovelSinceCmd(flags *rootFlags) *cobra.Command {
 			defer db.Close()
 
 			clauses := []string{`synced_at >= ?`}
-			qargs := []interface{}{cutoff.Format("2006-01-02T15:04:05Z")}
+			qargs := []interface{}{nejmSinceCutoffString(cutoff)}
 			if freeOnly {
 				clauses = append(clauses, `is_free = 1`)
 			}
