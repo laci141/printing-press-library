@@ -111,18 +111,24 @@ In local mode: searches locally synced data only.`,
 				return cmd.Help()
 			}
 			query := args[0]
-			// This API has a search endpoint: GET /studies/search-areas
+			// Live search rides the same normalized CT.gov path as the
+			// intelligence commands: GET /studies with query.term.
+			// (/studies/search-areas is a field-metadata endpoint, not text
+			// search — it ignores q= and returns no study records.)
 			if flags.dataSource != "local" {
 				c, err := flags.newClient()
 				if err != nil {
 					return err
 				}
-				data, getErr := c.Get(cmd.Context(), "/studies/search-areas", map[string]string{
-					"q": query,
-				})
+				trials, getErr := ctgovFetch(cmd.Context(), c, ctgovParams("term", query), limit, 1)
 				if getErr == nil {
 					// Live search succeeded
-					results := extractSearchResults(data)
+					results := make([]json.RawMessage, 0, len(trials))
+					for _, t := range trials {
+						if b, mErr := json.Marshal(t); mErr == nil {
+							results = append(results, b)
+						}
+					}
 					prov := DataProvenance{Source: "live"}
 					return outputSearchResults(cmd, flags, results, limit, prov)
 				}

@@ -4,9 +4,12 @@ package source
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
+
+	"github.com/mvanhorn/printing-press-library/library/health/clinical-trials/internal/cliutil"
 )
 
 // OpenFDABase is the public openFDA drug endpoint (optional key for higher
@@ -87,14 +90,23 @@ func AdverseEvents(ctx context.Context, c *Client, drug string, limit int, apiKe
 // redactAPIKey returns err with any occurrence of the raw API key (and its
 // URL-escaped form) replaced by a redaction marker, so a transport error that
 // echoes the failing URL never leaks the key into logs or terminal output.
+// A *cliutil.RateLimitError is rebuilt as the same type with redacted fields —
+// flattening it to a plain string would break the errors.As detection that
+// callers (e.g. isRateLimit in evidence.go) rely on to surface throttles as
+// hard errors instead of silently-empty results.
 func redactAPIKey(err error, apiKey string) error {
 	if err == nil || apiKey == "" {
 		return err
 	}
-	msg := err.Error()
-	msg = strings.ReplaceAll(msg, apiKey, "REDACTED")
-	msg = strings.ReplaceAll(msg, url.QueryEscape(apiKey), "REDACTED")
-	return fmt.Errorf("%s", msg)
+	redact := func(s string) string {
+		s = strings.ReplaceAll(s, apiKey, "REDACTED")
+		return strings.ReplaceAll(s, url.QueryEscape(apiKey), "REDACTED")
+	}
+	var rl *cliutil.RateLimitError
+	if errors.As(err, &rl) {
+		return &cliutil.RateLimitError{URL: redact(rl.URL), RetryAfter: rl.RetryAfter, Body: redact(rl.Body)}
+	}
+	return errors.New(redact(err.Error()))
 }
 
 // isNotFound reports whether err is an openFDA 404 (no matching records), which

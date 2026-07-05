@@ -17,6 +17,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// perProbeTimeout bounds each individual source probe. Probes run
+// sequentially under one shared --timeout ctx; without a per-probe cap, two
+// fully-timed-out probes (30s HTTP client timeout each) exhaust the default
+// 1-minute budget and every remaining source reads as a false "down".
+const perProbeTimeout = 15 * time.Second
+
 // sourceHealth is one probed source's status.
 type sourceHealth struct {
 	Name      string `json:"name"`
@@ -100,7 +106,12 @@ func newNovelHealthCmd(flags *rootFlags) *cobra.Command {
 			for _, p := range probes {
 				h := sourceHealth{Name: p.name, Role: p.role}
 				start := time.Now()
-				perr := p.fn(ctx)
+				// Each probe gets its own sub-deadline so a slow or blocked
+				// source can't exhaust the shared ctx and mark every later
+				// source "down" with a misleading "context deadline exceeded".
+				probeCtx, probeCancel := context.WithTimeout(ctx, perProbeTimeout)
+				perr := p.fn(probeCtx)
+				probeCancel()
 				h.LatencyMS = time.Since(start).Milliseconds()
 				if perr == nil {
 					h.Status = "ok"

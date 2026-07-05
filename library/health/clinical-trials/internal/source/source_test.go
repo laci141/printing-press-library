@@ -7,7 +7,40 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/mvanhorn/printing-press-library/library/health/clinical-trials/internal/cliutil"
 )
+
+func TestRedactAPIKey_PreservesRateLimitError(t *testing.T) {
+	rl := &cliutil.RateLimitError{
+		URL:        "https://api.fda.gov/drug/event.json?api_key=SECRET123",
+		RetryAfter: 2 * time.Second,
+		Body:       "key SECRET123 throttled",
+	}
+	got := redactAPIKey(rl, "SECRET123")
+	var out *cliutil.RateLimitError
+	if !errors.As(got, &out) {
+		t.Fatalf("redactAPIKey must keep *cliutil.RateLimitError visible to errors.As (isRateLimit depends on it), got %T", got)
+	}
+	if strings.Contains(out.URL, "SECRET123") || strings.Contains(out.Body, "SECRET123") {
+		t.Errorf("key not redacted: %+v", out)
+	}
+	if out.RetryAfter != 2*time.Second {
+		t.Errorf("RetryAfter not preserved: %v", out.RetryAfter)
+	}
+}
+
+func TestRedactAPIKey_PlainError(t *testing.T) {
+	err := errors.New("GET https://api.fda.gov/x?api_key=SECRET123: dial tcp: timeout")
+	got := redactAPIKey(err, "SECRET123")
+	if strings.Contains(got.Error(), "SECRET123") {
+		t.Errorf("key leaked: %v", got)
+	}
+	if !strings.Contains(got.Error(), "REDACTED") {
+		t.Errorf("expected REDACTED marker: %v", got)
+	}
+}
 
 func rawMap(t *testing.T, js string) map[string]json.RawMessage {
 	t.Helper()
