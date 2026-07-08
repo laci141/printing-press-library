@@ -21,6 +21,7 @@ config:
 
 resources:
   enforcement:
+    x-resource-id: recall_number
     description: "FDA drug recall enforcement records (openFDA /drug/enforcement.json)"
     endpoints:
       list:

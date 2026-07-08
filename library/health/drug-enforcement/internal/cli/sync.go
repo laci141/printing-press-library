@@ -1451,7 +1451,13 @@ func syncResourcePath(resource string) (string, error) {
 // Includes both flat resources and dependent (parent-child) resources so
 // annotations on a child path-item are honored at runtime, not just on
 // flat paths.
-var resourceIDFieldOverrides = map[string]string{}
+var resourceIDFieldOverrides = map[string]string{
+	// Projected from spec.yaml `x-resource-id: recall_number`. openFDA
+	// enforcement records carry no `id`/`name`-shaped field, so every
+	// generic fallback misses and each record would drop as
+	// primary_key_unresolved. recall_number is the FDA source record ID.
+	"enforcement": "recall_number",
+}
 
 // genericIDFieldFallbacks is the runtime safety net for resources that did
 // NOT receive a templated IDField. API-specific names belong in spec

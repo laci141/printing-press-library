@@ -232,9 +232,11 @@ func runRecallSearch(cmd *cobra.Command, flags *rootFlags, search string, limit 
 		return classifyAPIError(err, flags)
 	}
 
-	// Machine output: pass the openFDA envelope through unchanged (it already
-	// carries openFDA's own disclaimer under meta.disclaimer).
-	if flags.asJSON || flags.agent || (!isTerminal(cmd.OutOrStdout()) && !flags.csv && !flags.quiet && !flags.plain) {
+	// Machine output only on an explicit request (--json/--agent). A piped
+	// stdout must NOT silently switch to the machine envelope: plain-text
+	// consumers (e.g. `... | head`) still need the human class legend and
+	// disclaimer guardrail, which only the formatted branch below emits.
+	if flags.asJSON || flags.agent {
 		return printOutputWithFlags(cmd.OutOrStdout(), data, flags)
 	}
 
@@ -268,7 +270,7 @@ func runRecallSearch(cmd *cobra.Command, flags *rootFlags, search string, limit 
 // emitNoRecords prints the guardrail "no recall records found" result. It never
 // implies the drug/firm is safe.
 func emitNoRecords(cmd *cobra.Command, flags *rootFlags, subject string) error {
-	if flags.asJSON || flags.agent || (!isTerminal(cmd.OutOrStdout()) && !flags.csv && !flags.quiet && !flags.plain) {
+	if flags.asJSON || flags.agent {
 		out := map[string]any{
 			"total":      0,
 			"records":    []any{},
