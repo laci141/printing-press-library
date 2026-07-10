@@ -2,16 +2,16 @@
   "schema_version": 1,
   "slug": "flight-goat",
   "cli_name": "flight-goat-pp-cli",
-  "version": "2026.6.5",
-  "released_at": "2026-06-24T00:44:18Z",
-  "source_commit": "df8fb811194af726ca3206e4ff398c2ffd608223",
+  "version": "2026.7.2",
+  "released_at": "2026-07-10T05:42:37Z",
+  "source_commit": "64702c4716584fe5c16bc438a5bc204803347b73",
   "printing_press_version": "3.6.0",
   "changes": [
     {
-      "title": "feat(boardgamegeek): add boardgamegeek-pp-cli",
-      "pr": 1295,
-      "url": "https://github.com/mvanhorn/printing-press-library/pull/1295",
-      "commit": "df8fb811194af726ca3206e4ff398c2ffd608223"
+      "title": "feat(cli): add FlySoar (Soar) price source + booking handoff to flight-goat",
+      "pr": 1445,
+      "url": "https://github.com/mvanhorn/printing-press-library/pull/1445",
+      "commit": "64702c4716584fe5c16bc438a5bc204803347b73"
     }
   ]
 }

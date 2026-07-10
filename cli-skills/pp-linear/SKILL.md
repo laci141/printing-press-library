@@ -30,7 +30,7 @@ This skill drives the `linear-pp-cli` binary. **Do not invoke a command named `l
 2. Verify: `linear-pp-cli --version`
 3. Ensure the reported install directory is on `$PATH` for the agent/runtime that will invoke this skill.
 
-If the `npx` install fails (no Node, offline, etc.), fall back to a direct Go install (requires Go 1.26.4 or newer):
+If the `npx` install fails (no Node, offline, etc.), fall back to a direct Go install (requires Go 1.26.5 or newer):
 
 ```bash
 go install github.com/mvanhorn/printing-press-library/library/project-management/linear/cmd/linear-pp-cli@latest
@@ -316,6 +316,14 @@ These capabilities aren't available in any other tool for this API.
 **project-statuses** — Manage project-statuses
 
 - `linear-pp-cli project-statuses <id>` — Get a single projectstatus
+
+**project-updates** — Create and list Linear project updates (status posts on a project)
+
+- `linear-pp-cli project-updates list --project <uuid> --agent` — List project updates for a project
+- `linear-pp-cli project-updates list --project-name "My Project" --limit 10 --agent` — List updates by project name
+- `linear-pp-cli project-updates create --project <uuid> --body-file /tmp/update.md --health onTrack --agent` — Post a project update with markdown body
+- `linear-pp-cli project-updates create --project-name "My Project" --body "Sprint on track." --health onTrack --agent` — Post update by project name
+- `linear-pp-cli project-updates create --project <uuid> --body-stdin --health atRisk --agent < /tmp/update.md` — Post update from stdin
 
 **projects** — Manage projects
 

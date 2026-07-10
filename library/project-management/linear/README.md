@@ -6,7 +6,7 @@ Pulls your workspace into a local SQLite store with FTS5 search and runs compoun
 
 Created by [@mvanhorn](https://github.com/mvanhorn) (Matt Van Horn).
 
-Contributors: [@ericlitman](https://github.com/ericlitman) (Eric Litman), [@tmchow](https://github.com/tmchow) (Trevin Chow).
+Contributors: [@ericlitman](https://github.com/ericlitman) (Eric Litman), [@tmchow](https://github.com/tmchow) (Trevin Chow), [@rob-coco](https://github.com/rob-coco) (Rob Coco).
 
 ## Install
 
@@ -37,7 +37,7 @@ npx -y @mvanhorn/printing-press-library install linear --agent claude-code --age
 
 ### Without Node (Go fallback)
 
-If `npx` isn't available (no Node, offline), install the CLI directly via Go (requires Go 1.26.4 or newer):
+If `npx` isn't available (no Node, offline), install the CLI directly via Go (requires Go 1.26.5 or newer):
 
 ```bash
 go install github.com/mvanhorn/printing-press-library/library/project-management/linear/cmd/linear-pp-cli@latest
