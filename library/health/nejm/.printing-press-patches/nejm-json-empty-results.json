@@ -4,14 +4,16 @@
   "applied_at": "2026-06-22",
   "base_run_id": "20260620-035405-a2d4c231",
   "base_printing_press_version": "4.24.0",
-  "summary": "Output [] instead of hint text to stdout when --json is set and results are empty.",
-  "reason": "Five commands (articles, open-access, search, trends, reading-list ls) wrote a human-readable hint to stderr and returned nil with no stdout output when the local corpus was empty; this left stdout empty and caused json_fidelity dogfood tests to fail with 'invalid JSON'. Also added Example field to reading-list ls which was missing.",
+  "summary": "JSON list output must be [] (never null or hint text) when results are empty; result slices that feed a JSON encoder are initialized with make(..., 0) instead of a nil var declaration.",
+  "reason": "Five commands (articles, open-access, search, trends, reading-list ls) wrote a human-readable hint to stderr and returned nil with no stdout output when the local corpus was empty; this left stdout empty and caused json_fidelity dogfood tests to fail with 'invalid JSON'. Also added Example field to reading-list ls which was missing. Follow-up: reading-list ls, feedback recent, and doctor's cache report encoded a nil slice directly, emitting null instead of [] for empty lists.",
   "files": [
     "internal/cli/nejm_feeds.go",
     "internal/cli/nejm_commands.go",
     "internal/cli/open_access.go",
     "internal/cli/trends.go",
-    "internal/cli/reading_list.go"
+    "internal/cli/reading_list.go",
+    "internal/cli/feedback.go",
+    "internal/cli/doctor.go"
   ],
   "validated_outcome": "Full live dogfood gate passes with 0 failures after this fix."
 }

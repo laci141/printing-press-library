@@ -205,7 +205,7 @@ func newFeedbackListCmd(flags *rootFlags) *cobra.Command {
 				}
 				return err
 			}
-			var entries []FeedbackEntry
+			entries := make([]FeedbackEntry, 0)
 			for _, line := range strings.Split(string(data), "\n") {
 				line = strings.TrimSpace(line)
 				if line == "" {

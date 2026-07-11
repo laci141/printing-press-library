@@ -419,7 +419,7 @@ func collectCacheReport(ctx context.Context, staleAfterSpec string) map[string]a
 	}
 	defer rows.Close()
 
-	var resources []map[string]any
+	resources := make([]map[string]any, 0)
 	fresh := true
 	haveAny := false
 	oldest := time.Duration(0)

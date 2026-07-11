@@ -107,7 +107,7 @@ func newNovelReadingListCmd(flags *rootFlags) *cobra.Command {
 				Authors string `json:"authors,omitempty"`
 				Read    bool   `json:"read"`
 			}
-			var results []rlRow
+			results := make([]rlRow, 0)
 			for rows.Next() {
 				var doi, addedAt string
 				var readAtNull *string
