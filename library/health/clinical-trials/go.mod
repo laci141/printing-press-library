@@ -1,6 +1,6 @@
 module github.com/mvanhorn/printing-press-library/library/health/clinical-trials
 
-go 1.26
+go 1.26.5
 
 toolchain go1.26.4
 
