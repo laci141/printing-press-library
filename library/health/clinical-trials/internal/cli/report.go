@@ -151,7 +151,6 @@ func writeMDTable(w interface{ Write([]byte) (int, error) }, heading, keyCol str
 
 func renderReportCSV(cmd *cobra.Command, r topicReport) error {
 	cw := csv.NewWriter(cmd.OutOrStdout())
-	defer cw.Flush()
 	rows := [][]string{
 		{"section", "label", "count"},
 		{"summary", "total_trials", strconv.Itoa(r.Total)},
@@ -172,5 +171,6 @@ func renderReportCSV(cmd *cobra.Command, r topicReport) error {
 			return err
 		}
 	}
+	cw.Flush()
 	return cw.Error()
 }
