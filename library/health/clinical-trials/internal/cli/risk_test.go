@@ -123,6 +123,54 @@ func TestNovelRiskBehavior(t *testing.T) {
 	}
 }
 
+// TestScoreRiskPhaseFactorAlwaysPresent guards the explainability contract:
+// every trial gets an explicit "phase" factor entry, including Phase 2 (the
+// most common attrition point) and unknown/unposted phases — a reviewer must
+// never have to infer from a missing entry whether the phase signal was
+// considered.
+func TestScoreRiskPhaseFactorAlwaysPresent(t *testing.T) {
+	cases := []struct {
+		name       string
+		phases     []string
+		wantPoints int
+	}{
+		{name: "early phase 1", phases: []string{"EARLY_PHASE1"}, wantPoints: 10},
+		{name: "phase 1", phases: []string{"PHASE1"}, wantPoints: 10},
+		{name: "phase 2", phases: []string{"PHASE2"}, wantPoints: 5},
+		{name: "phase 3", phases: []string{"PHASE3"}, wantPoints: 0},
+		{name: "unknown phase enum", phases: []string{"NA"}, wantPoints: 5},
+		{name: "no phases posted", phases: nil, wantPoints: 5},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			trial := Trial{
+				NCTID: "NCT0", Status: "RECRUITING", Enrollment: 500,
+				Countries: []string{"United States", "Germany"},
+				Phases:    tc.phases, Sponsor: "Acme",
+			}
+			v := scoreRisk(trial, 100)
+			var phase *riskFactor
+			for i := range v.Factors {
+				if v.Factors[i].Name == "phase" {
+					phase = &v.Factors[i]
+					break
+				}
+			}
+			if phase == nil {
+				t.Fatalf("phases %v: no %q factor entry in %+v", tc.phases, "phase", v.Factors)
+			}
+			if phase.Points != tc.wantPoints {
+				t.Errorf("phases %v: phase factor points = %d, want %d", tc.phases, phase.Points, tc.wantPoints)
+			}
+			if phase.Detail == "" {
+				t.Errorf("phases %v: phase factor has empty detail", tc.phases)
+			}
+		})
+	}
+}
+
 func TestHasAnyPhase(t *testing.T) {
 	if !hasAnyPhase([]string{"PHASE2", "PHASE3"}, "PHASE3", "PHASE4") {
 		t.Error("expected PHASE3 to match")
