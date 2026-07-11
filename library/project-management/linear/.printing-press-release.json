@@ -2,17 +2,17 @@
   "schema_version": 1,
   "slug": "linear",
   "cli_name": "linear-pp-cli",
-  "version": "2026.6.4",
-  "released_at": "2026-06-21T22:14:23Z",
-  "source_commit": "d7149f11f1d49a1830b725d4b2b622f0a6cf934b",
+  "version": "2026.7.3",
+  "released_at": "2026-07-08T23:15:22Z",
+  "source_commit": "220c1563d0375ec8741c4c377b4bb5a4317cbf6a",
   "printing_press_version": "4.9.0",
   "run_id": "20260518-232543",
   "changes": [
     {
-      "title": "feat(linear): support issue parent linking",
-      "pr": 1284,
-      "url": "https://github.com/mvanhorn/printing-press-library/pull/1284",
-      "commit": "d7149f11f1d49a1830b725d4b2b622f0a6cf934b"
+      "title": "feat: registry hygiene follow-ups (pp-first descriptions, expanded MCP validation, --validate for skills, npm publish auto-trigger)",
+      "pr": 675,
+      "url": "https://github.com/mvanhorn/printing-press-library/pull/675",
+      "commit": "220c1563d0375ec8741c4c377b4bb5a4317cbf6a"
     }
   ]
 }

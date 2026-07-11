@@ -25,7 +25,7 @@ This skill drives the `linear-pp-cli` binary. **Do not invoke a command named `l
 2. Verify: `linear-pp-cli --version`
 3. Ensure the reported install directory is on `$PATH` for the agent/runtime that will invoke this skill.
 
-If the `npx` install fails (no Node, offline, etc.), fall back to a direct Go install (requires Go 1.26.4 or newer):
+If the `npx` install fails (no Node, offline, etc.), fall back to a direct Go install (requires Go 1.26.5 or newer):
 
 ```bash
 go install github.com/mvanhorn/printing-press-library/library/project-management/linear/cmd/linear-pp-cli@latest
@@ -169,6 +169,20 @@ These capabilities aren't available in any other tool for this API.
   linear-pp-cli labels list --team ENG --agent --select id,name,global,team.key
   linear-pp-cli issues create --title "Title" --team ENG --label <global-or-eng-label-id> --agent
   ```
+- **Project and initiative name resolution** — Resolve portfolio objects by human name before writing issue relationships.
+
+  _Reach for this when a user gives an issue identifier plus a project or initiative name. `--project` is UUID-only; use `--project-name` when the input is a human project name._
+
+  ```bash
+  linear-pp-cli projects list --agent --select id,name,team.key,state,url
+  linear-pp-cli projects search "Autonomous Backlog Manager & Dispatch Governance" --team SYMPH --agent --select id,name,team.key,initiative.name,url
+  linear-pp-cli initiatives list --agent --select id,name,status,url
+  linear-pp-cli initiatives search "Dispatch Governance" --agent --select id,name,status,url
+  linear-pp-cli issues edit SYMPH-795 --project-name "Autonomous Backlog Manager & Dispatch Governance" --dry-run --agent
+  linear-pp-cli issues edit SYMPH-795 --project-name "Autonomous Backlog Manager & Dispatch Governance" --agent
+  ```
+
+  `--project-name` always performs a live Linear read to resolve the UUID, even when the surrounding issue write is a dry-run. Use `projects search` first when the name is partial; writes require a normalized exact project-name match.
 - **Shell-safe Linear writes with media** — Create and update issue descriptions, comments, and Linear docs without putting Markdown bodies on the shell command line.
 
   _Reach for this whenever a body contains newlines, quotes, backticks, `$()` expansions, shell commands, images, logs, or agent-generated Markdown._
@@ -185,11 +199,43 @@ These capabilities aren't available in any other tool for this API.
   ```
 
   `documents create` requires exactly one parent (`--issue`, `--project`, `--team`, `--initiative`, `--cycle`, `--release`, or `--folder`); `--team` accepts a key such as `ENG` or a UUID. `issues edit --media`, `comments edit --media`, and `documents edit --media` with no body/content flag fetch the existing Markdown live and append uploaded media links. Images become Markdown image embeds; non-images become Markdown links. Add `--media-public` only when the uploaded asset must be reachable outside the Linear workspace.
-- **Current issue reads and comments** — Read full issue bodies and discussion without falling back to stale local state.
+- **Current issue reads and comments** — Read full issue bodies and discussion without falling back to stale local state. `comments list` takes the issue positionally (preferred) or via `--issue`.
 
   ```bash
-  linear-pp-cli issues ENG-123 --agent --data-source live --select identifier,title,description,state.name,url
-  linear-pp-cli comments list --issue ENG-123 --agent
+  linear-pp-cli issues ENG-123 --agent --data-source live --select identifier,title,description,state.id,state.name,url
+  linear-pp-cli comments list ENG-123 --agent
+  linear-pp-cli comments list --issue ENG-123 --agent --limit 100
+  ```
+- **State transitions** — Move an issue between workflow states without raw SQL, GraphQL, or `api` spelunking. The exact recipe:
+
+  1. List the states for the issue's team: `workflow-states list --team <key>` (alias: `states list`).
+  2. Pick the target by `name` or `type` and copy its `id` UUID.
+  3. Pass that UUID to `issues edit --state`.
+
+  ```bash
+  linear-pp-cli workflow-states list --team ENG --agent --select id,name,type
+  linear-pp-cli issues edit ENG-123 --state <state-uuid> --agent
+  ```
+
+  Or skip the lookup entirely with one-command transitions resolved against the issue's own team:
+
+  ```bash
+  linear-pp-cli issues edit ENG-123 --state-name "In Progress" --agent
+  linear-pp-cli issues edit ENG-123 --state-type started --agent   # usage error if the team has several 'started' states
+  ```
+
+  `issues create` takes the same trio, resolved against `--team`, so an issue can open directly in the right state. `--state` requires a UUID (a non-UUID value is a usage error pointing at `--state-name`):
+
+  ```bash
+  linear-pp-cli issues create --title "..." --team ENG --state-name "In Progress" --agent
+  ```
+
+  Do not use `linear-pp-cli api` or `linear-pp-cli sql` for workflow states — `api` only exposes generated REST-shaped interfaces (currently `integrations`), not Linear GraphQL objects.
+- **Linear document reads** — `documents <ref>` accepts every identifier form Linear surfaces: the document UUID, the bare `slugId` (`f7f48ab36080`), the full URL slug (`my-runbook-f7f48ab36080`), or the entire document URL. Copy whichever you have; no slug trimming or parsing shims needed.
+
+  ```bash
+  linear-pp-cli documents my-runbook-f7f48ab36080 --agent --select title,updatedAt,content
+  linear-pp-cli documents "https://linear.app/<org>/document/my-runbook-f7f48ab36080" --agent
   ```
 
 ## Command Reference
@@ -229,6 +275,9 @@ These capabilities aren't available in any other tool for this API.
 **initiatives** — Manage initiatives
 
 - `linear-pp-cli initiatives <id>` — Get a single initiative
+- `linear-pp-cli initiatives list` — List Linear initiatives
+- `linear-pp-cli initiatives search <query>` — Search Linear initiatives by name
+- `linear-pp-cli initiatives resolve <name>` — Resolve one Linear initiative name to its UUID
 
 **integrations** — Manage integrations
 
@@ -263,9 +312,20 @@ These capabilities aren't available in any other tool for this API.
 
 - `linear-pp-cli project-statuses <id>` — Get a single projectstatus
 
+**project-updates** — Create and list Linear project updates (status posts on a project)
+
+- `linear-pp-cli project-updates list --project <uuid> --agent` — List project updates for a project
+- `linear-pp-cli project-updates list --project-name "My Project" --limit 10 --agent` — List updates by project name
+- `linear-pp-cli project-updates create --project <uuid> --body-file /tmp/update.md --health onTrack --agent` — Post a project update with markdown body
+- `linear-pp-cli project-updates create --project-name "My Project" --body "Sprint on track." --health onTrack --agent` — Post update by project name
+- `linear-pp-cli project-updates create --project <uuid> --body-stdin --health atRisk --agent < /tmp/update.md` — Post update from stdin
+
 **projects** — Manage projects
 
 - `linear-pp-cli projects <id>` — Get a single project
+- `linear-pp-cli projects list` — List Linear projects
+- `linear-pp-cli projects search <query>` — Search Linear projects by name
+- `linear-pp-cli projects resolve <name>` — Resolve one Linear project name to its UUID
 
 **release-notes** — Manage release-notes
 
@@ -306,6 +366,10 @@ These capabilities aren't available in any other tool for this API.
 **users** — Manage users
 
 - `linear-pp-cli users` — Get a single user
+
+**workflow-states** — List Linear workflow states (alias: `states`)
+
+- `linear-pp-cli workflow-states list --team ENG --agent --select id,name,type` — List a team's states with the UUIDs `issues edit --state` needs
 
 
 ### Finding the right command
@@ -439,7 +503,13 @@ Every `issues create` records the new ticket in a local `pp_created` table tagge
 
 Add `--agent` to any command. Expands to: `--json --compact --no-input --no-color --yes`.
 
-- **Pipeable** — JSON on stdout, errors on stderr
+- **Pipeable** — JSON on stdout. Failures are JSON too: in `--agent`/`--json` mode every typed error (usage, not-found, auth, API, rate-limit, config) is a one-line envelope on stdout, so piping stdout straight into a JSON parser is always safe:
+
+  ```json
+  {"error":"document \"missing-doc\" not found","code":3,"type":"not_found"}
+  ```
+
+  The process still exits with the typed code from the Exit Codes table; `type` is the machine-readable name for it (`usage`, `not_found`, `auth`, `api`, `partial_failure`, `rate_limit`, `config`). No `2>&1 | python json` defensive wrappers needed on read paths.
 - **Filterable** — `--select` keeps a subset of fields. Dotted paths descend into nested structures; arrays traverse element-wise. Critical for keeping context small on verbose APIs:
 
   ```bash
