@@ -16,6 +16,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/mvanhorn/printing-press-library/library/health/clinical-trials/internal/cliutil"
@@ -82,9 +84,49 @@ func decodeInto(rawURL string, body []byte, out any) error {
 		return nil
 	}
 	if err := json.Unmarshal(body, out); err != nil {
-		return fmt.Errorf("decoding response from %s: %w", rawURL, err)
+		return fmt.Errorf("decoding response from %s: %w", scrubURL(rawURL), err)
 	}
 	return nil
+}
+
+// sensitiveQueryKeys are query-parameter names whose values are secrets (API
+// keys, tokens) and must never appear in an error message or log line.
+var sensitiveQueryKeys = map[string]bool{
+	"api_key":      true,
+	"apikey":       true,
+	"api-key":      true,
+	"key":          true,
+	"token":        true,
+	"access_token": true,
+	"auth":         true,
+}
+
+// scrubURL returns rawURL with the values of any sensitive query parameters
+// replaced by REDACTED, so a URL can be safely embedded in an error message.
+// Sources like OpenFDA and PubMed append &api_key=... to the request URL; that
+// URL flows into transport-level errors here, so scrubbing centrally means no
+// individual source has to remember to redact. If rawURL can't be parsed, the
+// whole query string is dropped as a conservative fallback.
+func scrubURL(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		if i := strings.IndexByte(rawURL, '?'); i >= 0 {
+			return rawURL[:i] + "?REDACTED"
+		}
+		return rawURL
+	}
+	q := u.Query()
+	redacted := false
+	for k := range q {
+		if sensitiveQueryKeys[strings.ToLower(k)] {
+			q.Set(k, "REDACTED")
+			redacted = true
+		}
+	}
+	if redacted {
+		u.RawQuery = q.Encode()
+	}
+	return u.String()
 }
 
 func (c *Client) do(ctx context.Context, method, rawURL string, headers map[string]string, payload []byte) ([]byte, error) {
@@ -112,7 +154,7 @@ func (c *Client) do(ctx context.Context, method, rawURL string, headers map[stri
 			if ctxErr := ctx.Err(); ctxErr != nil {
 				return nil, ctxErr
 			}
-			lastErr = fmt.Errorf("%s %s: %w", method, rawURL, err)
+			lastErr = fmt.Errorf("%s %s: %w", method, scrubURL(rawURL), err)
 			if !sleepCtx(ctx, cliutil.Backoff(attempt)) {
 				return nil, ctx.Err()
 			}
@@ -133,25 +175,25 @@ func (c *Client) do(ctx context.Context, method, rawURL string, headers map[stri
 				if !sleepCtx(ctx, cliutil.RetryAfter(resp)) {
 					return nil, ctx.Err()
 				}
-				lastErr = &cliutil.RateLimitError{URL: rawURL, RetryAfter: cliutil.RetryAfter(resp), Body: truncate429(body)}
+				lastErr = &cliutil.RateLimitError{URL: scrubURL(rawURL), RetryAfter: cliutil.RetryAfter(resp), Body: truncate429(body)}
 				continue
 			}
-			return nil, &cliutil.RateLimitError{URL: rawURL, RetryAfter: cliutil.RetryAfter(resp), Body: truncate429(body)}
+			return nil, &cliutil.RateLimitError{URL: scrubURL(rawURL), RetryAfter: cliutil.RetryAfter(resp), Body: truncate429(body)}
 		case resp.StatusCode >= 500:
 			if attempt < maxSourceRetries {
 				if !sleepCtx(ctx, cliutil.Backoff(attempt)) {
 					return nil, ctx.Err()
 				}
-				lastErr = fmt.Errorf("%s %s: HTTP %d", method, rawURL, resp.StatusCode)
+				lastErr = fmt.Errorf("%s %s: HTTP %d", method, scrubURL(rawURL), resp.StatusCode)
 				continue
 			}
-			return nil, fmt.Errorf("%s %s: HTTP %d", method, rawURL, resp.StatusCode)
+			return nil, fmt.Errorf("%s %s: HTTP %d", method, scrubURL(rawURL), resp.StatusCode)
 		default:
-			return nil, fmt.Errorf("%s %s: HTTP %d: %s", method, rawURL, resp.StatusCode, truncate429(body))
+			return nil, fmt.Errorf("%s %s: HTTP %d: %s", method, scrubURL(rawURL), resp.StatusCode, truncate429(body))
 		}
 	}
 	if lastErr == nil {
-		lastErr = fmt.Errorf("%s %s: exhausted retries", method, rawURL)
+		lastErr = fmt.Errorf("%s %s: exhausted retries", method, scrubURL(rawURL))
 	}
 	return nil, lastErr
 }
