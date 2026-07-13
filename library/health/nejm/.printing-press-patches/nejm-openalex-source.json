@@ -1,0 +1,15 @@
+{
+  "schema_version": 2,
+  "id": "nejm-openalex-source",
+  "applied_at": "2026-07-13",
+  "base_run_id": "20260620-035405-a2d4c231",
+  "base_printing_press_version": "4.24.0",
+  "summary": "OpenAlex (CC0) is a second, copyright-clean data source exposed as the patch-added 'openalex search' command: live abstracts, author lists, citation counts, and OA flags for NEJM works filtered by ISSN 0028-4793.",
+  "reason": "The Cloudflare-gated NEJM HTML transport cannot deliver abstracts, citation counts, or reliable author lists, and the spec's single-API model cannot express a second base_url, so the OpenAlex source ships as a hand-authored stdlib-HTTP command (net/http against api.openalex.org, polite-pool mailto) rather than a generated endpoint. A regen must re-add or preserve this command; it has no spec representation.",
+  "files": [
+    "internal/cli/openalex.go",
+    "internal/cli/root.go",
+    "SKILL.md"
+  ],
+  "validated_outcome": "go build/vet/test green; live 'openalex search --query \"vitamin D\" --per-page 3 --sort cited --json' returns real NEJM works with reconstructed abstracts and citation counts (no 403). Command rides the MCP cobratree runtime mirror like the other novel commands, so mcp_tool_count/mcp_public_tool_count (typed endpoint tools only) are unchanged."
+}

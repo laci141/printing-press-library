@@ -78,6 +78,18 @@ These capabilities aren't available in any other tool for this API.
   nejm-pp-cli reading-list add 10.1056/NEJMoa2506905
   ```
 
+### Second data source: OpenAlex (CC0)
+
+- **`openalex search`** — Search NEJM works live in the OpenAlex scholarly index: abstracts, author lists, citation counts, and open-access flags.
+
+  _Use when you need abstracts or citation counts without syncing and without the Cloudflare-gated NEJM transport; data is CC0-licensed._
+
+  ```bash
+  nejm-pp-cli openalex search --query "vitamin D" --from-year 2015 --to-year 2026 --per-page 10 --sort cited
+  ```
+
+  Flags: `--query` (full-text search), `--from-year`/`--to-year` (publication-year range), `--per-page` (1-50, default 20), `--sort` (`cited` or `date`).
+
 ### Corpus analytics
 
 - **`trends`** — Show how NEJM output distributes by specialty, article type, and issue across the synced corpus.

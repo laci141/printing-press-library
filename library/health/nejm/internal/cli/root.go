@@ -243,6 +243,7 @@ See README.md or the bundled SKILL.md for recipes.`,
 	rootCmd.AddCommand(newNovelReadingListCmd(flags))
 	rootCmd.AddCommand(newNovelSinceCmd(flags))
 	rootCmd.AddCommand(newNovelTrendsCmd(flags))
+	rootCmd.AddCommand(newOpenAlexCmd(flags))
 	rootCmd.AddCommand(newAPICmd(flags))
 	rootCmd.AddCommand(newArticlePromotedCmd(flags))
 	rootCmd.AddCommand(newSpecialtyPromotedCmd(flags))
