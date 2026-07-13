@@ -13,7 +13,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newCurrentCmd lists articles from the current issue (eTOC feed) in the local corpus.
+// newCurrentCmd lists articles from the most recent publication week in the
+// local corpus — the closest analog to "the current issue" now that the corpus
+// is sourced from OpenAlex, which carries no issue partition.
 func newCurrentCmd(flags *rootFlags) *cobra.Command {
 	var limit int
 	var freeOnly bool
@@ -21,7 +23,7 @@ func newCurrentCmd(flags *rootFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "current",
 		Short:       "List the current NEJM issue's articles from the local corpus",
-		Long:        "List articles from the current issue (eTOC RSS feed). Run 'nejm-pp-cli sync' first to populate the corpus.",
+		Long:        "List articles from the most recent NEJM publication week in the local corpus (approximates the current issue). Run 'nejm-pp-cli sync' first to populate the corpus from OpenAlex.",
 		Annotations: map[string]string{"mcp:read-only": "true"},
 		Example:     "  nejm-pp-cli current\n  nejm-pp-cli current --free --json",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -38,7 +40,7 @@ func newCurrentCmd(flags *rootFlags) *cobra.Command {
 			defer db.Close()
 			maybeEmitSyncHints(cmd, db, "article", flags.maxAge)
 
-			where := `feed = 'etoc'`
+			where := nejmCurrentIssueWhere
 			var qargs []any
 			if freeOnly {
 				where += ` AND is_free = 1`
@@ -79,10 +81,12 @@ func newRecentCmd(flags *rootFlags) *cobra.Command {
 			defer db.Close()
 			maybeEmitSyncHints(cmd, db, "article", flags.maxAge)
 
-			where := `feed = 'axatoc'`
+			// Newest-first over the whole corpus; the retired RSS transport's
+			// 'axatoc' (recently-published) feed partition no longer exists.
+			where := ``
 			var qargs []any
 			if freeOnly {
-				where += ` AND is_free = 1`
+				where = `is_free = 1`
 			}
 			items, err := nejmQueryArticles(db, where, qargs, limit)
 			if err != nil {

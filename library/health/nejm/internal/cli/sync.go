@@ -122,36 +122,69 @@ Resource scoping:
 
 			syncEventWriter := cmd.OutOrStdout()
 
-			// NEJM Phase 3: sync articles from RSS feeds (etoc + axatoc).
-			// The article endpoint (/doi/full/{doi}) requires a DOI and cannot
-			// bulk-list; RSS feeds are the only article list source.
+			// NEJM: bulk article sync sources from OpenAlex (CC0). The retired
+			// RSS transport (etoc + axatoc feeds) was Cloudflare-gated and
+			// carried no abstracts, citation data, or OA flags; OpenAlex lists
+			// the full NEJM corpus (ISSN 0028-4793) with all of them. The
+			// article endpoint (/doi/full/{doi}) still cannot bulk-list, so
+			// this bespoke source stays outside the generated syncResource loop.
 			// Skip if user explicitly asked for specific resources that don't include "article".
-			wantRSSSync := len(resources) == 0
+			wantArticleSync := len(resources) == 0
 			for _, r := range resources {
 				if r == "article" {
-					wantRSSSync = true
+					wantArticleSync = true
 					break
 				}
 			}
-			if wantRSSSync {
-				if humanFriendly {
-					fmt.Fprintln(os.Stderr, "Syncing NEJM RSS feeds (etoc + axatoc)...")
+			if wantArticleSync && flags.dryRun {
+				if !humanFriendly {
+					fmt.Fprintln(syncEventWriter, `{"event":"sync_dryrun","resource":"article"}`)
 				}
-				rssCount, rssErr := nejmSyncAllFeeds(cmd.Context(), db, os.Stderr)
-				if rssErr != nil {
+			} else if wantArticleSync {
+				// The generated dogfood/latest-only page caps are applied to
+				// `maxPages` further down, after this block runs — mirror them
+				// here so a full-corpus OpenAlex sync can't run unbounded in
+				// dogfood or defeat --latest-only's refresh-the-head intent
+				// (newest-first sort makes page 1 exactly the head).
+				articleMaxPages := maxPages
+				if cliutil.IsDogfoodEnv() && !cmd.Flags().Changed("max-pages") {
+					articleMaxPages = 10
+				}
+				startCursor, _, _, _ := db.GetSyncState("article")
+				if latestOnly && since == "" {
+					articleMaxPages = 1
+					startCursor = ""
+				}
+				if full {
+					startCursor = ""
+				}
+				if humanFriendly {
+					fmt.Fprintln(os.Stderr, "Syncing NEJM articles from OpenAlex...")
+				}
+				oaCount, resumeCursor, oaErr := nejmSyncOpenAlex(cmd.Context(), db, startCursor, articleMaxPages, syncEventWriter)
+				if oaErr != nil {
 					if humanFriendly {
-						fmt.Fprintf(os.Stderr, "  RSS feeds: error: %v\n", rssErr)
+						fmt.Fprintf(os.Stderr, "  OpenAlex articles: error: %v\n", oaErr)
 					} else {
-						fmt.Fprintf(syncEventWriter, `{"event":"sync_warning","resource":"article","reason":"rss_fetch_error","message":%q}`+"\n", rssErr.Error())
+						fmt.Fprintf(syncEventWriter, `{"event":"sync_warning","resource":"article","reason":"openalex_fetch_error","message":%q}`+"\n", oaErr.Error())
 					}
 				} else {
 					if humanFriendly {
-						fmt.Fprintf(os.Stderr, "  RSS feeds: %d articles synced\n", rssCount)
+						fmt.Fprintf(os.Stderr, "\n  OpenAlex articles: %d synced\n", oaCount)
 					} else {
-						fmt.Fprintf(syncEventWriter, `{"event":"sync_progress","resource":"article","count":%d,"source":"rss"}`+"\n", rssCount)
+						fmt.Fprintf(syncEventWriter, `{"event":"sync_progress","resource":"article","count":%d,"source":"openalex"}`+"\n", oaCount)
 					}
-					_ = db.SaveSyncState("article", "", rssCount)
+					if resumeCursor != "" && !latestOnly {
+						if humanFriendly {
+							fmt.Fprintf(os.Stderr, "  article: reached --max-pages limit; re-run 'sync' to resume from the saved cursor\n")
+						} else {
+							fmt.Fprintf(syncEventWriter, `{"event":"sync_warning","resource":"article","reason":"max_pages_cap_hit","message":"reached the page cap before the OpenAlex corpus was exhausted; re-run sync to resume from the saved cursor, or pass --max-pages 0 for unlimited"}`+"\n")
+						}
+					}
 				}
+				// Persist the resume cursor (empty on natural completion) so
+				// the next run continues or restarts as appropriate.
+				_ = db.SaveSyncState("article", resumeCursor, oaCount)
 			}
 
 			// If no specific resources, sync top-level resources
@@ -169,7 +202,7 @@ Resource scoping:
 				if humanFriendly {
 					fmt.Fprintln(os.Stderr, "nejm-pp-cli sync: specialty and other resources can be synced via --resources.")
 				} else {
-					fmt.Fprintln(syncEventWriter, `{"event":"sync_info","reason":"rss_only","detail":"article sync completed via RSS; use --resources specialty to sync specialty data"}`)
+					fmt.Fprintln(syncEventWriter, `{"event":"sync_info","reason":"openalex_only","detail":"article sync completed via OpenAlex; use --resources specialty to sync specialty data"}`)
 				}
 			}
 

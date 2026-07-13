@@ -1,5 +1,9 @@
 // Copyright 2026 laci141 and contributors. Licensed under Apache-2.0. See LICENSE.
-// Hand-coded Phase 3: NEJM RSS feed parsing and article meta-tag extraction.
+// Shared local-store helpers for the article corpus: the canonical record
+// shape, query/print plumbing, store opening, and the article detail-page
+// meta extraction used by --enrich. Relocated from the retired nejm_feeds.go
+// when the RSS transport was replaced by the OpenAlex sync source
+// (nejm_openalex_sync.go); nothing here is RSS-specific.
 
 package cli
 
@@ -8,11 +12,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"encoding/xml"
-	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"strings"
 	"time"
 
@@ -21,12 +22,7 @@ import (
 	xhtml "golang.org/x/net/html"
 )
 
-const (
-	nejmEtocFeedURL   = "/action/showFeed?jc=nejm&type=etoc&feed=rss"
-	nejmAxatocFeedURL = "/action/showFeed?jc=nejm&type=axatoc&feed=rss"
-)
-
-// nejmBaseURL is the origin RSS feeds and article pages are fetched from. It is
+// nejmBaseURL is the origin article pages are fetched from for --enrich. It is
 // a var rather than a const so tests can point it at an httptest server.
 var nejmBaseURL = "https://www.nejm.org"
 
@@ -50,210 +46,18 @@ type nejmArticleRecord struct {
 	Feed        string `json:"feed,omitempty"`
 }
 
-// --- RSS XML types ---
-
-type nejmRSSFeed struct {
-	XMLName xml.Name      `xml:"RDF"`
-	Items   []nejmRSSItem `xml:"item"`
-}
-
-type nejmRSSItem struct {
-	Title       string `xml:"title"`
-	Link        string `xml:"link"`
-	Creator     string `xml:"creator"`      // dc:creator
-	Date        string `xml:"date"`         // dc:date
-	DOI         string `xml:"doi"`          // prism:doi
-	URL         string `xml:"url"`          // prism:url
-	Volume      string `xml:"volume"`       // prism:volume
-	Number      string `xml:"number"`       // prism:number
-	StartPage   string `xml:"startingPage"` // prism:startingPage
-	EndPage     string `xml:"endingPage"`   // prism:endingPage
-	CoverDate   string `xml:"coverDate"`    // prism:coverDate
-	Description string `xml:"description"`  // bibliographic citation string
-}
-
-// nejmFetchFeed fetches and parses an NEJM RSS 1.0/RDF feed over plain HTTP.
-// NEJM RSS endpoints return 200 without Cloudflare challenge.
-func nejmFetchFeed(ctx context.Context, feedPath string) ([]nejmRSSItem, error) {
-	url := nejmBaseURL + feedPath
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("building RSS request: %w", err)
-	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; nejm-pp-cli/0.1)")
-	req.Header.Set("Accept", "application/rss+xml, application/xml, text/xml")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("fetching RSS feed %s: %w", url, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("RSS feed %s returned HTTP %d", url, resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("reading RSS body: %w", err)
-	}
-
-	// NEJM RSS is RDF+PRISM with namespaced elements. xml.Unmarshal resolves
-	// namespace prefixes only when they match the struct field names exactly or
-	// via xml tags. Since the feed uses dc: and prism: prefixes we can't predict
-	// the full namespace URI reliably across feed versions; instead we strip the
-	// namespace prefix from each element name before parsing.
-	cleaned := nejmStripPrefixesSimple(body)
-
-	var feed nejmRSSFeed
-	if err := xml.Unmarshal(cleaned, &feed); err != nil {
-		return nil, fmt.Errorf("parsing RSS XML: %w", err)
-	}
-	return feed.Items, nil
-}
-
-// 🔧 JAVÍTOTT: nejmStripPrefixesSimple - csak címkehatárokon cserél
-func nejmStripPrefixesSimple(b []byte) []byte {
-	s := string(b)
-	// Remove namespace declarations like xmlns:dc="..." xmlns:prism="..."
-	for _, ns := range []string{"dc", "prism", "rdf", "rdfs", "content", "taxo", "admin"} {
-		s = strings.ReplaceAll(s, "xmlns:"+ns+"=", "xmlns_"+ns+"=")
-		// Replace opening tags: <dc:foo → <foo, <prism:foo → <foo
-		// Anchored to tag boundaries to avoid matching inside CDATA/escaped text
-		s = strings.ReplaceAll(s, "<"+ns+":", "<")
-		// Replace closing tags: </dc:foo → </foo
-		s = strings.ReplaceAll(s, "</"+ns+":", "</")
-	}
-	return []byte(s)
-}
-
-// nejmRSSItemToRecord converts a parsed RSS item to a store record.
-func nejmRSSItemToRecord(item nejmRSSItem, feedName string) nejmArticleRecord {
-	doi := strings.TrimSpace(item.DOI)
-	if doi == "" {
-		// Extract DOI from URL as fallback
-		u := strings.TrimSpace(item.Link)
-		if idx := strings.Index(u, "/doi/"); idx >= 0 {
-			doi = strings.TrimPrefix(u[idx:], "/doi/full/")
-			doi = strings.TrimPrefix(doi, "/doi/abs/")
-			doi = strings.TrimPrefix(doi, "/doi/")
-		}
-	}
-
-	articleURL := strings.TrimSpace(item.URL)
-	if articleURL == "" {
-		articleURL = strings.TrimSpace(item.Link)
-	}
-	if articleURL != "" && !strings.HasPrefix(articleURL, "http") {
-		articleURL = nejmBaseURL + articleURL
-	}
-
-	pages := ""
-	if item.StartPage != "" {
-		pages = item.StartPage
-		if item.EndPage != "" {
-			pages += "-" + item.EndPage
-		}
-	}
-
-	date := strings.TrimSpace(item.Date)
-	if date == "" {
-		date = strings.TrimSpace(item.CoverDate)
-	}
-
-	return nejmArticleRecord{
-		ID:        doi,
-		DOI:       doi,
-		Title:     strings.TrimSpace(item.Title),
-		Authors:   strings.TrimSpace(item.Creator),
-		Date:      date,
-		URL:       articleURL,
-		Volume:    strings.TrimSpace(item.Volume),
-		Issue:     strings.TrimSpace(item.Number),
-		Pages:     pages,
-		CoverDate: strings.TrimSpace(item.CoverDate),
-		Feed:      feedName,
-	}
-}
-
-// nejmSyncFeed fetches one NEJM RSS feed and upserts all articles into the store.
-// Returns the count of newly inserted/updated records.
-func nejmSyncFeed(ctx context.Context, db *store.Store, feedPath, feedName string, w io.Writer) (int, error) {
-	items, err := nejmFetchFeed(ctx, feedPath)
-	if err != nil {
-		return 0, err
-	}
-
-	count := 0
-	for _, item := range items {
-		rec := nejmRSSItemToRecord(item, feedName)
-		if rec.DOI == "" {
-			continue
-		}
-		data, err := json.Marshal(rec)
-		if err != nil {
-			continue
-		}
-		if err := db.UpsertArticle(json.RawMessage(data)); err != nil {
-			if w != nil {
-				fmt.Fprintf(w, "warning: upsert %s: %v\n", rec.DOI, err)
-			}
-			continue
-		}
-		// The generated upsert does not write the NEJM-specific feed column, so
-		// set it explicitly here. This keeps the column authoritative even when
-		// an article is re-synced (e.g. moves between feeds).
-		if _, err := db.DB().ExecContext(ctx,
-			`UPDATE "article" SET "feed" = ? WHERE "doi" = ?`, feedName, rec.DOI); err != nil {
-			if w != nil {
-				fmt.Fprintf(w, "warning: set feed for %s: %v\n", rec.DOI, err)
-			}
-		}
-		count++
-	}
-	return count, nil
-}
-
-// nejmSyncAllFeeds syncs both eTOC and recently-published feeds.
-func nejmSyncAllFeeds(ctx context.Context, db *store.Store, w io.Writer) (int, error) {
-	// Ensure the feed column exists before per-row UPDATEs in nejmSyncFeed.
-	if err := nejmEnsureFeedColumn(db); err != nil {
-		return 0, fmt.Errorf("migrating local database: %w", err)
-	}
-
-	feeds := []struct{ path, name string }{
-		{nejmEtocFeedURL, "etoc"},
-		{nejmAxatocFeedURL, "axatoc"},
-	}
-
-	total := 0
-	var errs []error
-	for _, feed := range feeds {
-		n, err := nejmSyncFeed(ctx, db, feed.path, feed.name, w)
-		if err != nil {
-			if w != nil {
-				fmt.Fprintf(w, "warning: sync feed %s: %v\n", feed.name, err)
-			}
-			errs = append(errs, fmt.Errorf("%s: %w", feed.name, err))
-			continue
-		}
-		total += n
-	}
-
-	// Only surface a hard error when every feed failed (e.g. network partition,
-	// DNS outage, Cloudflare block). Partial success returns (total, nil) so a
-	// single flaky feed doesn't fail the whole sync. The returned error lets the
-	// caller emit a structured rss_fetch_error sync_warning in --json mode.
-	if len(errs) == len(feeds) && len(errs) > 0 {
-		return total, fmt.Errorf("all NEJM feeds failed: %w", errors.Join(errs...))
-	}
-	return total, nil
-}
+// nejmCurrentIssueWhere scopes article queries to the most recent publication
+// week in the corpus. The retired RSS transport partitioned rows by feed
+// ('etoc' marked the current issue); OpenAlex carries no issue partition, so
+// "current issue" is approximated as everything published within six days of
+// the newest article. NEJM publishes weekly, so the window tracks one issue.
+const nejmCurrentIssueWhere = `date >= (SELECT date(MAX(date), '-6 days') FROM "article")`
 
 // --- Article detail page extraction ---
 
 // nejmFetchAndParseArticle fetches an article detail page via the Surf client
 // and extracts NEJM-specific meta tags (abstract, article_type, specialties, isFree).
-// Merges results into an existing nejmArticleRecord (DOI already known from RSS).
+// Merges results into an existing nejmArticleRecord (DOI already known).
 func nejmFetchAndParseArticle(ctx context.Context, c *client.Client, doi string) (nejmArticleRecord, error) {
 	path := "/doi/full/" + doi
 	raw, err := c.GetWithHeaders(ctx, path, nil, nil)
@@ -445,7 +249,7 @@ func nejmPrintArticles(cmd interface {
 }
 
 // parseSinceDuration converts strings like "48h", "7d", "2w" into a time.Time cutoff.
-// Duplicated here (also exists in sync.go) to keep nejm_feeds.go self-contained.
+// Duplicated here (also exists in sync.go) to keep the store helpers self-contained.
 func nejmParseSinceDuration(s string) (time.Time, error) {
 	s = strings.TrimSpace(strings.ToLower(s))
 	if s == "" {

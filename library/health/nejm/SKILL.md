@@ -37,7 +37,7 @@ go install github.com/mvanhorn/printing-press-library/library/health/nejm/cmd/ne
 
 If `--version` reports "command not found" after install, the runtime cannot see the binary directory on `$PATH`. Do not proceed with skill commands until verification succeeds.
 
-NEJM has no public API. This CLI turns its public surfaces into an offline-queryable, agent-native corpus: the current issue and recently-published feeds, per-article abstracts and metadata by DOI, and full-text search over everything you have synced. Novel local-state commands like 'since', 'digest', 'reading-list', 'trends', and 'open-access' do things the website and PubMed wrappers cannot.
+NEJM has no public API. This CLI builds an offline-queryable, agent-native corpus of NEJM articles sourced from OpenAlex's CC0 scholarly index (abstracts, authors, publication types, open-access flags), plus per-article metadata by DOI and full-text search over everything you have synced. Novel local-state commands like 'since', 'digest', 'reading-list', 'trends', and 'open-access' do things the website and PubMed wrappers cannot.
 
 ## When to Use This CLI
 
@@ -48,7 +48,7 @@ Use this CLI when an agent or clinician needs current peer-reviewed NEJM literat
 Do not use this CLI for:
 - Do not use this CLI to read full article text behind the NEJM paywall; it surfaces abstracts and metadata only.
 - Do not use it for a broad multi-journal literature review; use a PubMed/Crossref tool for cross-journal search.
-- Do not use it for live keyword search of the entire NEJM archive; it searches only the locally synced corpus.
+- Do not use the corpus 'search' command before syncing; it searches only locally synced data. For live archive-wide queries without a sync, use 'openalex search'.
 
 ## Unique Capabilities
 

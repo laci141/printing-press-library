@@ -36,7 +36,7 @@ func newNovelDigestCmd(flags *rootFlags) *cobra.Command {
 			defer db.Close()
 			maybeEmitSyncHints(cmd, db, "article", flags.maxAge)
 
-			items, err := nejmQueryArticles(db, `feed = 'etoc'`, nil, limit)
+			items, err := nejmQueryArticles(db, nejmCurrentIssueWhere, nil, limit)
 			if err != nil {
 				return fmt.Errorf("querying articles: %w", err)
 			}
