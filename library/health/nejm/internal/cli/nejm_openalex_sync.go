@@ -90,14 +90,17 @@ func nejmOpenAlexWorkToRecord(w openAlexSyncWork) nejmArticleRecord {
 // nejmOpenAlexFetchPage GETs one cursor page with bounded retries. Transient
 // failures (network errors, HTTP 429, HTTP 5xx) retry with exponential
 // backoff; everything else (403, malformed body) fails immediately so a
-// policy block is not retried into a rate-limit ban.
-func nejmOpenAlexFetchPage(ctx context.Context, cursor string) (*openAlexSyncResponse, error) {
+// policy block is not retried into a rate-limit ban. reqTimeout bounds each
+// individual attempt (--timeout is per-request, so a hung connection cannot
+// stall a multi-minute corpus sync); the run as a whole is bounded by the
+// parent context and --max-pages, not by reqTimeout.
+func nejmOpenAlexFetchPage(ctx context.Context, cursor string, reqTimeout time.Duration) (*openAlexSyncResponse, error) {
 	params := url.Values{}
 	params.Set("filter", "primary_location.source.issn:"+openAlexNEJMISSN)
 	params.Set("per-page", fmt.Sprintf("%d", openAlexSyncPerPage))
 	params.Set("sort", "publication_date:desc")
 	params.Set("cursor", cursor)
-	params.Set("mailto", openAlexMailto)
+	openAlexSetMailto(params)
 	reqURL := openAlexWorksURL + "?" + params.Encode()
 
 	var lastErr error
@@ -112,17 +115,24 @@ func nejmOpenAlexFetchPage(ctx context.Context, cursor string) (*openAlexSyncRes
 			backoff *= 2
 		}
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+		attemptCtx, cancel := ctx, context.CancelFunc(func() {})
+		if reqTimeout > 0 {
+			attemptCtx, cancel = context.WithTimeout(ctx, reqTimeout)
+		}
+		req, err := http.NewRequestWithContext(attemptCtx, http.MethodGet, reqURL, nil)
 		if err != nil {
+			cancel()
 			return nil, err
 		}
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
+			cancel()
 			lastErr = fmt.Errorf("querying OpenAlex: %w", err)
 			continue
 		}
 		body, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
+		cancel()
 		if err != nil {
 			lastErr = fmt.Errorf("reading OpenAlex response: %w", err)
 			continue
@@ -153,7 +163,7 @@ func nejmOpenAlexFetchPage(ctx context.Context, cursor string) (*openAlexSyncRes
 // On first contact it purges rows left behind by the retired RSS transport
 // (feed 'etoc'/'axatoc'): those rows carry no abstracts and use a different
 // DOI casing, so they would duplicate every re-synced article.
-func nejmSyncOpenAlex(ctx context.Context, db *store.Store, startCursor string, maxPages int, events io.Writer) (int, string, error) {
+func nejmSyncOpenAlex(ctx context.Context, db *store.Store, startCursor string, maxPages int, reqTimeout time.Duration, events io.Writer) (int, string, error) {
 	if events == nil {
 		events = io.Discard
 	}
@@ -180,7 +190,7 @@ func nejmSyncOpenAlex(ctx context.Context, db *store.Store, startCursor string, 
 	lastProgressAt := time.Now()
 
 	for {
-		page, err := nejmOpenAlexFetchPage(ctx, cursor)
+		page, err := nejmOpenAlexFetchPage(ctx, cursor, reqTimeout)
 		if err != nil {
 			return total, cursor, err
 		}

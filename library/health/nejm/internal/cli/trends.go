@@ -80,7 +80,10 @@ func newNovelTrendsCmd(flags *rootFlags) *cobra.Command {
 
 			if len(results) == 0 {
 				fmt.Fprintln(cmd.ErrOrStderr(), "hint: no data. Run 'nejm-pp-cli sync' to fetch articles, then 'nejm-pp-cli article <doi> --enrich' to enrich individual articles with specialties and types.")
-				return printOutputWithFlags(cmd.OutOrStdout(), json.RawMessage("[]"), flags)
+				if flags.asJSON {
+					return printOutputWithFlags(cmd.OutOrStdout(), json.RawMessage("[]"), flags)
+				}
+				return nil
 			}
 
 			data, err := json.Marshal(results)

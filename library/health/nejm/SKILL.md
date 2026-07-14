@@ -90,6 +90,8 @@ These capabilities aren't available in any other tool for this API.
 
   Flags: `--query` (full-text search), `--from-year`/`--to-year` (publication-year range), `--per-page` (1-50, default 20), `--sort` (`cited` or `date`).
 
+  Set `NEJM_OPENALEX_MAILTO` to your email to enroll OpenAlex requests (live search and `sync`) in the [polite pool](https://docs.openalex.org/how-to-use-the-api/rate-limits-and-authentication) — a dedicated, faster server pool. Unset, requests use the anonymous pool.
+
 ### Corpus analytics
 
 - **`trends`** — Show how NEJM output distributes by specialty, article type, and issue across the synced corpus.

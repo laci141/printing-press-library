@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"sort"
 	"strings"
 
@@ -21,12 +22,22 @@ const (
 	// openAlexNEJMISSN identifies NEJM in OpenAlex's primary_location filter.
 	openAlexNEJMISSN = "0028-4793"
 	openAlexWorksURL = "https://api.openalex.org/works"
-	// openAlexMailto enrolls requests in OpenAlex's polite pool, which gets
-	// a dedicated, faster server pool than anonymous traffic.
-	openAlexMailto     = "laszlokasa6@gmail.com"
+	// openAlexMailtoEnv names the env var whose email enrolls requests in
+	// OpenAlex's polite pool (a dedicated, faster server pool). Unset,
+	// requests use the anonymous pool — no identity is ever baked in.
+	openAlexMailtoEnv  = "NEJM_OPENALEX_MAILTO"
 	openAlexMaxPerPage = 50
 	openAlexDefPerPage = 20
 )
+
+// openAlexSetMailto adds the polite-pool mailto param only when the user has
+// opted in via env; a hardcoded address would ship personal data in every
+// request URL.
+func openAlexSetMailto(params url.Values) {
+	if m := strings.TrimSpace(os.Getenv(openAlexMailtoEnv)); m != "" {
+		params.Set("mailto", m)
+	}
+}
 
 // openAlexResponse mirrors the subset of the OpenAlex /works envelope this
 // command consumes.
@@ -172,7 +183,7 @@ func newOpenAlexSearchCmd(flags *rootFlags) *cobra.Command {
 			} else {
 				params.Set("sort", "cited_by_count:desc")
 			}
-			params.Set("mailto", openAlexMailto)
+			openAlexSetMailto(params)
 
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, openAlexWorksURL+"?"+params.Encode(), nil)
 			if err != nil {

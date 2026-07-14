@@ -161,7 +161,7 @@ Resource scoping:
 				if humanFriendly {
 					fmt.Fprintln(os.Stderr, "Syncing NEJM articles from OpenAlex...")
 				}
-				oaCount, resumeCursor, oaErr := nejmSyncOpenAlex(cmd.Context(), db, startCursor, articleMaxPages, syncEventWriter)
+				oaCount, resumeCursor, oaErr := nejmSyncOpenAlex(cmd.Context(), db, startCursor, articleMaxPages, flags.timeout, syncEventWriter)
 				if oaErr != nil {
 					if humanFriendly {
 						fmt.Fprintf(os.Stderr, "  OpenAlex articles: error: %v\n", oaErr)
