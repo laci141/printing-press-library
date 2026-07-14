@@ -4,6 +4,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -64,6 +65,9 @@ func newNovelSinceCmd(flags *rootFlags) *cobra.Command {
 			}
 			if len(items) == 0 {
 				fmt.Fprintf(cmd.ErrOrStderr(), "hint: no articles seen in the last %s. Run 'nejm-pp-cli sync' to fetch new articles.\n", args[0])
+				if flags.asJSON {
+					return printOutputWithFlags(cmd.OutOrStdout(), json.RawMessage("[]"), flags)
+				}
 				return nil
 			}
 			return nejmPrintArticles(cmd, items, flags)

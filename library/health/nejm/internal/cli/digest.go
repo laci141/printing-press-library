@@ -42,6 +42,11 @@ func newNovelDigestCmd(flags *rootFlags) *cobra.Command {
 			}
 			if len(items) == 0 {
 				fmt.Fprintln(cmd.ErrOrStderr(), "hint: no current-issue articles found. Run 'nejm-pp-cli sync' to fetch the current issue.")
+				if flags.asJSON {
+					// digest's populated output is a groups object, so the
+					// empty shape is {} rather than the list commands' [].
+					return printOutputWithFlags(cmd.OutOrStdout(), json.RawMessage("{}"), flags)
+				}
 				return nil
 			}
 
