@@ -93,6 +93,13 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 				return classifyAPIError(err, flags)
 			}
 
+			// Relevance gate: drop works whose title/topic share no content
+			// token with the claim, before enrichment so excluded works cost
+			// no PubMed lookups and never enter the score.
+			fetched := len(works)
+			works = filterRelevant(claim, works)
+			dropped := fetched - len(works)
+
 			if enrich {
 				enrichPubTypes(ctx, works, 50)
 			}
@@ -120,6 +127,12 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 				out.Note = "no works found; try a broader claim or --data-source live"
 			} else if result.Verdict == scengine.VerdictInsufficient {
 				out.Note = "fewer than 3 directional studies; treat as preliminary"
+			}
+			if dropped > 0 {
+				if out.Note != "" {
+					out.Note += "; "
+				}
+				out.Note += fmt.Sprintf("%d off-topic work(s) excluded by relevance gate", dropped)
 			}
 
 			return emit(cmd, flags, out, func(w io.Writer) { renderConsensus(w, out) })

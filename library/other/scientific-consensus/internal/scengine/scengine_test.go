@@ -99,6 +99,72 @@ func TestClassifyStance(t *testing.T) {
 	}
 }
 
+// TestClassifyStance_ClaimAware pins the claim-aware polarity behavior (FIX A).
+// Today ClassifyStance ignores the claim and derives stance only from whether
+// the paper reports a beneficial finding, so a HARM-asserting claim inverts:
+// a paper reporting the harm should SUPPORT the claim, and a paper reporting
+// benefit / no-effect should REFUTE it. BENEFIT-asserting and ambiguous claims
+// must keep today's behavior exactly (no regression).
+//
+// These cases FAIL against current code (the two harm cases classify as
+// inconclusive today because the base cue vocabulary is risk/mortality/incidence
+// and never recognizes "weight gain"; see repro in the plan).
+func TestClassifyStance_ClaimAware(t *testing.T) {
+	tests := []struct {
+		name     string
+		claim    string
+		title    string
+		abstract string
+		want     Stance
+	}{
+		{
+			name:     "harm claim, paper shows less of the harm -> refuting",
+			claim:    "artificial sweeteners cause weight gain",
+			title:    "Non-nutritive sweeteners and body weight: a randomized trial",
+			abstract: "The sweetener group showed less weight gain than the sugar group over 12 weeks.",
+			want:     StanceRefuting,
+		},
+		{
+			name:     "harm claim, paper shows more of the harm -> supporting",
+			claim:    "artificial sweeteners cause weight gain",
+			title:    "Sweetener consumption and adiposity: a prospective cohort",
+			abstract: "Sweetener consumption was associated with greater weight gain over 10 years of follow-up.",
+			want:     StanceSupporting,
+		},
+		{
+			name:     "benefit claim, paper reports the benefit -> supporting (no regression)",
+			claim:    "coffee improves alertness",
+			title:    "Caffeine and cognitive performance",
+			abstract: "Caffeine significantly improved alertness and vigilance in a double-blind trial.",
+			want:     StanceSupporting,
+		},
+		{
+			name:     "ambiguous claim -> falls back to today's claim-agnostic behavior",
+			claim:    "the relationship between coffee and alertness",
+			title:    "Caffeine and cognitive performance",
+			abstract: "Caffeine significantly improved alertness and vigilance in a double-blind trial.",
+			// Expectation is defined relative to today's behavior below.
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, conf := ClassifyStance(tt.title, tt.abstract, tt.claim)
+			want := tt.want
+			if tt.name == "ambiguous claim -> falls back to today's claim-agnostic behavior" {
+				// Ambiguous polarity must be indistinguishable from the
+				// claim-agnostic baseline (empty claim) — no crash, no drift.
+				want, _ = ClassifyStance(tt.title, tt.abstract, "")
+			}
+			if got != want {
+				t.Errorf("stance = %q, want %q (conf %.2f)", got, want, conf)
+			}
+			if conf < 0 || conf > 1 {
+				t.Errorf("confidence out of range: %v", conf)
+			}
+		})
+	}
+}
+
 func TestConsensus(t *testing.T) {
 	works := []ScoredWork{
 		{Stance: StanceSupporting, StanceConf: 0.8, Design: DesignMetaAnalysis, CitedBy: 500},
