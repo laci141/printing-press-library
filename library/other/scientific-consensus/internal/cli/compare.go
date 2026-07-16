@@ -40,6 +40,7 @@ func computeConsensus(ctx context.Context, c apiGetter, claim string, limit, yea
 		TotalCitations: r.TotalCitations, Method: stanceMethodLabel(stances),
 		TopSupporting: topByStance(stances, scengine.StanceSupporting, 2),
 		TopRefuting:   topByStance(stances, scengine.StanceRefuting, 2),
+		AllStudies:    allStudyBriefs(stances),
 	}
 	return out, nil
 }

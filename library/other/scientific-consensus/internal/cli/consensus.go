@@ -19,6 +19,10 @@ type workBrief struct {
 	Design     scengine.Design `json:"design"`
 	Stance     scengine.Stance `json:"stance"`
 	StanceConf float64         `json:"stance_confidence"`
+	// Abstract is the reconstructed OpenAlex abstract, capped at
+	// maxAbstractChars so downstream LLM prompts built from this JSON stay
+	// bounded. Empty string when the source has no abstract.
+	Abstract string `json:"abstract"`
 }
 
 type consensusOutput struct {
@@ -37,7 +41,27 @@ type consensusOutput struct {
 	Method           string                    `json:"stance_method"`
 	TopSupporting    []workBrief               `json:"top_supporting"`
 	TopRefuting      []workBrief               `json:"top_refuting"`
-	Note             string                    `json:"note,omitempty"`
+	// AllStudies lists every analyzed work (post relevance gate) in fetch
+	// (relevance) order, so content-aware consumers can re-filter by
+	// abstract instead of trusting the top lists alone.
+	AllStudies []workBrief `json:"all_studies"`
+	Note       string      `json:"note,omitempty"`
+}
+
+// maxAbstractChars bounds per-study abstract length in JSON output.
+const maxAbstractChars = 1500
+
+// clipAbstract caps an abstract at maxAbstractChars characters, cutting on a
+// rune boundary so multi-byte text is never split mid-character.
+func clipAbstract(s string) string {
+	if len(s) <= maxAbstractChars {
+		return s
+	}
+	r := []rune(s)
+	if len(r) <= maxAbstractChars {
+		return s
+	}
+	return string(r[:maxAbstractChars])
 }
 
 func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
@@ -123,6 +147,7 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 			}
 			out.TopSupporting = topByStance(stances, scengine.StanceSupporting, 3)
 			out.TopRefuting = topByStance(stances, scengine.StanceRefuting, 3)
+			out.AllStudies = allStudyBriefs(stances)
 			if result.StudyCount == 0 {
 				out.Note = "no works found; try a broader claim or --data-source live"
 			} else if result.Verdict == scengine.VerdictInsufficient {
@@ -180,6 +205,22 @@ func topByStance(stances []workStance, stance scengine.Stance, n int) []workBrie
 		out = append(out, workBrief{
 			Title: m.Work.Title, Year: m.Work.Year, DOI: m.Work.DOI, CitedBy: m.Work.CitedBy,
 			Design: m.Design, Stance: m.Stance, StanceConf: m.Confidence,
+			Abstract: clipAbstract(m.Work.Abstract),
+		})
+	}
+	return out
+}
+
+// allStudyBriefs converts every analyzed work into a workBrief, preserving the
+// input (relevance) order. Always returns a non-nil slice so JSON emits [] for
+// zero studies rather than null.
+func allStudyBriefs(stances []workStance) []workBrief {
+	out := make([]workBrief, 0, len(stances))
+	for _, s := range stances {
+		out = append(out, workBrief{
+			Title: s.Work.Title, Year: s.Work.Year, DOI: s.Work.DOI, CitedBy: s.Work.CitedBy,
+			Design: s.Design, Stance: s.Stance, StanceConf: s.Confidence,
+			Abstract: clipAbstract(s.Work.Abstract),
 		})
 	}
 	return out
