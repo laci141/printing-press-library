@@ -42,6 +42,22 @@ func computeConsensus(ctx context.Context, c apiGetter, claim string, limit, yea
 	fetched := len(works)
 	works = filterRelevant(claim, works)
 	dropped := fetched - len(works)
+
+	// Phase 3 PICO relevance gate, same wiring as the `consensus` command: a
+	// work must name the intervention AND the outcome to count as evidence
+	// about the relation the claim asserts. compare and batch have to measure
+	// the same subset the consensus command does, or the two commands report
+	// different corpora — and confidence, which is computed from that subset,
+	// would not mean the same thing across them.
+	ivTokens, outTokens := scengine.PICOTokens(claim)
+	picoRelevant := make([]scWork, 0, len(works))
+	for _, w := range works {
+		if scengine.IsPICORelevant(w.Abstract, w.Title, ivTokens, outTokens) {
+			picoRelevant = append(picoRelevant, w)
+		}
+	}
+	picoDropped := len(works) - len(picoRelevant)
+	works = picoRelevant
 	relevantCount := len(works)
 
 	if enrich {
@@ -69,6 +85,11 @@ func computeConsensus(ctx context.Context, c apiGetter, claim string, limit, yea
 	}
 	if dropped > 0 {
 		out.Note = appendNote(out.Note, fmt.Sprintf("%d off-topic work(s) excluded by relevance gate", dropped))
+	}
+	if picoDropped > 0 {
+		out.Note = appendNote(out.Note, fmt.Sprintf(
+			"%d work(s) excluded by PICO gate (missing intervention %v or outcome %v in abstract/title)",
+			picoDropped, ivTokens, outTokens))
 	}
 	if evidenceGuarded {
 		out.Note = appendNote(out.Note, fmt.Sprintf(

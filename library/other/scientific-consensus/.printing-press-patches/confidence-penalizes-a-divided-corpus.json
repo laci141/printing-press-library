@@ -1,0 +1,15 @@
+{
+  "schema_version": 2,
+  "id": "confidence-penalizes-a-divided-corpus",
+  "applied_at": "2026-07-23",
+  "base_run_id": "20260620-165352-e55cec69",
+  "base_printing_press_version": "4.24.0",
+  "summary": "Confidence must fall when the corpus does not speak with one voice, counting mixed and inconclusive works as uncertainty — study count alone is not evidence quality.",
+  "reason": "The agreement term divides by the DIRECTIONAL count only, so a corpus of one supporting work and thirty inconclusive ones scored a perfect 1.0 on agreement: a corpus that knows almost nothing looked unanimous. Volume then rewarded sheer size, so a hundred works that cancel out outranked ten that agree. A dispersion factor computed over the TOTAL work count and applied multiplicatively fixes the ordering without touching the verdict, the consensus score, or the strength ladder — a regen must keep confidence answering 'how consistent is this corpus', not 'how big is it'. The same relevant subset must reach both commands, so the PICO gate runs in compare/batch too.",
+  "files": [
+    "internal/scengine/score.go",
+    "internal/cli/compare.go",
+    "internal/scengine/scengine_test.go"
+  ],
+  "validated_outcome": "Pre-change confidence values (0.702727 / 0.668182 / 0.164606 / 0.97 / 0) were recorded against the unmodified formula and are pinned as a toggle-off regression test, so phase4ConfidenceEnabled=false reproduces the old numbers exactly; full go test suite green."
+}

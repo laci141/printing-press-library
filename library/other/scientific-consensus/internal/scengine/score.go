@@ -126,6 +126,34 @@ func verdict(r ConsensusResult, directional int) Verdict {
 	}
 }
 
+// phase4ConfidenceEnabled controls the dispersion penalty on confidence.
+// Always true in production; tests may toggle it.
+var phase4ConfidenceEnabled = true
+
+// dispersionWeight is how much of the confidence a fully divided corpus gives
+// up. Package-level and tunable after measurement; at 0.35 a corpus that
+// cancels out entirely keeps 65% of the confidence its volume and design would
+// otherwise earn. It is deliberately not 1.0 — study count and apex design are
+// still real signal even when the direction is contested.
+var dispersionWeight = 0.35
+
+// stanceDispersion measures how far the corpus is from speaking with one voice.
+// It returns 0.0 when every work points the same way and 1.0 when supporting
+// and refuting cancel out entirely. Unlike the agreement term it divides by the
+// TOTAL work count, so mixed and inconclusive works count as evidence of
+// uncertainty rather than being invisible.
+func stanceDispersion(supporting, refuting, mixed, inconclusive int) float64 {
+	total := supporting + refuting + mixed + inconclusive
+	if total == 0 {
+		return 0
+	}
+	net := supporting - refuting
+	if net < 0 {
+		net = -net
+	}
+	return 1 - float64(net)/float64(total)
+}
+
 func confidence(r ConsensusResult, directional int) float64 {
 	if r.StudyCount == 0 {
 		return 0
@@ -138,6 +166,16 @@ func confidence(r ConsensusResult, directional int) float64 {
 		agreement = math.Abs(float64(r.Supporting-r.Refuting)) / float64(directional)
 	}
 	conf := 0.45*volume + 0.30*apex + 0.25*agreement
+	// Dispersion penalty. The agreement term above sees only directional works,
+	// so a corpus of 1 supporting and 30 inconclusive scores a perfect 1.0 on
+	// agreement — a corpus that knows almost nothing looks unanimous. The
+	// penalty is applied multiplicatively, after the weighted sum, so it scales
+	// the whole confidence rather than competing with any single term for
+	// weight.
+	if phase4ConfidenceEnabled {
+		d := stanceDispersion(r.Supporting, r.Refuting, r.Mixed, r.Inconclusive)
+		conf *= 1 - dispersionWeight*d
+	}
 	return math.Min(0.97, conf)
 }
 
