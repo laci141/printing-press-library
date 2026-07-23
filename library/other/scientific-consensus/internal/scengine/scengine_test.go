@@ -1,6 +1,9 @@
 package scengine
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestClassifyDesign_PubTypeAuthoritative(t *testing.T) {
 	tests := []struct {
@@ -160,6 +163,320 @@ func TestClassifyStance_ClaimAware(t *testing.T) {
 			}
 			if conf < 0 || conf > 1 {
 				t.Errorf("confidence out of range: %v", conf)
+			}
+		})
+	}
+}
+
+// TestClassifyStance_HarmClaimGates pins the four gates that a positive cue
+// must survive on the harm-claim branch (FIX A + B). Each case isolates ONE
+// gate: without that gate the case classifies as supporting, which is the
+// exact failure the vaccines/autism corpus exhibited.
+func TestClassifyStance_HarmClaimGates(t *testing.T) {
+	const vaxClaim = "vaccines cause autism"
+	tests := []struct {
+		name     string
+		claim    string
+		title    string
+		abstract string
+		want     Stance
+		gate     string
+	}{
+		{
+			// Without the negation gate: harmCues matches "increase the risk"
+			// inside a clause that says the opposite. Real case: Hviid 2019.
+			name:     "negated harm cue is not a report of harm",
+			claim:    vaxClaim,
+			title:    "MMR vaccination and autism",
+			abstract: "The study strongly supports that MMR vaccination does not increase the risk for autism in children.",
+			want:     StanceInconclusive, // Option C will earn this a refuting cue
+			gate:     "negation",
+		},
+		{
+			// Without the framing gate: an Objective sentence poses the
+			// question and is scored as if it answered it. Real case: Hviid 2019.
+			name:     "question framing is not a finding",
+			claim:    vaxClaim,
+			title:    "MMR vaccination and autism",
+			abstract: "Objective: To evaluate whether the MMR vaccine increases the risk for autism in children.",
+			want:     StanceInconclusive,
+			gate:     "framing",
+		},
+		{
+			// KNOWN LIMITATION, deliberately pinned. The negation gate is
+			// clause-local (negationLookback), so a null finding stated far
+			// earlier in the same sentence does not scope over a later cue:
+			// "no correlation exists between X and the increase in the risk of
+			// Y" still yields one positive cue, landing on mixed instead of
+			// refuting. Real case: Kaye 2001.
+			//
+			// A sentence-wide null gate was measured and rejected: on the
+			// vaccines/autism corpus it changed exactly one work (this one,
+			// mixed instead of supporting) while making "no benefit was seen;
+			// the drug increased mortality" a false negative. Not worth the
+			// blast radius. Revisit only with real clause parsing.
+			name:     "sentence-wide null finding does NOT scope over a later cue",
+			claim:    vaxClaim,
+			title:    "MMR and the incidence of autism",
+			abstract: "The data provide evidence that no correlation exists between MMR vaccination and the increase in the risk of autism over time.",
+			want:     StanceMixed,
+			gate:     "clause-local negation (limitation)",
+		},
+		{
+			// The case the rejected sentence-wide gate would have broken: an
+			// unrelated null finding early in the sentence must NOT erase a
+			// genuine harm report later in it. The harm cue still counts, so
+			// the null and the harm balance out to mixed. Under a
+			// sentence-wide null gate the positive cue would be dropped and
+			// this would read as refuting — the harm report silently deleted.
+			name:     "early null finding does not erase a real harm report",
+			claim:    vaxClaim,
+			title:    "Vaccination and autism: a cohort study",
+			abstract: "No difference in adherence was seen, but vaccination was linked to an increased risk of autism.",
+			want:     StanceMixed,
+			gate:     "negation must stay clause-local",
+		},
+		{
+			// Without the pair gate: the outcome token alone satisfies the old
+			// trailing-window check even though the sentence never mentions the
+			// intervention. Real case: Kaye 2001's incidence trend.
+			name:     "outcome token alone does not tie a cue to the claim",
+			claim:    vaxClaim,
+			title:    "MMR vaccine and autism: a time trend analysis",
+			abstract: "The incidence of newly diagnosed autism increased sevenfold over the decade.",
+			want:     StanceInconclusive,
+			gate:     "pairing (outcome only)",
+		},
+		{
+			// The mirror image: the intervention token alone is not enough
+			// either. Real case: "Social media and vaccine hesitancy".
+			name:     "intervention token alone does not tie a cue to the claim",
+			claim:    vaxClaim,
+			title:    "Social media and vaccine hesitancy",
+			abstract: "Exposure to the campaign produced an increase in the number of negative vaccine tweets.",
+			want:     StanceInconclusive,
+			gate:     "pairing (intervention only)",
+		},
+		{
+			// Both sides in one sentence, no negation, no framing: this is what
+			// a genuine report of the claimed harm looks like, and it must
+			// still count. Guards against the gates degenerating into "always
+			// refute".
+			name:     "both claim sides in scope still count as supporting",
+			claim:    vaxClaim,
+			title:    "Vaccination and autism: a cohort study",
+			abstract: "Vaccination was linked to an increased risk of autism in this cohort.",
+			want:     StanceSupporting,
+			gate:     "pairing (positive control)",
+		},
+		{
+			// Dedup: harmCues ("increased risk") and directionUpCues
+			// ("increased") match the same words. Counted twice the positive
+			// side is 2 vs 1 negative (ratio 0.67 -> supporting); counted once
+			// it is 1 vs 1 -> mixed.
+			name:     "overlapping harm and direction cues count once",
+			claim:    vaxClaim,
+			title:    "Vaccination and autism: a cohort study",
+			abstract: "Vaccination was linked to an increased risk of autism, although no significant difference was seen in girls.",
+			want:     StanceMixed,
+			gate:     "dedup",
+		},
+		{
+			// A claim with nothing on the intervention side cannot be paired;
+			// the branch must fall back to the pre-pairing behavior instead of
+			// silently counting nothing.
+			name:     "unsplittable claim falls back to the unpaired behavior",
+			claim:    "causes autism",
+			title:    "Exposure and autism",
+			abstract: "Exposure was associated with a higher risk of autism.",
+			want:     StanceSupporting,
+			gate:     "pairing fallback",
+		},
+
+		// --- Option C: strongRefutCues (full text, no pairing, B2 applies) ---
+		{
+			name:  "optC strong: did not cause",
+			claim: vaxClaim,
+			title: "Vaccines Did Not Cause Rachel's Autism",
+			want:  StanceRefuting,
+			gate:  "optC strong",
+		},
+		{
+			name:  "optC strong: does not support a causal association",
+			claim: vaxClaim,
+			title: "Evidence Does Not Support a Causal Association between MMR Vaccine and Autism",
+			want:  StanceRefuting,
+			gate:  "optC strong",
+		},
+		{
+			name:     "optC strong: no causal link",
+			claim:    vaxClaim,
+			title:    "Vaccination schedule and autism",
+			abstract: "Extensive review found no causal link between vaccination schedule and autism spectrum disorder.",
+			want:     StanceRefuting,
+			gate:     "optC strong",
+		},
+
+		// --- Option C: metaRefutCues (pairing within metaRefutRadius) ---
+		{
+			// Adapted from the spec text "MMR and autism: further evidence
+			// against": the claim's intervention stem is "vacci" (the token
+			// "MMR" is three characters and ClaimContentTokens drops it), so
+			// the bare MMR title cannot pair. The case below is the same title
+			// with the intervention word present. The unpaired variant is
+			// pinned separately as a known limitation.
+			name:  "optC meta: further evidence against, both sides in radius",
+			claim: vaxClaim,
+			title: "MMR vaccine and autism: further evidence against a causal association",
+			want:  StanceRefuting,
+			gate:  "optC meta",
+		},
+		{
+			name:  "optC meta: fraud with pairing",
+			claim: vaxClaim,
+			title: "Fraudulent data linking MMR vaccine to autism: a retraction analysis",
+			want:  StanceRefuting,
+			gate:  "optC meta",
+		},
+		{
+			name:  "optC meta: no pairing stays inconclusive",
+			claim: vaxClaim,
+			title: "Fraudulent Science",
+			want:  StanceInconclusive,
+			gate:  "optC meta pairing",
+		},
+		{
+			// KNOWN LIMITATION: a title that names only the trade name and the
+			// outcome ("MMR and autism: further evidence against a causal
+			// association", corpus work #11) has no intervention token, so the
+			// meta cue cannot pair and the work stays inconclusive.
+			name:  "optC meta: intervention word absent stays inconclusive",
+			claim: vaxClaim,
+			title: "MMR and autism: further evidence against a causal association",
+			want:  StanceInconclusive,
+			gate:  "optC meta (limitation)",
+		},
+
+		// --- Option C must not defeat the B2 framing gate ---
+		{
+			name:     "optC: framing blocks a strong refutation cue",
+			claim:    vaxClaim,
+			title:    "Vaccines and autism",
+			abstract: "Objective: to examine whether vaccines do not cause autism in predisposed children.",
+			want:     StanceInconclusive,
+			gate:     "optC + B2 framing",
+		},
+
+		// --- Phase 2 behavior preserved under Option C ---
+		{
+			// Adapted from the spec case: the claim drives the intervention
+			// tokens here, so the claim names corn syrup rather than "sugar",
+			// which does not appear in the text.
+			name:     "optC regression: genuine harm report still supports",
+			claim:    "corn syrup causes obesity",
+			title:    "Corn syrup and adolescent obesity",
+			abstract: "High fructose corn syrup consumption significantly increased obesity risk in adolescents.",
+			want:     StanceSupporting,
+			gate:     "optC regression (harm)",
+		},
+		{
+			name:     "optC regression: null finding still refutes",
+			claim:    "artificial sweeteners cause weight gain",
+			title:    "Artificially sweetened beverages and body weight",
+			abstract: "Artificially sweetened beverage intake showed no association with weight gain.",
+			want:     StanceRefuting,
+			gate:     "optC regression (null)",
+		},
+		{
+			// KNOWN LIMITATION, accepted: a co-occurrence sentence with no
+			// negation and no framing still counts, so a time-trend
+			// association reads as supporting. Option C is not meant to fix
+			// this — it carries no refutation cue to fire on. Real case: the
+			// Kaye 2001 time-trend paper (corpus work #34).
+			//
+			// Adapted from the spec text, which used "a rise in": "rise" is
+			// not in directionUpCues, so that wording produces no cue at all
+			// and would have pinned inconclusive for the wrong reason.
+			name:     "optC known limit: time-trend co-occurrence still supports",
+			claim:    vaxClaim,
+			title:    "Thimerosal and autism diagnoses",
+			abstract: "Thimerosal exposure in vaccines was associated with an increase in autism diagnoses from 1988 to 1999.",
+			want:     StanceSupporting,
+			gate:     "optC known limit",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, conf := ClassifyStance(tt.title, tt.abstract, tt.claim)
+			if got != tt.want {
+				t.Errorf("gate %s: stance = %q, want %q (conf %.2f)", tt.gate, got, tt.want, conf)
+			}
+			if conf < 0 || conf > 1 {
+				t.Errorf("confidence out of range: %v", conf)
+			}
+		})
+	}
+}
+
+// TestClaimSides pins the claim split that the pair gate depends on: content
+// tokens before the polarity verb are the intervention, the ones after are the
+// outcome. An empty side is the documented "cannot pair" signal.
+func TestClaimSides(t *testing.T) {
+	tests := []struct {
+		claim  string
+		wantIn []string
+		wantOu []string
+	}{
+		{"vaccines cause autism", []string{"vacci"}, []string{"autis"}},
+		{"artificial sweeteners cause weight gain", []string{"artif", "sweet"}, []string{"weigh", "gain"}},
+		{"smoking causes lung cancer", []string{"smoki"}, []string{"lung", "cance"}},
+		{"causes autism", nil, []string{"autis"}},
+		{"coffee improves alertness", nil, nil}, // no harm cue: not a harm claim
+	}
+	for _, tt := range tests {
+		t.Run(tt.claim, func(t *testing.T) {
+			in, out := claimSides(tt.claim)
+			if !equalTokens(in, tt.wantIn) {
+				t.Errorf("intervention = %v, want %v", in, tt.wantIn)
+			}
+			if !equalTokens(out, tt.wantOu) {
+				t.Errorf("outcome = %v, want %v", out, tt.wantOu)
+			}
+		})
+	}
+}
+
+func equalTokens(got, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// TestSentenceBounds pins the sentence splitter the framing and pairing gates
+// scope to, including the decimal guard that keeps "0.3 per 10 000" and a
+// confidence interval inside one sentence.
+func TestSentenceBounds(t *testing.T) {
+	hay := "first sentence here. the rate was 0.3 per 10 000; ci 1.18; second part. third sentence."
+	tests := []struct {
+		name string
+		at   int
+		want string
+	}{
+		{"first sentence", 3, "first sentence here."},
+		{"decimals do not split", strings.Index(hay, "per"), "the rate was 0.3 per 10 000; ci 1.18; second part."},
+		{"last sentence", strings.Index(hay, "third"), "third sentence."},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s, e := sentenceBounds(hay, tt.at)
+			if got := hay[s:e]; got != tt.want {
+				t.Errorf("sentence = %q, want %q", got, tt.want)
 			}
 		})
 	}
