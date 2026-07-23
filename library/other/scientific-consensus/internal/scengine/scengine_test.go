@@ -939,3 +939,37 @@ func TestConfidenceInconclusiveMassIsPenalized(t *testing.T) {
 			"with=%.4f without=%.4f", withPenalty, withoutPenalty)
 	}
 }
+
+// TestConsensusEmptyApexIsUnclassified pins the zero-work path. The early
+// return skips ApexDesign(), so the field has to be seeded — otherwise the
+// result marshals "apex_design": "", which is not a design and cannot be
+// mapped to a tier by any consumer.
+func TestConsensusEmptyApexIsUnclassified(t *testing.T) {
+	res := Consensus(nil)
+	if res.ApexDesign != DesignUnknown {
+		t.Errorf("ApexDesign on empty corpus = %q, want %q", res.ApexDesign, DesignUnknown)
+	}
+	if res.ApexDesign == "" {
+		t.Error("ApexDesign is the empty string — the seed is missing")
+	}
+	// Everything else on this path must be untouched.
+	if res.StudyCount != 0 || res.Verdict != VerdictInsufficient || res.EvidenceStrength != StrengthVeryLow {
+		t.Errorf("empty-corpus result drifted: %+v", res)
+	}
+	if res.ConsensusScore != 0 || res.Confidence != 0 {
+		t.Errorf("empty corpus must score 0/0, got %.4f/%.4f", res.ConsensusScore, res.Confidence)
+	}
+}
+
+// TestConsensusApexUnchangedForNonEmpty guards the seed against changing the
+// apex a real corpus reports.
+func TestConsensusApexUnchangedForNonEmpty(t *testing.T) {
+	works := []ScoredWork{
+		{Stance: StanceSupporting, Design: DesignCohort, StanceConf: 0.9, CitedBy: 10},
+		{Stance: StanceSupporting, Design: DesignMetaAnalysis, StanceConf: 0.9, CitedBy: 5},
+		{Stance: StanceRefuting, Design: DesignCaseReport, StanceConf: 0.9, CitedBy: 1},
+	}
+	if got := Consensus(works).ApexDesign; got != DesignMetaAnalysis {
+		t.Errorf("apex = %q, want %q", got, DesignMetaAnalysis)
+	}
+}

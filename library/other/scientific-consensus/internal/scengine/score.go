@@ -60,7 +60,15 @@ type ConsensusResult struct {
 
 // Consensus aggregates scored works into a tier- and citation-weighted verdict.
 func Consensus(works []ScoredWork) ConsensusResult {
-	res := ConsensusResult{StudyCount: len(works), Verdict: VerdictInsufficient, EvidenceStrength: StrengthVeryLow}
+	// ApexDesign is seeded explicitly: the zero value of Design is the empty
+	// string, and the len==0 early return below skips the ApexDesign() call
+	// that would otherwise fill it. Without the seed a zero-work result emits
+	// "apex_design": "" — not a design at all, and not something a consumer can
+	// map to a tier. Every non-empty corpus overwrites this below.
+	res := ConsensusResult{
+		StudyCount: len(works), Verdict: VerdictInsufficient,
+		EvidenceStrength: StrengthVeryLow, ApexDesign: DesignUnknown,
+	}
 	if len(works) == 0 {
 		return res
 	}

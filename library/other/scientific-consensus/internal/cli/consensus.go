@@ -169,7 +169,10 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 					Claim:            claim,
 					Verdict:          scengine.VerdictInsufficient,
 					EvidenceStrength: scengine.StrengthInsufficient,
-					Method:           stanceMethodLabel(nil),
+					// Explicit, for the same reason Consensus() seeds it: an
+					// unset Design marshals as "" rather than as a design.
+					ApexDesign: scengine.DesignUnknown,
+					Method:     stanceMethodLabel(nil),
 					RelevantCount:    0,
 					EvidenceGuarded:  true,
 					TopSupporting:    []workBrief{},
@@ -282,6 +285,23 @@ func stanceMethodLabel(stances []workStance) string {
 	return "heuristic"
 }
 
+// phase5SortEnabled controls evidence-tier-first ordering of the top-N stance
+// lists. Always true in production.
+var phase5SortEnabled = true
+
+// topByStance builds the top-N card list for one stance, strongest evidence
+// first: primary key is the design's tier rank (lower = higher on the evidence
+// pyramid), secondary key is citation count, descending.
+//
+// Ordering by citations alone put the wrong studies on the cards. Citation
+// counts are strongly age-dependent — a 2024 meta-analysis has had no time to
+// accumulate them while a 1998 cohort study has had decades — so a pure
+// citation sort systematically surfaces older, weaker evidence. Because the
+// cut to N happens AFTER the sort, this changes WHICH works appear, not just
+// their order; that is the intent, not a side effect.
+//
+// The input slice is never reordered: matches is a fresh slice, so the caller's
+// stance order (and therefore all_studies' relevance order) is preserved.
 func topByStance(stances []workStance, stance scengine.Stance, n int) []workBrief {
 	matches := make([]workStance, 0)
 	for _, s := range stances {
@@ -289,7 +309,15 @@ func topByStance(stances []workStance, stance scengine.Stance, n int) []workBrie
 			matches = append(matches, s)
 		}
 	}
-	sort.SliceStable(matches, func(i, j int) bool { return matches[i].Work.CitedBy > matches[j].Work.CitedBy })
+	sort.SliceStable(matches, func(i, j int) bool {
+		if phase5SortEnabled {
+			ri, rj := scengine.TierRank(matches[i].Design), scengine.TierRank(matches[j].Design)
+			if ri != rj {
+				return ri < rj
+			}
+		}
+		return matches[i].Work.CitedBy > matches[j].Work.CitedBy
+	})
 	if len(matches) > n {
 		matches = matches[:n]
 	}
