@@ -1,24 +1,27 @@
 package scengine
 
-import "math"
+import (
+	"math"
+	"strings"
+)
 
 // ScoredWork is the per-work input to the consensus engine.
 type ScoredWork struct {
-	Stance      Stance
-	StanceConf  float64
-	Design      Design
-	CitedBy     int
+	Stance     Stance
+	StanceConf float64
+	Design     Design
+	CitedBy    int
 }
 
 // Verdict summarizes the overall consensus direction.
 type Verdict string
 
 const (
-	VerdictSupports      Verdict = "evidence-supports"
-	VerdictRefutes       Verdict = "evidence-refutes"
-	VerdictMixed         Verdict = "evidence-mixed"
-	VerdictInconclusive  Verdict = "inconclusive"
-	VerdictInsufficient  Verdict = "insufficient-evidence"
+	VerdictSupports     Verdict = "evidence-supports"
+	VerdictRefutes      Verdict = "evidence-refutes"
+	VerdictMixed        Verdict = "evidence-mixed"
+	VerdictInconclusive Verdict = "inconclusive"
+	VerdictInsufficient Verdict = "insufficient-evidence"
 )
 
 // EvidenceStrength is a coarse label for how strong the underlying evidence base is.
@@ -29,13 +32,17 @@ const (
 	StrengthModerate EvidenceStrength = "moderate"
 	StrengthLow      EvidenceStrength = "low"
 	StrengthVeryLow  EvidenceStrength = "very-low"
+	// StrengthInsufficient is a safety label, not a measurement: it means the
+	// evidence base is too thin for the strength ladder to say anything at all.
+	// It is applied by ApplyLowEvidenceGuard, never by strength().
+	StrengthInsufficient EvidenceStrength = "insufficient"
 )
 
 // ConsensusResult is the consensus engine's output.
 type ConsensusResult struct {
 	Verdict          Verdict          `json:"verdict"`
-	ConsensusScore   float64          `json:"consensus_score"`   // -1..1 (refute..support), tier+citation weighted
-	Confidence       float64          `json:"confidence"`        // 0..1
+	ConsensusScore   float64          `json:"consensus_score"` // -1..1 (refute..support), tier+citation weighted
+	Confidence       float64          `json:"confidence"`      // 0..1
 	EvidenceStrength EvidenceStrength `json:"evidence_strength"`
 	ApexDesign       Design           `json:"apex_design"`
 	StudyCount       int              `json:"study_count"`
@@ -44,6 +51,11 @@ type ConsensusResult struct {
 	Mixed            int              `json:"mixed"`
 	Inconclusive     int              `json:"inconclusive"`
 	TotalCitations   int              `json:"total_citations"`
+	// NearUnanimous flags a result so one-sided that the absence of dissent is
+	// itself suspicious — usually a sign that genuine debate was filtered out
+	// upstream rather than that the science is settled. Presentation-only: it
+	// never feeds back into Verdict, ConsensusScore, or Confidence.
+	NearUnanimous bool `json:"near_unanimous"`
 }
 
 // Consensus aggregates scored works into a tier- and citation-weighted verdict.
@@ -87,6 +99,7 @@ func Consensus(works []ScoredWork) ConsensusResult {
 	res.Confidence = round2(confidence(res, directional))
 	res.EvidenceStrength = strength(res.ApexDesign, res.StudyCount)
 	res.Verdict = verdict(res, directional)
+	res.NearUnanimous = nearUnanimous(res)
 	return res
 }
 
@@ -143,6 +156,58 @@ func strength(apex Design, studies int) EvidenceStrength {
 	default:
 		return StrengthVeryLow
 	}
+}
+
+// nearUnanimousScore is the |ConsensusScore| at or above which a result with no
+// dissent at all is treated as suspiciously perfect rather than merely strong.
+const nearUnanimousScore = 0.98
+
+// nearUnanimous reports whether a result is so one-sided that a real
+// disagreement was probably filtered out before scoring. It requires ZERO
+// refuting AND ZERO mixed studies: a single mixed study is enough evidence that
+// dissent survived the pipeline, so the flag stays off. The check is symmetric
+// (|score| >= 0.98) because a unanimous refutation is exactly as suspicious as
+// a unanimous endorsement; the zero-dissent requirement means only one side can
+// ever be populated anyway.
+func nearUnanimous(r ConsensusResult) bool {
+	if r.Refuting > 0 || r.Mixed > 0 {
+		return false
+	}
+	if r.StudyCount == 0 {
+		return false
+	}
+	return math.Abs(r.ConsensusScore) >= nearUnanimousScore
+}
+
+// LowEvidenceThreshold is the minimum number of studies that must survive the
+// relevance gate before a keyless (heuristic) run is allowed to report a real
+// EvidenceStrength label.
+const LowEvidenceThreshold = 5
+
+// ApplyLowEvidenceGuard downgrades EvidenceStrength to StrengthInsufficient
+// when stance classification ran WITHOUT an LLM and too few relevant studies
+// survived the relevance gate.
+//
+// Rationale (the vaccines/autism run): with no LLM the only relevance filter is
+// lexical, so a handful of off-topic papers can carry a false claim to a
+// confident-looking "supports" verdict with a "moderate" strength badge. The
+// strength ladder measures study DESIGN, which stays high even when the corpus
+// is wrong — so design quality must not be allowed to certify a corpus this
+// thin. Correctness must not depend on the LLM being reachable.
+//
+// method is the stance_method string ("heuristic" or "llm:<provider>");
+// relevantCount is the number of works remaining after filterRelevant. Verdict,
+// ConsensusScore, and Confidence are deliberately left untouched — this guard
+// is a labelling safeguard, not a change to the scoring math.
+func ApplyLowEvidenceGuard(r ConsensusResult, method string, relevantCount int) ConsensusResult {
+	if strings.HasPrefix(method, "llm:") {
+		return r // an LLM vetted relevance; the ladder is trustworthy
+	}
+	if relevantCount >= LowEvidenceThreshold {
+		return r
+	}
+	r.EvidenceStrength = StrengthInsufficient
+	return r
 }
 
 func clamp01(v, floor float64) float64 {

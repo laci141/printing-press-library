@@ -17,8 +17,16 @@ type compareOutput struct {
 	Note     string          `json:"note,omitempty"`
 }
 
-// computeConsensus runs the full fetch -> classify -> score -> consensus pass
-// for one claim. Shared by `compare` and `batch`.
+// computeConsensus runs the full fetch -> filter -> classify -> score ->
+// consensus pass for one claim. Shared by `compare` and `batch`.
+//
+// The relevance gate and the low-evidence safety guard are applied here for the
+// same reason the `consensus` command applies them: without an LLM the only
+// relevance signal is lexical, so off-topic works must be dropped before they
+// reach the score, and a corpus too thin to survive that gate must not be
+// certified by a study-design strength label. Before this, compare and batch
+// scored EVERY fetched work — the exact condition that let a false claim
+// (vaccines/autism) come back "supported" with a confident-looking badge.
 func computeConsensus(ctx context.Context, c apiGetter, claim string, limit, yearFrom int, enrich bool) (consensusOutput, error) {
 	filter := ""
 	if yearFrom > 0 {
@@ -28,19 +36,48 @@ func computeConsensus(ctx context.Context, c apiGetter, claim string, limit, yea
 	if err != nil {
 		return consensusOutput{}, err
 	}
+
+	// Relevance gate, before enrichment so excluded works cost no PubMed
+	// lookups and never enter the score.
+	fetched := len(works)
+	works = filterRelevant(claim, works)
+	dropped := fetched - len(works)
+	relevantCount := len(works)
+
 	if enrich {
 		enrichPubTypes(ctx, works, 50)
 	}
 	scored, stances := scoreWorks(ctx, works, claim)
 	r := scengine.Consensus(scored)
+
+	method := stanceMethodLabel(stances)
+	measuredStrength := r.EvidenceStrength
+	r = scengine.ApplyLowEvidenceGuard(r, method, relevantCount)
+	evidenceGuarded := r.EvidenceStrength != measuredStrength
+
 	out := consensusOutput{
 		Claim: claim, Verdict: r.Verdict, ConsensusScore: r.ConsensusScore, Confidence: r.Confidence,
 		EvidenceStrength: r.EvidenceStrength, ApexDesign: r.ApexDesign, StudyCount: r.StudyCount,
 		Supporting: r.Supporting, Refuting: r.Refuting, Mixed: r.Mixed, Inconclusive: r.Inconclusive,
-		TotalCitations: r.TotalCitations, Method: stanceMethodLabel(stances),
-		TopSupporting: topByStance(stances, scengine.StanceSupporting, 2),
-		TopRefuting:   topByStance(stances, scengine.StanceRefuting, 2),
-		AllStudies:    allStudyBriefs(stances),
+		TotalCitations: r.TotalCitations, Method: method,
+		RelevantCount:   relevantCount,
+		NearUnanimous:   r.NearUnanimous,
+		EvidenceGuarded: evidenceGuarded,
+		TopSupporting:   topByStance(stances, scengine.StanceSupporting, 2),
+		TopRefuting:     topByStance(stances, scengine.StanceRefuting, 2),
+		AllStudies:      allStudyBriefs(stances),
+	}
+	if dropped > 0 {
+		out.Note = appendNote(out.Note, fmt.Sprintf("%d off-topic work(s) excluded by relevance gate", dropped))
+	}
+	if evidenceGuarded {
+		out.Note = appendNote(out.Note, fmt.Sprintf(
+			"evidence strength forced to %q: keyless run with only %d relevant work(s) (threshold %d) — no AI relevance filtering ran, so listed studies may be off-topic",
+			scengine.StrengthInsufficient, relevantCount, scengine.LowEvidenceThreshold))
+	}
+	if r.NearUnanimous {
+		out.Note = appendNote(out.Note,
+			"near-unanimous result (no refuting or mixed studies) — check that genuine debate was not filtered out")
 	}
 	return out, nil
 }
@@ -54,7 +91,12 @@ func newNovelCompareCmd(flags *rootFlags) *cobra.Command {
 		Short: "Run two consensus analyses side-by-side to compare competing claims",
 		Long: "Run the consensus engine for two claims and present them side by side, with the\n" +
 			"more strongly supported claim flagged. Use this to weigh competing interventions\n" +
-			"or contradictory claims.",
+			"or contradictory claims.\n\n" +
+			"Each claim goes through the same relevance gate and low-evidence safety guard as\n" +
+			"the `consensus` command: off-topic works are dropped before scoring, and on a\n" +
+			"keyless run with fewer than 5 relevant works evidence_strength is forced to\n" +
+			"\"insufficient\" (evidence_guarded is set). A comparison where either side is\n" +
+			"guarded is not a fair comparison — check relevant_count on both.",
 		Example:     "  scientific-consensus-pp-cli compare \"statins reduce mortality\" \"statins increase diabetes risk\" --agent",
 		Annotations: map[string]string{"mcp:read-only": "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -97,7 +139,14 @@ func newNovelCompareCmd(flags *rootFlags) *cobra.Command {
 				out.Stronger = "comparable"
 			}
 			if a.StudyCount == 0 || b.StudyCount == 0 {
-				out.Note = "one or both claims returned no works; comparison may be unreliable"
+				out.Note = appendNote(out.Note, "one or both claims returned no works; comparison may be unreliable")
+			}
+			// A side-by-side verdict is only meaningful when both sides rest on
+			// a corpus the guard did not veto; say so rather than letting the
+			// "stronger support" line imply a fair fight.
+			if a.EvidenceGuarded || b.EvidenceGuarded {
+				out.Note = appendNote(out.Note,
+					"low-evidence guard fired on at least one claim; the side-by-side comparison is not reliable")
 			}
 			return emit(cmd, flags, out, func(w io.Writer) { renderCompare(w, out) })
 		},
@@ -107,6 +156,15 @@ func newNovelCompareCmd(flags *rootFlags) *cobra.Command {
 	return cmd
 }
 
+// guardedLabel renders an evidence-strength cell, marking the value when the
+// low-evidence guard produced it rather than the strength ladder.
+func guardedLabel(o consensusOutput) string {
+	if o.EvidenceGuarded {
+		return string(o.EvidenceStrength) + " ⚠guarded"
+	}
+	return string(o.EvidenceStrength)
+}
+
 func renderCompare(w io.Writer, o compareOutput) {
 	row := func(label, av, bv string) { fmt.Fprintf(w, "  %-18s %-32s %-32s\n", label, av, bv) }
 	fmt.Fprintln(w, "Claim comparison:")
@@ -114,8 +172,9 @@ func renderCompare(w io.Writer, o compareOutput) {
 	row("verdict", string(o.ClaimA.Verdict), string(o.ClaimB.Verdict))
 	row("consensus score", fmt.Sprintf("%+.2f", o.ClaimA.ConsensusScore), fmt.Sprintf("%+.2f", o.ClaimB.ConsensusScore))
 	row("confidence", fmt.Sprintf("%.0f%%", o.ClaimA.Confidence*100), fmt.Sprintf("%.0f%%", o.ClaimB.Confidence*100))
-	row("evidence strength", string(o.ClaimA.EvidenceStrength), string(o.ClaimB.EvidenceStrength))
+	row("evidence strength", guardedLabel(o.ClaimA), guardedLabel(o.ClaimB))
 	row("studies", fmt.Sprintf("%d", o.ClaimA.StudyCount), fmt.Sprintf("%d", o.ClaimB.StudyCount))
+	row("relevant works", fmt.Sprintf("%d", o.ClaimA.RelevantCount), fmt.Sprintf("%d", o.ClaimB.RelevantCount))
 	fmt.Fprintf(w, "\n  Stronger support: %s\n", o.Stronger)
 	if o.Note != "" {
 		fmt.Fprintf(w, "  Note: %s\n", o.Note)

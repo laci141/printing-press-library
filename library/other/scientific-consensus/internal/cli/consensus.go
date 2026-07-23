@@ -39,8 +39,19 @@ type consensusOutput struct {
 	Inconclusive     int                       `json:"inconclusive"`
 	TotalCitations   int                       `json:"total_citations"`
 	Method           string                    `json:"stance_method"`
-	TopSupporting    []workBrief               `json:"top_supporting"`
-	TopRefuting      []workBrief               `json:"top_refuting"`
+	// RelevantCount is how many fetched works survived the lexical relevance
+	// gate and therefore entered scoring. It is the input to the low-evidence
+	// safety guard, and consumers need it to judge how thin the corpus was.
+	RelevantCount int `json:"relevant_count"`
+	// NearUnanimous mirrors scengine.ConsensusResult.NearUnanimous: the result
+	// is so one-sided that real dissent was probably filtered out upstream.
+	NearUnanimous bool `json:"near_unanimous"`
+	// EvidenceGuarded reports that the low-evidence safety guard fired and
+	// overwrote EvidenceStrength with "insufficient". Without this flag a
+	// consumer cannot tell a guarded label from a measured one.
+	EvidenceGuarded bool        `json:"evidence_guarded"`
+	TopSupporting   []workBrief `json:"top_supporting"`
+	TopRefuting     []workBrief `json:"top_refuting"`
 	// AllStudies lists every analyzed work (post relevance gate) in fetch
 	// (relevance) order, so content-aware consumers can re-filter by
 	// abstract instead of trusting the top lists alone.
@@ -76,6 +87,9 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 			"stance, and compute a tier- and citation-weighted Consensus Score, Confidence,\n" +
 			"and Evidence Strength. Stance is heuristic without an AI key. Do NOT treat the\n" +
 			"score as a peer-reviewed conclusion; use `evidence` to inspect study designs.\n\n" +
+			"Safety guard: on a keyless (heuristic) run, when fewer than 5 works survive the\n" +
+			"relevance gate, evidence_strength is forced to \"insufficient\" and\n" +
+			"evidence_guarded is set. Study design alone must not certify a corpus that thin.\n\n" +
 			"Optional LLM-assisted stance classification: set one of these API keys (checked\n" +
 			"in this priority order, first one set wins) to classify stance with that model\n" +
 			"instead of the lexical heuristic:\n" +
@@ -123,6 +137,9 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 			fetched := len(works)
 			works = filterRelevant(claim, works)
 			dropped := fetched - len(works)
+			// relevantCount is the post-gate corpus size — exactly the set that
+			// reaches scoring, and the input to the low-evidence safety guard.
+			relevantCount := len(works)
 
 			if enrich {
 				enrichPubTypes(ctx, works, 50)
@@ -137,13 +154,28 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 			prog.done()
 			result := scengine.Consensus(scored)
 
+			// Low-evidence safety guard. method is resolved BEFORE the guard
+			// because the guard's first question is "did an LLM vet relevance?"
+			// — with an LLM the strength ladder is trustworthy, without one a
+			// corpus under scengine.LowEvidenceThreshold cannot support any
+			// strength label at all. The post-guard label is compared against
+			// the measured one so the JSON can report that a guard, not a
+			// measurement, produced the value.
+			method := stanceMethodLabel(stances)
+			measuredStrength := result.EvidenceStrength
+			result = scengine.ApplyLowEvidenceGuard(result, method, relevantCount)
+			evidenceGuarded := result.EvidenceStrength != measuredStrength
+
 			out := consensusOutput{
 				Claim: claim, Verdict: result.Verdict, ConsensusScore: result.ConsensusScore,
 				Confidence: result.Confidence, EvidenceStrength: result.EvidenceStrength,
 				ApexDesign: result.ApexDesign, StudyCount: result.StudyCount,
 				Supporting: result.Supporting, Refuting: result.Refuting, Mixed: result.Mixed,
 				Inconclusive: result.Inconclusive, TotalCitations: result.TotalCitations,
-				Method: stanceMethodLabel(stances),
+				Method:          method,
+				RelevantCount:   relevantCount,
+				NearUnanimous:   result.NearUnanimous,
+				EvidenceGuarded: evidenceGuarded,
 			}
 			out.TopSupporting = topByStance(stances, scengine.StanceSupporting, 3)
 			out.TopRefuting = topByStance(stances, scengine.StanceRefuting, 3)
@@ -154,10 +186,16 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 				out.Note = "fewer than 3 directional studies; treat as preliminary"
 			}
 			if dropped > 0 {
-				if out.Note != "" {
-					out.Note += "; "
-				}
-				out.Note += fmt.Sprintf("%d off-topic work(s) excluded by relevance gate", dropped)
+				out.Note = appendNote(out.Note, fmt.Sprintf("%d off-topic work(s) excluded by relevance gate", dropped))
+			}
+			if evidenceGuarded {
+				out.Note = appendNote(out.Note, fmt.Sprintf(
+					"evidence strength forced to %q: keyless run with only %d relevant work(s) (threshold %d) — no AI relevance filtering ran, so listed studies may be off-topic",
+					scengine.StrengthInsufficient, relevantCount, scengine.LowEvidenceThreshold))
+			}
+			if result.NearUnanimous {
+				out.Note = appendNote(out.Note,
+					"near-unanimous result (no refuting or mixed studies) — check that genuine debate was not filtered out")
 			}
 
 			return emit(cmd, flags, out, func(w io.Writer) { renderConsensus(w, out) })
@@ -167,6 +205,15 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 	cmd.Flags().IntVar(&yearFrom, "year-from", 0, "only include works published from this year onward")
 	cmd.Flags().BoolVar(&enrich, "enrich", true, "enrich study-design classification with PubMed publication types")
 	return cmd
+}
+
+// appendNote joins note fragments with "; ", so callers can add a fragment
+// without repeating the empty-string check at every call site.
+func appendNote(note, add string) string {
+	if note == "" {
+		return add
+	}
+	return note + "; " + add
 }
 
 // stanceMethodLabel summarizes how stance was classified across the analyzed
@@ -231,11 +278,19 @@ func renderConsensus(w io.Writer, o consensusOutput) {
 	fmt.Fprintf(w, "  Verdict:           %s\n", o.Verdict)
 	fmt.Fprintf(w, "  Consensus score:   %+.2f  (-1 refute … +1 support)\n", o.ConsensusScore)
 	fmt.Fprintf(w, "  Confidence:        %.0f%%\n", o.Confidence*100)
-	fmt.Fprintf(w, "  Evidence strength: %s (apex: %s)\n", o.EvidenceStrength, o.ApexDesign)
+	if o.EvidenceGuarded {
+		fmt.Fprintf(w, "  Evidence strength: %s  ⚠ guarded: only %d relevant work(s), no AI filtering (apex: %s)\n",
+			o.EvidenceStrength, o.RelevantCount, o.ApexDesign)
+	} else {
+		fmt.Fprintf(w, "  Evidence strength: %s (apex: %s)\n", o.EvidenceStrength, o.ApexDesign)
+	}
 	fmt.Fprintf(w, "  Studies analyzed:  %d  (support %d / refute %d / mixed %d / inconclusive %d)\n",
 		o.StudyCount, o.Supporting, o.Refuting, o.Mixed, o.Inconclusive)
 	fmt.Fprintf(w, "  Total citations:   %d\n", o.TotalCitations)
 	fmt.Fprintf(w, "  Stance method:     %s\n", o.Method)
+	if o.NearUnanimous {
+		fmt.Fprintln(w, "  ⚠ Near-unanimous:  no refuting or mixed studies — verify debate was not filtered out")
+	}
 	if len(o.TopSupporting) > 0 {
 		fmt.Fprintln(w, "\n  Top supporting:")
 		for _, b := range o.TopSupporting {
