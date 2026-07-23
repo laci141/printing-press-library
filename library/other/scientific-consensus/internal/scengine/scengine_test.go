@@ -573,3 +573,159 @@ func TestReconstructAbstract(t *testing.T) {
 		t.Errorf("nil index should yield empty string")
 	}
 }
+
+func TestIsPICORelevant(t *testing.T) {
+	tests := []struct {
+		name              string
+		abstract          string
+		title             string
+		ivTokens, outToks []string
+		want              bool
+	}{
+		{
+			name:     "pico_both_tokens_present",
+			abstract: "A cohort of vaccinated and unvaccinated children showed increased autism rates.",
+			title:    "Vaccines and autism: a population study",
+			ivTokens: []string{"vaccine"}, outToks: []string{"autism"},
+			want: true,
+		},
+		{
+			name:     "pico_only_iv_present",
+			abstract: "Vaccination schedules in pediatrics.",
+			title:    "Study of vaccine timing",
+			ivTokens: []string{"vaccine"}, outToks: []string{"autism"},
+			want: false,
+		},
+		{
+			name:     "pico_only_outcome_present",
+			abstract: "Autism prevalence rose over the study period.",
+			title:    "Autism trends 1990-2020",
+			ivTokens: []string{"vaccine"}, outToks: []string{"autism"},
+			want: false,
+		},
+		{
+			name:     "pico_empty_tokens_bypass_gate",
+			abstract: "Any text",
+			title:    "Any title",
+			ivTokens: nil, outToks: nil,
+			want: true,
+		},
+		{
+			name:     "pico_case_insensitive_and_stemmed",
+			abstract: "VACCINATED infants were followed for AUTISM spectrum disorder.",
+			title:    "",
+			ivTokens: []string{"vacci"}, outToks: []string{"autis"},
+			want: true,
+		},
+		{
+			name:     "pico_token_may_come_from_title_only",
+			abstract: "Children were followed for ten years.",
+			title:    "Vaccine exposure and autism risk",
+			ivTokens: []string{"vaccine"}, outToks: []string{"autism"},
+			want: true,
+		},
+		{
+			// Within a side the match is OR: the second token carries it.
+			name:     "pico_any_token_on_a_side_suffices",
+			abstract: "Low-calorie sweeteners and body weight.",
+			title:    "",
+			ivTokens: []string{"artif", "sweet"}, outToks: []string{"weigh", "gain"},
+			want: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := IsPICORelevant(tt.abstract, tt.title, tt.ivTokens, tt.outToks)
+			if got != tt.want {
+				t.Errorf("IsPICORelevant(iv=%v, out=%v) = %v, want %v", tt.ivTokens, tt.outToks, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestIsPICORelevantFromClaim exercises the gate the way production does:
+// tokens derived from the claim by PICOTokens, not hand-written.
+func TestIsPICORelevantFromClaim(t *testing.T) {
+	tests := []struct {
+		name     string
+		abstract string
+		title    string
+		claim    string
+		want     bool
+	}{
+		{
+			name:     "pico_head_noun_matches_without_modifier",
+			abstract: "Low-calorie sweeteners and body weight: a meta-analysis",
+			title:    "",
+			claim:    "artificial sweeteners cause weight gain",
+			want:     true,
+		},
+		{
+			name:     "pico_modifier_only_still_needs_outcome",
+			abstract: "The artificial sweetener erythritol and cardiovascular events",
+			title:    "",
+			claim:    "artificial sweeteners cause weight gain",
+			want:     false,
+		},
+		{
+			name:     "pico_stopwords_do_not_open_gate",
+			abstract: "A study of the effects in patients and their outcomes",
+			title:    "",
+			claim:    "artificial sweeteners cause weight gain",
+			want:     false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			iv, out := PICOTokens(tt.claim)
+			got := IsPICORelevant(tt.abstract, tt.title, iv, out)
+			if got != tt.want {
+				t.Errorf("IsPICORelevant(%q | iv=%v out=%v) = %v, want %v",
+					tt.abstract, iv, out, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPICOTokens(t *testing.T) {
+	tests := []struct {
+		name            string
+		claim           string
+		wantIV, wantOut []string
+	}{
+		{
+			name:   "harm claim returns every content token per side",
+			claim:  "vaccines cause autism",
+			wantIV: []string{"vacci"}, wantOut: []string{"autis"},
+		},
+		{
+			name:   "modifier and head noun both kept",
+			claim:  "artificial sweeteners cause weight gain",
+			wantIV: []string{"artif", "sweet"}, wantOut: []string{"weigh", "gain"},
+		},
+		{
+			name:   "unsplittable claim bypasses gate",
+			claim:  "autism",
+			wantIV: nil, wantOut: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			iv, out := PICOTokens(tt.claim)
+			if !equalTokens(iv, tt.wantIV) || !equalTokens(out, tt.wantOut) {
+				t.Errorf("PICOTokens(%q) = (%v, %v), want (%v, %v)", tt.claim, iv, out, tt.wantIV, tt.wantOut)
+			}
+		})
+	}
+}
+
+func TestDropPICOStopwords(t *testing.T) {
+	if got := dropPICOStopwords([]string{"the", "sweet", "of"}); !equalTokens(got, []string{"sweet"}) {
+		t.Errorf("stopwords not dropped: %v", got)
+	}
+	// A side made only of stopwords falls back to the unfiltered list rather
+	// than emptying out, which would bypass the gate on BOTH sides.
+	if got := dropPICOStopwords([]string{"the", "of"}); !equalTokens(got, []string{"the", "of"}) {
+		t.Errorf("all-stopword side should fall back, got %v", got)
+	}
+}

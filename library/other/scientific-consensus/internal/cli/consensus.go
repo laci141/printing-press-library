@@ -137,9 +137,50 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 			fetched := len(works)
 			works = filterRelevant(claim, works)
 			dropped := fetched - len(works)
+
+			// --- Phase 3: PICO relevance gate ---
+			// The lexical gate above keeps a work that shares ANY content token
+			// with the claim. That is too weak for a two-sided claim: a paper
+			// about vaccine schedules with no mention of autism passes it. The
+			// PICO gate additionally requires the intervention AND the outcome
+			// to both appear in the abstract or title, so what survives is
+			// evidence about the relation the claim asserts, not about one half
+			// of it. Runs before enrichment and scoring so excluded works cost
+			// no PubMed lookups and never reach the score.
+			ivTokens, outTokens := scengine.PICOTokens(claim)
+			picoRelevant := make([]scWork, 0, len(works))
+			for _, w := range works {
+				if scengine.IsPICORelevant(w.Abstract, w.Title, ivTokens, outTokens) {
+					picoRelevant = append(picoRelevant, w)
+				}
+			}
+			picoDropped := len(works) - len(picoRelevant)
+			works = picoRelevant
 			// relevantCount is the post-gate corpus size — exactly the set that
 			// reaches scoring, and the input to the low-evidence safety guard.
 			relevantCount := len(works)
+
+			// No work names both sides of the claim: there is nothing to score,
+			// and reporting a verdict computed from zero studies would be worse
+			// than reporting none. Emitted as a normal result (not an error) so
+			// agent consumers get the machine-readable shape they expect.
+			if relevantCount == 0 {
+				out := consensusOutput{
+					Claim:            claim,
+					Verdict:          scengine.VerdictInsufficient,
+					EvidenceStrength: scengine.StrengthInsufficient,
+					Method:           stanceMethodLabel(nil),
+					RelevantCount:    0,
+					EvidenceGuarded:  true,
+					TopSupporting:    []workBrief{},
+					TopRefuting:      []workBrief{},
+					AllStudies:       []workBrief{},
+					Note: fmt.Sprintf(
+						"no works matched both the intervention (%v) and outcome (%v) tokens in abstract/title (PICO gate); consensus not available — try restating the claim with the terms the literature uses",
+						ivTokens, outTokens),
+				}
+				return emit(cmd, flags, out, func(w io.Writer) { renderConsensus(w, out) })
+			}
 
 			if enrich {
 				enrichPubTypes(ctx, works, 50)
@@ -187,6 +228,11 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 			}
 			if dropped > 0 {
 				out.Note = appendNote(out.Note, fmt.Sprintf("%d off-topic work(s) excluded by relevance gate", dropped))
+			}
+			if picoDropped > 0 {
+				out.Note = appendNote(out.Note, fmt.Sprintf(
+					"%d work(s) excluded by PICO gate (missing intervention %v or outcome %v in abstract/title)",
+					picoDropped, ivTokens, outTokens))
 			}
 			if evidenceGuarded {
 				out.Note = appendNote(out.Note, fmt.Sprintf(
