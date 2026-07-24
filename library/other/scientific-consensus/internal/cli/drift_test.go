@@ -4,6 +4,7 @@ package cli
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -24,6 +25,7 @@ func TestValidateDriftSpan(t *testing.T) {
 		{"span 1 rejected", 2020, 2021, true},
 		{"span 2 accepted", 2020, 2022, false},
 		{"wide span accepted", 2015, 2025, false},
+		{"decade span accepted", 2020, 2030, false},
 		{"inverted span rejected", 2025, 2015, true},
 	}
 	for _, tt := range tests {
@@ -43,6 +45,11 @@ func TestValidateDriftSpan(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), "at least 2 years") {
 				t.Errorf("error message should explain the 2-year minimum, got %q", err.Error())
+			}
+			// The message must echo the rejected bounds so the user can see
+			// which values were too close together.
+			if want := fmt.Sprintf("--from %d --to %d", tt.from, tt.to); !strings.Contains(err.Error(), want) {
+				t.Errorf("error message should contain %q, got %q", want, err.Error())
 			}
 		})
 	}
