@@ -1,0 +1,11 @@
+{
+  "schema_version": 2,
+  "id": "full-abstracts-opt-out-of-the-serialization-cap",
+  "applied_at": "2026-07-25",
+  "base_run_id": "20260620-165352-e55cec69",
+  "base_printing_press_version": "4.24.0",
+  "summary": "The abstract cap in consensus JSON is a serialization concern, not an engine one: every gate and classifier reads the full reconstructed abstract, so the capped output must stay opt-out-able or the JSON cannot be used to audit what the engine actually decided.",
+  "reason": "The relevance gate, the PICO gate and ClassifyStance all consume scWork.Abstract in full; clipAbstract runs afterwards, only while building workBrief. That gap makes the emitted JSON unfaithful as an audit trail — a study can be excluded on text the consumer never receives, and replaying a gate over the emitted corpus produces exclusions that never happened in production. A regen must keep the cap defaulted ON (bounded LLM prompts is why it exists) while leaving an explicit way to turn it off.",
+  "files": ["internal/cli/consensus.go", "internal/cli/consensus_full_abstracts_test.go", "SKILL.md"],
+  "validated_outcome": "Measured on 12 archived corpora before the flag existed: 110 of 246 studies (45%) reached the consumer already truncated, and replaying the current PICO gate over coffee's own survivors excluded a work that had passed at runtime. clipAbstract is proven byte-identical to its pre-flag implementation across empty/at-cap/over-cap/multi-byte inputs while the flag is off."
+}
