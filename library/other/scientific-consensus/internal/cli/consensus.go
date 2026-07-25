@@ -21,7 +21,8 @@ type workBrief struct {
 	StanceConf float64         `json:"stance_confidence"`
 	// Abstract is the reconstructed OpenAlex abstract, capped at
 	// maxAbstractChars so downstream LLM prompts built from this JSON stay
-	// bounded. Empty string when the source has no abstract.
+	// bounded, unless --full-abstracts is set. Empty string when the source has
+	// no abstract.
 	Abstract string `json:"abstract"`
 }
 
@@ -62,9 +63,32 @@ type consensusOutput struct {
 // maxAbstractChars bounds per-study abstract length in JSON output.
 const maxAbstractChars = 1500
 
+// fullAbstractsEnabled disables the maxAbstractChars cap for one command run.
+//
+// It exists because the cap is invisible to the engine but destroys the JSON as
+// a MEASUREMENT input. Every gate and classifier in this CLI reads the full
+// reconstructed abstract (scwork.go builds it, the relevance gate, the PICO
+// gate and ClassifyStance all consume it); clipAbstract runs afterwards, only
+// while building workBrief for output. So a run is scored on the whole text and
+// then serialized as a stump — measured on the archived corpora, 110 of 246
+// studies (45%) reach an analyst already truncated, and replaying the gate over
+// them produces exclusions that never happened in production.
+//
+// Package-level rather than a parameter on topByStance/allStudyBriefs so the
+// two clipAbstract call sites stay untouched and compare/controversies keep
+// their signatures. Same idiom as phase5SortEnabled below and picoGateEnabled
+// in scengine. RunE sets it from the flag and resets it on return, so a
+// long-lived process (the MCP server runs many commands in one process) cannot
+// leak the setting from one invocation into the next.
+var fullAbstractsEnabled = false
+
 // clipAbstract caps an abstract at maxAbstractChars characters, cutting on a
-// rune boundary so multi-byte text is never split mid-character.
+// rune boundary so multi-byte text is never split mid-character. Returns the
+// input unchanged when fullAbstractsEnabled is set.
 func clipAbstract(s string) string {
+	if fullAbstractsEnabled {
+		return s
+	}
 	if len(s) <= maxAbstractChars {
 		return s
 	}
@@ -79,6 +103,7 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 	var limit int
 	var yearFrom int
 	var enrich bool
+	var fullAbstracts bool
 
 	cmd := &cobra.Command{
 		Use:   "consensus <claim>",
@@ -104,6 +129,12 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 		Example:     "  scientific-consensus-pp-cli consensus \"vitamin D reduces respiratory infections\" --agent",
 		Annotations: map[string]string{"mcp:read-only": "true", "pp:no-error-path-probe": "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Scoped to this invocation: the MCP server runs many commands in
+			// one process, and a leaked "true" would silently uncap every later
+			// consensus/compare/controversies result.
+			fullAbstractsEnabled = fullAbstracts
+			defer func() { fullAbstractsEnabled = false }()
+
 			if len(args) == 0 && cmd.Flags().NFlag() == 0 {
 				return cmd.Help()
 			}
@@ -253,6 +284,8 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 	cmd.Flags().IntVar(&limit, "limit", 40, "number of works to analyze (max 200)")
 	cmd.Flags().IntVar(&yearFrom, "year-from", 0, "only include works published from this year onward")
 	cmd.Flags().BoolVar(&enrich, "enrich", true, "enrich study-design classification with PubMed publication types")
+	cmd.Flags().BoolVar(&fullAbstracts, "full-abstracts", false,
+		"Emit untruncated abstracts in JSON output. For measurement and regression testing only — output may reach several MB and can exceed downstream LLM prompt limits.")
 	return cmd
 }
 

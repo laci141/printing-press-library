@@ -63,6 +63,12 @@ These capabilities aren't available in any other tool for this API.
   ```bash
   scientific-consensus consensus "vitamin D reduces respiratory infections" --agent
   ```
+
+  Abstracts in the JSON output are capped at 1500 characters so downstream LLM prompts stay bounded. The engine always scores the full abstract — the cap applies only to serialization — so a study can be excluded by the PICO gate on text you cannot see in the output. Pass `--full-abstracts` to emit them untruncated when you need the JSON as a measurement or regression-testing input. Output can reach several MB and may exceed downstream LLM prompt limits, so leave it off for normal agent use.
+
+  ```bash
+  scientific-consensus consensus "vitamin D reduces respiratory infections" --full-abstracts --json
+  ```
 - **`evidence`** — Classify retrieved studies by design (meta-analysis to case report) and render the evidence pyramid for a topic.
 
   _Reach for this to judge whether a claim rests on RCTs/meta-analyses or just case series._
