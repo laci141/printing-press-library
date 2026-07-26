@@ -69,6 +69,8 @@ These capabilities aren't available in any other tool for this API.
   ```bash
   scientific-consensus consensus "vitamin D reduces respiratory infections" --full-abstracts --json
   ```
+
+  Retracted studies are withheld from the score. Two signals are used: the publisher's retraction marker in the title, and the source index's retraction flag. The flag is needed because a retracted meta-analysis can be served with an unmarked title, and it is reported as a separate tier because index flags over-mark — a work carrying only the flag may have received a correction rather than a retraction. Excluded works are never dropped from the output: they stay in `all_studies` with a `retraction` field naming which tier fired, and `retracted_excluded` reports how many were withheld. Expect `relevant_count - retracted_excluded == study_count`; do not assume `study_count` equals the number of works that passed the relevance gates.
 - **`evidence`** — Classify retrieved studies by design (meta-analysis to case report) and render the evidence pyramid for a topic.
 
   _Reach for this to judge whether a claim rests on RCTs/meta-analyses or just case series._
@@ -83,6 +85,8 @@ These capabilities aren't available in any other tool for this API.
   ```bash
   scientific-consensus compare "statins reduce mortality" "statins increase diabetes risk" --agent
   ```
+
+  `compare` applies the same relevance, PICO and retraction gates as `consensus`, so both commands score the identical subset for a given claim and their confidence values stay comparable.
 - **`reproducibility`** — Estimate reproducibility by detecting replication studies, sample sizes, and pre-registration cues.
 
   _Reach for this to gauge how well-replicated a finding is._

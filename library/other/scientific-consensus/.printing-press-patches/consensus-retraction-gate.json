@@ -1,0 +1,18 @@
+{
+  "schema_version": 2,
+  "id": "consensus-retraction-gate",
+  "applied_at": "2026-07-26",
+  "base_run_id": "20260620-165352-e55cec69",
+  "base_printing_press_version": "4.24.0",
+  "summary": "Retracted works must not contribute to the consensus score. Detection combines the publisher's title marker with OpenAlex's is_retracted flag as two distinct tiers; excluded works stay in all_studies with a retraction label, and consensus/compare report retracted_excluded.",
+  "reason": "Measured on live runs, not hypothesised: 'vitamin C prevents the common cold' scored a meta-analysis that had been retracted in 2023 for double-counting placebo arms (retraction notice 10.1155/2023/9848057) as SUPPORTING at confidence 0.90, at the top of the evidence pyramid. A title-only rule cannot catch it — OpenAlex serves that title with no marker — so the index flag is required. The flag alone is not sufficient either: it over-marks (the 2020 Lancet Commission dementia report is is_retracted:true although it only received a table correction), hence two tiers with different reader-facing wording. The gate runs between classification and scoring rather than as a new Stance value, because Consensus() tallies stances in a switch ending in `default: Inconclusive++` and collects designs and citations before that switch, so a retraction stance would still reach ApexDesign and TotalCitations while appearing handled. Works are withheld from the score but never removed from the output: PRISMA requires that a reader can see what was excluded and why.",
+  "files": [
+    "internal/scengine/retracted.go",
+    "internal/scengine/retracted_test.go",
+    "internal/scengine/retracted_baseline_test.go",
+    "internal/cli/scwork.go",
+    "internal/cli/consensus.go",
+    "internal/cli/compare.go"
+  ],
+  "validated_outcome": "go build/vet/test green. Live keyless runs on the two claims that exposed the bug: 'vitamin C prevents the common cold' (limit 188) relevant_count 176, retracted_excluded 2, study_count 174; 'intermittent fasting extends lifespan' (limit 161) relevant_count 135, retracted_excluded 1, study_count 134 — relevant_count minus retracted_excluded equals study_count in both. All three works remain in all_studies carrying retraction 'retracted-declared' or 'retracted-flagged'. Verdicts unchanged and consensus_score moved by at most 0.01: the change protects credibility, not the number. Detector precision checked against measured false-positive traps (papers about retraction, 'Theory of retracts', 'Retracted Science and the Retraction Index') and against a verified index false positive (Lancet dementia Commission), which lands in the softer tier."
+}

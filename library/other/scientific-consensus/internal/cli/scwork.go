@@ -31,6 +31,11 @@ type scWork struct {
 	PubTypes    []string `json:"-"`
 	FirstAuthor string   `json:"first_author,omitempty"`
 	Country     string   `json:"-"`
+	// Retraction carries the work's retraction status, derived once here from
+	// the title and OpenAlex's is_retracted flag so every consumer sees the
+	// same answer. The zero value is scengine.NotRetracted, so callers that
+	// never look at it behave exactly as before.
+	Retraction scengine.Retraction `json:"retraction,omitempty"`
 }
 
 // openAlexWorksResponse mirrors the slice of the OpenAlex /works payload the
@@ -58,6 +63,11 @@ type openAlexWork struct {
 	OpenAccess      struct {
 		IsOA bool `json:"is_oa"`
 	} `json:"open_access"`
+	// IsRetracted is OpenAlex's retraction flag. Measured to over-mark (a
+	// correction on the 2020 Lancet dementia Commission reads as retracted),
+	// which is why DetectRetraction keeps it in a softer tier than a title
+	// marker rather than treating it as ground truth.
+	IsRetracted           bool             `json:"is_retracted"`
 	AbstractInvertedIndex map[string][]int `json:"abstract_inverted_index"`
 	IDs                   struct {
 		Pmid string `json:"pmid"`
@@ -96,7 +106,7 @@ func fetchWorks(ctx context.Context, c apiGetter, search, filter, sortBy string,
 	params := map[string]string{
 		"per-page": strconv.Itoa(perPage),
 		"mailto":   defaultMailto,
-		"select":   "id,doi,title,display_name,publication_year,cited_by_count,type,open_access,abstract_inverted_index,ids,primary_topic,primary_location,authorships",
+		"select":   "id,doi,title,display_name,publication_year,cited_by_count,type,open_access,abstract_inverted_index,ids,primary_topic,primary_location,authorships,is_retracted",
 	}
 	if search != "" {
 		params["search"] = search
@@ -133,6 +143,9 @@ func fetchWorks(ctx context.Context, c apiGetter, search, filter, sortBy string,
 			Venue:    w.PrimaryLocation.Source.DisplayName,
 			Topic:    w.PrimaryTopic.DisplayName,
 			IsOA:     w.OpenAccess.IsOA,
+			// title, not title+abstract: DetectRetraction is start-anchored,
+			// and joining would leave the abstract silently unguarded.
+			Retraction: scengine.DetectRetraction(title, w.IsRetracted),
 		}
 		if len(w.Authorships) > 0 {
 			sw.FirstAuthor = w.Authorships[0].Author.DisplayName
@@ -210,6 +223,34 @@ func scoreWorks(ctx context.Context, works []scWork, claim string) ([]scengine.S
 		stances[i] = workStance{Work: w, Stance: st, Confidence: conf, Design: cls.Design, Method: cls.Method, StanceMethod: stMethod}
 	}
 	return scored, stances
+}
+
+// scorableWorks splits the output of scoreWorks into the works that may enter
+// the consensus score and a count of those withheld because they are retracted.
+//
+// Shared rather than inlined at each call site because consensus, compare and
+// batch must measure the SAME subset — the existing comment in computeConsensus
+// says so about the relevance gates, and a retraction gate that drifted between
+// the two commands would produce two different scores for one claim, which is
+// worse than having no gate at all.
+//
+// scored and stances are index-aligned by construction (scoreWorks fills both
+// in a single loop), so filtering by index preserves each work's own values.
+// The input slices are not mutated.
+func scorableWorks(scored []scengine.ScoredWork, stances []workStance) ([]scengine.ScoredWork, int) {
+	out := make([]scengine.ScoredWork, 0, len(scored))
+	excluded := 0
+	for i := range stances {
+		if i >= len(scored) {
+			break
+		}
+		if stances[i].Work.Retraction.ExcludeFromScore() {
+			excluded++
+			continue
+		}
+		out = append(out, scored[i])
+	}
+	return out, excluded
 }
 
 type workStance struct {

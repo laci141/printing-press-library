@@ -24,6 +24,11 @@ type workBrief struct {
 	// bounded, unless --full-abstracts is set. Empty string when the source has
 	// no abstract.
 	Abstract string `json:"abstract"`
+	// Retraction is non-empty when the work was withdrawn. Such works are kept
+	// in AllStudies and excluded from scoring: the PRISMA convention is that a
+	// reader must be able to see what was removed and why, and a work that
+	// silently vanishes is indistinguishable from one that was never fetched.
+	Retraction scengine.Retraction `json:"retraction,omitempty"`
 }
 
 type consensusOutput struct {
@@ -50,9 +55,13 @@ type consensusOutput struct {
 	// EvidenceGuarded reports that the low-evidence safety guard fired and
 	// overwrote EvidenceStrength with "insufficient". Without this flag a
 	// consumer cannot tell a guarded label from a measured one.
-	EvidenceGuarded bool        `json:"evidence_guarded"`
-	TopSupporting   []workBrief `json:"top_supporting"`
-	TopRefuting     []workBrief `json:"top_refuting"`
+	EvidenceGuarded bool `json:"evidence_guarded"`
+	// RetractedExcluded is how many relevant works were withheld from scoring
+	// because they are retracted. It is what makes the arithmetic checkable:
+	// relevant_count - retracted_excluded == study_count.
+	RetractedExcluded int         `json:"retracted_excluded"`
+	TopSupporting     []workBrief `json:"top_supporting"`
+	TopRefuting       []workBrief `json:"top_refuting"`
 	// AllStudies lists every analyzed work (post relevance gate) in fetch
 	// (relevance) order, so content-aware consumers can re-filter by
 	// abstract instead of trusting the top lists alone.
@@ -202,13 +211,13 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 					EvidenceStrength: scengine.StrengthInsufficient,
 					// Explicit, for the same reason Consensus() seeds it: an
 					// unset Design marshals as "" rather than as a design.
-					ApexDesign: scengine.DesignUnknown,
-					Method:     stanceMethodLabel(nil),
-					RelevantCount:    0,
-					EvidenceGuarded:  true,
-					TopSupporting:    []workBrief{},
-					TopRefuting:      []workBrief{},
-					AllStudies:       []workBrief{},
+					ApexDesign:      scengine.DesignUnknown,
+					Method:          stanceMethodLabel(nil),
+					RelevantCount:   0,
+					EvidenceGuarded: true,
+					TopSupporting:   []workBrief{},
+					TopRefuting:     []workBrief{},
+					AllStudies:      []workBrief{},
 					Note: fmt.Sprintf(
 						"no works matched both the intervention (%v) and outcome (%v) tokens in abstract/title (PICO gate); consensus not available — try restating the claim with the terms the literature uses",
 						ivTokens, outTokens),
@@ -227,7 +236,26 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 			prog.update(len(works))
 			scored, stances := scoreWorks(ctx, works, claim)
 			prog.done()
-			result := scengine.Consensus(scored)
+
+			// Retraction gate. A withdrawn paper is not evidence, and the
+			// damage is not hypothetical: a live run on "vitamin C prevents
+			// the common cold" scored a meta-analysis that had been retracted
+			// for double-counting placebo arms — as SUPPORTING, at the top of
+			// the evidence pyramid, where it set apex_design for the whole
+			// result.
+			//
+			// The gate runs HERE, between classification and scoring, and not
+			// by giving retracted works their own Stance. Consensus() tallies
+			// stances with a switch ending in `default: res.Inconclusive++`,
+			// and it collects designs and citations BEFORE that switch — so a
+			// retraction stance would still reach ApexDesign and
+			// TotalCitations while looking handled.
+			//
+			// The split lives in scorableWorks (scwork.go) rather than here so
+			// compare and batch apply the identical rule; two commands
+			// disagreeing about which works count would be worse than no gate.
+			scorable, retractedExcluded := scorableWorks(scored, stances)
+			result := scengine.Consensus(scorable)
 
 			// Low-evidence safety guard. method is resolved BEFORE the guard
 			// because the guard's first question is "did an LLM vet relevance?"
@@ -238,7 +266,10 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 			// measurement, produced the value.
 			method := stanceMethodLabel(stances)
 			measuredStrength := result.EvidenceStrength
-			result = scengine.ApplyLowEvidenceGuard(result, method, relevantCount)
+			// len(scorable), not relevantCount: the guard asks whether the
+			// corpus that was actually SCORED is thick enough to carry a
+			// strength label, and retracted works never entered it.
+			result = scengine.ApplyLowEvidenceGuard(result, method, len(scorable))
 			evidenceGuarded := result.EvidenceStrength != measuredStrength
 
 			out := consensusOutput{
@@ -247,15 +278,20 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 				ApexDesign: result.ApexDesign, StudyCount: result.StudyCount,
 				Supporting: result.Supporting, Refuting: result.Refuting, Mixed: result.Mixed,
 				Inconclusive: result.Inconclusive, TotalCitations: result.TotalCitations,
-				Method:          method,
-				RelevantCount:   relevantCount,
-				NearUnanimous:   result.NearUnanimous,
-				EvidenceGuarded: evidenceGuarded,
+				Method:            method,
+				RelevantCount:     relevantCount,
+				NearUnanimous:     result.NearUnanimous,
+				EvidenceGuarded:   evidenceGuarded,
+				RetractedExcluded: retractedExcluded,
 			}
 			out.TopSupporting = topByStance(stances, scengine.StanceSupporting, 3)
 			out.TopRefuting = topByStance(stances, scengine.StanceRefuting, 3)
 			out.AllStudies = allStudyBriefs(stances)
-			if result.StudyCount == 0 {
+			if result.StudyCount == 0 && retractedExcluded > 0 {
+				out.Note = fmt.Sprintf(
+					"all %d relevant work(s) are retracted or flagged as retracted; nothing left to score",
+					retractedExcluded)
+			} else if result.StudyCount == 0 {
 				out.Note = "no works found; try a broader claim or --data-source live"
 			} else if result.Verdict == scengine.VerdictInsufficient {
 				out.Note = "fewer than 3 directional studies; treat as preliminary"
@@ -267,6 +303,11 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 				out.Note = appendNote(out.Note, fmt.Sprintf(
 					"%d work(s) excluded by PICO gate (missing intervention %v or outcome %v in abstract/title)",
 					picoDropped, ivTokens, outTokens))
+			}
+			if retractedExcluded > 0 {
+				out.Note = appendNote(out.Note, fmt.Sprintf(
+					"%d retracted work(s) excluded from the score (still listed in all_studies)",
+					retractedExcluded))
 			}
 			if evidenceGuarded {
 				out.Note = appendNote(out.Note, fmt.Sprintf(
@@ -338,6 +379,12 @@ var phase5SortEnabled = true
 func topByStance(stances []workStance, stance scengine.Stance, n int) []workBrief {
 	matches := make([]workStance, 0)
 	for _, s := range stances {
+		// Retracted works are excluded from the score, so presenting one on a
+		// "top evidence" card would contradict the number beside it. They stay
+		// visible in all_studies with their reason attached.
+		if s.Work.Retraction.ExcludeFromScore() {
+			continue
+		}
 		if s.Stance == stance {
 			matches = append(matches, s)
 		}
@@ -359,7 +406,8 @@ func topByStance(stances []workStance, stance scengine.Stance, n int) []workBrie
 		out = append(out, workBrief{
 			Title: m.Work.Title, Year: m.Work.Year, DOI: m.Work.DOI, CitedBy: m.Work.CitedBy,
 			Design: m.Design, Stance: m.Stance, StanceConf: m.Confidence,
-			Abstract: clipAbstract(m.Work.Abstract),
+			Abstract:   clipAbstract(m.Work.Abstract),
+			Retraction: m.Work.Retraction,
 		})
 	}
 	return out
@@ -374,7 +422,8 @@ func allStudyBriefs(stances []workStance) []workBrief {
 		out = append(out, workBrief{
 			Title: s.Work.Title, Year: s.Work.Year, DOI: s.Work.DOI, CitedBy: s.Work.CitedBy,
 			Design: s.Design, Stance: s.Stance, StanceConf: s.Confidence,
-			Abstract: clipAbstract(s.Work.Abstract),
+			Abstract:   clipAbstract(s.Work.Abstract),
+			Retraction: s.Work.Retraction,
 		})
 	}
 	return out
@@ -395,6 +444,9 @@ func renderConsensus(w io.Writer, o consensusOutput) {
 		o.StudyCount, o.Supporting, o.Refuting, o.Mixed, o.Inconclusive)
 	fmt.Fprintf(w, "  Total citations:   %d\n", o.TotalCitations)
 	fmt.Fprintf(w, "  Stance method:     %s\n", o.Method)
+	if o.RetractedExcluded > 0 {
+		fmt.Fprintf(w, "  ⚠ Retracted:       %d work(s) excluded from the score\n", o.RetractedExcluded)
+	}
 	if o.NearUnanimous {
 		fmt.Fprintln(w, "  ⚠ Near-unanimous:  no refuting or mixed studies — verify debate was not filtered out")
 	}

@@ -64,11 +64,19 @@ func computeConsensus(ctx context.Context, c apiGetter, claim string, limit, yea
 		enrichPubTypes(ctx, works, 50)
 	}
 	scored, stances := scoreWorks(ctx, works, claim)
-	r := scengine.Consensus(scored)
+
+	// Retraction gate, same helper the `consensus` command uses. compare and
+	// batch have to withhold the same works from the score, for the same
+	// reason the relevance gates above are duplicated here: two commands that
+	// scored different corpora would report two different verdicts for one
+	// claim, and the difference would be invisible to the reader.
+	scorable, retractedExcluded := scorableWorks(scored, stances)
+	r := scengine.Consensus(scorable)
 
 	method := stanceMethodLabel(stances)
 	measuredStrength := r.EvidenceStrength
-	r = scengine.ApplyLowEvidenceGuard(r, method, relevantCount)
+	// len(scorable): the guard judges the corpus that was actually scored.
+	r = scengine.ApplyLowEvidenceGuard(r, method, len(scorable))
 	evidenceGuarded := r.EvidenceStrength != measuredStrength
 
 	out := consensusOutput{
@@ -76,12 +84,13 @@ func computeConsensus(ctx context.Context, c apiGetter, claim string, limit, yea
 		EvidenceStrength: r.EvidenceStrength, ApexDesign: r.ApexDesign, StudyCount: r.StudyCount,
 		Supporting: r.Supporting, Refuting: r.Refuting, Mixed: r.Mixed, Inconclusive: r.Inconclusive,
 		TotalCitations: r.TotalCitations, Method: method,
-		RelevantCount:   relevantCount,
-		NearUnanimous:   r.NearUnanimous,
-		EvidenceGuarded: evidenceGuarded,
-		TopSupporting:   topByStance(stances, scengine.StanceSupporting, 2),
-		TopRefuting:     topByStance(stances, scengine.StanceRefuting, 2),
-		AllStudies:      allStudyBriefs(stances),
+		RelevantCount:     relevantCount,
+		NearUnanimous:     r.NearUnanimous,
+		EvidenceGuarded:   evidenceGuarded,
+		RetractedExcluded: retractedExcluded,
+		TopSupporting:     topByStance(stances, scengine.StanceSupporting, 2),
+		TopRefuting:       topByStance(stances, scengine.StanceRefuting, 2),
+		AllStudies:        allStudyBriefs(stances),
 	}
 	if dropped > 0 {
 		out.Note = appendNote(out.Note, fmt.Sprintf("%d off-topic work(s) excluded by relevance gate", dropped))
@@ -90,6 +99,11 @@ func computeConsensus(ctx context.Context, c apiGetter, claim string, limit, yea
 		out.Note = appendNote(out.Note, fmt.Sprintf(
 			"%d work(s) excluded by PICO gate (missing intervention %v or outcome %v in abstract/title)",
 			picoDropped, ivTokens, outTokens))
+	}
+	if retractedExcluded > 0 {
+		out.Note = appendNote(out.Note, fmt.Sprintf(
+			"%d retracted work(s) excluded from the score (still listed in all_studies)",
+			retractedExcluded))
 	}
 	if evidenceGuarded {
 		out.Note = appendNote(out.Note, fmt.Sprintf(
