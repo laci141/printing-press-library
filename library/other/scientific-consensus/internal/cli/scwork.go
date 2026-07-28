@@ -264,41 +264,148 @@ type workStance struct {
 	StanceMethod string `json:"stance_method,omitempty"`
 }
 
-// relevantToClaim reports whether a work's Title or Topic shares at least one
-// content token with the claim (stopword- and polarity-word-stripped, stemmed
-// to five characters so inflected forms match). Conservative by design: a
-// claim that yields no content tokens disables the gate (keep everything),
-// and a single token overlap is enough to keep a work — the gate exists to
-// drop clearly off-topic results (a crop-genetics paper under a
-// coffee/alertness claim), not to rank relevance.
-func relevantToClaim(claim string, w scWork) bool {
+// How many DISTINCT claim stems a work must share with the claim to survive the
+// relevance gate.
+//
+// Two, not one. A single shared stem is satisfied by any paper that mentions
+// one half of the claim, which is how a vitamin K ferroptosis study and a paper
+// on cold-dependent anthocyanin accumulation in blood oranges both reached the
+// score for "vitamin C prevents the common cold" — the first on `vitam`, the
+// second on `cold` — and were then classified with 0.90 stance confidence.
+//
+// One, when the work carries no abstract. The second stem would have to come
+// from text the record does not have, so demanding it would exclude works for a
+// property of OpenAlex's coverage rather than of their content. That is not
+// hypothetical: 52 of the 295 archived studies (17.6%) have no abstract. The
+// guard restores exactly the pre-V6 rule for those works, which is why widening
+// the haystack could not move the calibrated harm corpora.
+//
+// Both thresholds count DISTINCT stems: one stem found twice is one match.
+const (
+	relevanceMinTokens           = 2
+	relevanceMinTokensNoAbstract = 1
+)
+
+// claimRelevanceStems returns the claim's content tokens, truncated so inflected
+// forms still match, de-duplicated, and in claim order.
+//
+// THE 5 BELOW IS AN INLINE LITERAL ON PURPOSE. It is deliberately NOT
+// scengine.claimStemLen, which happens to hold the same value but drives the
+// stance harm path (classifyAgainstHarmClaim) and the PICO gate (pico.go).
+// Those are calibrated against the harm corpora; merging the two would mean a
+// future adjustment to either one silently re-tunes the other. Raising this
+// specific truncation to 7 was measured and is inert — at seven characters
+// `vitamin` is still `vitamin`, so it still matches "vitamin K" — so there is no
+// reason to touch it and every reason not to couple it.
+func claimRelevanceStems(claim string) []string {
 	tokens := scengine.ClaimContentTokens(claim)
-	if len(tokens) == 0 {
-		return true
-	}
-	hay := strings.ToLower(w.Title + " " + w.Topic)
+	stems := make([]string, 0, len(tokens))
+	seen := make(map[string]bool, len(tokens))
 	for _, tok := range tokens {
 		stem := tok
 		if len(stem) > 5 {
 			stem = stem[:5]
 		}
-		if strings.Contains(hay, stem) {
-			return true
+		if seen[stem] {
+			continue
+		}
+		seen[stem] = true
+		stems = append(stems, stem)
+	}
+	return stems
+}
+
+// relevantToClaim reports whether a work shares enough content with the claim to
+// be worth classifying. The haystack is Abstract + Title + Topic; the bar is
+// relevanceMinTokens distinct claim stems, or relevanceMinTokensNoAbstract when
+// the work has no abstract.
+//
+// Still conservative by design: a claim that yields no content tokens disables
+// the gate entirely (keep everything), because a gate that cannot name what it
+// is filtering for must not filter.
+//
+// Known limit, not a defect: this is lexical, so it does not know that `omega-3`
+// is `n-3` is `EPA` is `DHA`, or that "cardiovascular health" is what an
+// endothelial-function paper measures. V6 does not make that worse than the
+// single-token rule did; it just does not fix it.
+func relevantToClaim(claim string, w scWork) bool {
+	keep, _ := relevanceVerdict(claim, w)
+	return keep
+}
+
+// relevanceVerdict is relevantToClaim plus the threshold that decided it, so a
+// caller can report WHY a work was excluded instead of only how many were. A
+// silent gate is the failure mode this whole change exists to repair: on the
+// vitamin C corpus the exclusion count goes from 1 work to 17.
+//
+// required is 0 when the gate is disabled (the claim has no content tokens).
+func relevanceVerdict(claim string, w scWork) (keep bool, required int) {
+	stems := claimRelevanceStems(claim)
+	if len(stems) == 0 {
+		return true, 0
+	}
+	required = relevanceMinTokens
+	if strings.TrimSpace(w.Abstract) == "" {
+		required = relevanceMinTokensNoAbstract
+	}
+	// Abstract first, then Title, then Topic. The order cannot change a result —
+	// a stem never contains a space, so none can straddle a join — but it is the
+	// order the regression harness reproduces.
+	hay := strings.ToLower(w.Abstract + " " + w.Title + " " + w.Topic)
+	hits := 0
+	for _, stem := range stems {
+		if !strings.Contains(hay, stem) {
+			continue
+		}
+		hits++
+		if hits >= required {
+			return true, required
 		}
 	}
-	return false
+	return false, required
+}
+
+// relevanceReport is the relevance gate's contribution to the PRISMA ledger:
+// what it was given, what it kept, and the rule it applied. Carrying the stems
+// and the thresholds rather than a rendered sentence keeps the accounting
+// checkable and lets the caller decide how to phrase it.
+type relevanceReport struct {
+	Fetched  int
+	Kept     int
+	Excluded int
+	// Stems is what the gate searched for. Empty means the claim yielded no
+	// content tokens and the gate was therefore disabled, which is a different
+	// statement from "nothing was excluded".
+	Stems               []string
+	MinTokens           int
+	MinTokensNoAbstract int
 }
 
 // filterRelevant drops works that fail the relevance gate so they never reach
 // classification or scoring. Returns a new slice; the input is not mutated.
 func filterRelevant(claim string, works []scWork) []scWork {
+	kept, _ := filterRelevantReport(claim, works)
+	return kept
+}
+
+// filterRelevantReport is filterRelevant with the ledger attached, for callers
+// that must be able to say how many works the gate removed and under what rule.
+func filterRelevantReport(claim string, works []scWork) ([]scWork, relevanceReport) {
+	rep := relevanceReport{
+		Fetched:             len(works),
+		Stems:               claimRelevanceStems(claim),
+		MinTokens:           relevanceMinTokens,
+		MinTokensNoAbstract: relevanceMinTokensNoAbstract,
+	}
 	kept := make([]scWork, 0, len(works))
 	for _, w := range works {
 		if relevantToClaim(claim, w) {
 			kept = append(kept, w)
 		}
 	}
-	return kept
+	rep.Kept = len(kept)
+	rep.Excluded = rep.Fetched - rep.Kept
+	return kept, rep
 }
 
 // extractPMID pulls the numeric PMID out of an OpenAlex pmid URL.

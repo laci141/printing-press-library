@@ -45,9 +45,32 @@ type consensusOutput struct {
 	Inconclusive     int                       `json:"inconclusive"`
 	TotalCitations   int                       `json:"total_citations"`
 	Method           string                    `json:"stance_method"`
-	// RelevantCount is how many fetched works survived the lexical relevance
-	// gate and therefore entered scoring. It is the input to the low-evidence
-	// safety guard, and consumers need it to judge how thin the corpus was.
+	// FetchedCount is how many works the source returned, before any gate ran.
+	// It is the head of the exclusion ledger; without it a reader can see what
+	// survived but not what was removed.
+	FetchedCount int `json:"fetched_count"`
+	// RelevanceExcluded is how many works the lexical relevance gate dropped.
+	// On the vitamin C corpus this is 17 of 49 — large enough that leaving it
+	// implicit would misrepresent the corpus the score was computed from.
+	RelevanceExcluded int `json:"relevance_excluded"`
+	// PICOExcluded is how many works the PICO gate dropped.
+	//
+	// READ THIS BEFORE TRUSTING A ZERO. Today this field is 0 for every
+	// benefit-shaped claim, and that does NOT mean the gate found nothing to
+	// exclude — it means the gate never ran. scengine.PICOTokens splits a claim
+	// with claimSides (stance.go), which searches only claimHarmCues; the
+	// benefit verbs ("prevents", "improves", "reduces the risk") live in
+	// claimBenefitCues, which claimSides never consults. So a benefit claim
+	// yields no sides, PICOTokens returns (nil, nil), and IsPICORelevant
+	// short-circuits to true for every work. The gate is dead on this path and
+	// passes noise; it is left in place because waking it was measured to drop
+	// four legitimate works, which is worse. A zero here is "not applied", not
+	// "nothing excluded" — that ambiguity is exactly how the dead gate went
+	// unnoticed for months.
+	PICOExcluded int `json:"pico_excluded"`
+	// RelevantCount is how many fetched works survived BOTH relevance gates and
+	// therefore entered scoring. It is the input to the low-evidence safety
+	// guard, and consumers need it to judge how thin the corpus was.
 	RelevantCount int `json:"relevant_count"`
 	// NearUnanimous mirrors scengine.ConsensusResult.NearUnanimous: the result
 	// is so one-sided that real dissent was probably filtered out upstream.
@@ -57,8 +80,16 @@ type consensusOutput struct {
 	// consumer cannot tell a guarded label from a measured one.
 	EvidenceGuarded bool `json:"evidence_guarded"`
 	// RetractedExcluded is how many relevant works were withheld from scoring
-	// because they are retracted. It is what makes the arithmetic checkable:
-	// relevant_count - retracted_excluded == study_count.
+	// because they are retracted.
+	//
+	// Together with the fields above this makes the whole pipeline checkable
+	// arithmetic rather than prose:
+	//
+	//	fetched_count  = relevance_excluded + pico_excluded + relevant_count
+	//	relevant_count = retracted_excluded + study_count
+	//
+	// gateLedger.consistent enforces both, and a run that violates either says
+	// so in note rather than reporting a total that does not add up.
 	RetractedExcluded int         `json:"retracted_excluded"`
 	TopSupporting     []workBrief `json:"top_supporting"`
 	TopRefuting       []workBrief `json:"top_refuting"`
@@ -106,6 +137,105 @@ func clipAbstract(s string) string {
 		return s
 	}
 	return string(r[:maxAbstractChars])
+}
+
+// gateLedger is the PRISMA accounting for one consensus run: how many works each
+// gate removed, and the rule each one applied.
+//
+// It is a plain struct built in RunE and consumed by pure functions so the
+// reporting can be tested without a network client. The alternative — making the
+// command's API client injectable — would have to be repeated in compare.go,
+// which runs its own computeConsensus, so the seam would grow larger than the
+// repair.
+type gateLedger struct {
+	// relevance carries the lexical gate's own accounting (stems, thresholds).
+	relevance relevanceReport
+	// picoExcluded is how many works the PICO gate removed; picoIV/picoOut are
+	// the tokens it split the claim into. Both token slices are nil when the
+	// claim could not be split, which is when the gate does not run at all.
+	picoExcluded    int
+	picoIV, picoOut []string
+	// relevantCount is the corpus size after both gates: the set that reaches
+	// scoring.
+	relevantCount int
+	// retractedExcluded and studyCount close the ledger on the scoring side.
+	retractedExcluded int
+	studyCount        int
+}
+
+// consistent reports whether the ledger adds up. Both chains must hold:
+//
+//	fetched        = relevance_excluded + pico_excluded + relevant_count
+//	relevant_count = retracted_excluded + study_count
+//
+// The second is the invariant the retraction gate introduced; the first is its
+// counterpart for the two relevance gates, and is what makes a 17-work exclusion
+// verifiable instead of merely stated.
+func (g gateLedger) consistent() bool {
+	return g.relevance.Fetched == g.relevance.Excluded+g.picoExcluded+g.relevantCount &&
+		g.relevantCount == g.retractedExcluded+g.studyCount
+}
+
+// gateNotes renders one fragment per gate that actually removed something, plus
+// a self-check fragment when the arithmetic does not close.
+//
+// Each fragment names the gate AND the rule that fired. "17 off-topic work(s)
+// excluded" is a number a reader has to take on faith; "17 excluded — fewer than
+// 2 of the claim's 3 stems [vitam commo cold] in abstract+title+topic" is a
+// number they can audit against the study list beside it.
+func gateNotes(g gateLedger) []string {
+	var out []string
+
+	if g.relevance.Excluded > 0 {
+		out = append(out, fmt.Sprintf(
+			"%d off-topic work(s) excluded by the relevance gate: fewer than %d of the claim's %d distinct stem(s) %v found in abstract+title+topic (a work with no abstract needs only %d)",
+			g.relevance.Excluded, g.relevance.MinTokens, len(g.relevance.Stems),
+			g.relevance.Stems, g.relevance.MinTokensNoAbstract))
+	}
+
+	if g.picoExcluded > 0 {
+		out = append(out, fmt.Sprintf(
+			"%d work(s) excluded by PICO gate (missing intervention %v or outcome %v in abstract/title)",
+			g.picoExcluded, g.picoIV, g.picoOut))
+	}
+
+	if g.retractedExcluded > 0 {
+		out = append(out, fmt.Sprintf(
+			"%d retracted work(s) excluded from the score (still listed in all_studies)",
+			g.retractedExcluded))
+	}
+
+	if !g.consistent() {
+		out = append(out, fmt.Sprintf(
+			"WARNING: exclusion accounting does not add up (fetched %d; relevance %d + pico %d + relevant %d; relevant %d = retracted %d + scored %d) — treat the counts as unreliable",
+			g.relevance.Fetched, g.relevance.Excluded, g.picoExcluded, g.relevantCount,
+			g.relevantCount, g.retractedExcluded, g.studyCount))
+	}
+
+	return out
+}
+
+// appendGateNotes folds every gate fragment onto an existing note.
+func appendGateNotes(note string, g gateLedger) string {
+	for _, n := range gateNotes(g) {
+		note = appendNote(note, n)
+	}
+	return note
+}
+
+// noSurvivorsNote is the note for a run where no work reached scoring.
+//
+// A function rather than an inline string in RunE so the branch's text is
+// reachable from a test. It is the branch most likely to be read by someone
+// who got an empty answer and needs to know whether the literature is silent or
+// the gate was: an unexplained empty result is indistinguishable from a broken
+// query, and V6 is stricter than the rule it replaces, so this branch fires more
+// often than before, not less.
+func noSurvivorsNote(g gateLedger) string {
+	return appendGateNotes(fmt.Sprintf(
+		"none of the %d fetched work(s) survived the relevance gates; consensus not "+
+			"available — try restating the claim with the terms the literature uses",
+		g.relevance.Fetched), g)
 }
 
 func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
@@ -171,22 +301,23 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 				return classifyAPIError(err, flags)
 			}
 
-			// Relevance gate: drop works whose title/topic share no content
-			// token with the claim, before enrichment so excluded works cost
-			// no PubMed lookups and never enter the score.
-			fetched := len(works)
-			works = filterRelevant(claim, works)
-			dropped := fetched - len(works)
+			// Relevance gate: drop works that do not share enough content with
+			// the claim, before enrichment so excluded works cost no PubMed
+			// lookups and never enter the score. The report is carried to the
+			// output rather than reduced to a count, because the count alone
+			// cannot say which rule fired.
+			works, relReport := filterRelevantReport(claim, works)
 
 			// --- Phase 3: PICO relevance gate ---
-			// The lexical gate above keeps a work that shares ANY content token
-			// with the claim. That is too weak for a two-sided claim: a paper
-			// about vaccine schedules with no mention of autism passes it. The
-			// PICO gate additionally requires the intervention AND the outcome
-			// to both appear in the abstract or title, so what survives is
-			// evidence about the relation the claim asserts, not about one half
-			// of it. Runs before enrichment and scoring so excluded works cost
-			// no PubMed lookups and never reach the score.
+			// The lexical gate keeps a work that shares enough tokens with the
+			// claim. That is still too weak for a two-sided claim: a paper about
+			// vaccine schedules with no mention of autism can pass it. The PICO
+			// gate additionally requires the intervention AND the outcome to
+			// both appear in the abstract or title.
+			//
+			// It only does so for HARM-shaped claims. See PICOExcluded's comment
+			// above: for a benefit claim the split fails and this loop keeps
+			// everything.
 			ivTokens, outTokens := scengine.PICOTokens(claim)
 			picoRelevant := make([]scWork, 0, len(works))
 			for _, w := range works {
@@ -200,10 +331,25 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 			// reaches scoring, and the input to the low-evidence safety guard.
 			relevantCount := len(works)
 
-			// No work names both sides of the claim: there is nothing to score,
-			// and reporting a verdict computed from zero studies would be worse
-			// than reporting none. Emitted as a normal result (not an error) so
-			// agent consumers get the machine-readable shape they expect.
+			ledger := gateLedger{
+				relevance:     relReport,
+				picoExcluded:  picoDropped,
+				picoIV:        ivTokens,
+				picoOut:       outTokens,
+				relevantCount: relevantCount,
+			}
+
+			// Nothing survived the gates. Reporting a verdict computed from zero
+			// studies would be worse than reporting none, so this is emitted as
+			// a normal result (not an error) with the machine-readable shape
+			// agent consumers expect.
+			//
+			// The note MUST explain which gate emptied the corpus. Before V6
+			// this branch blamed the PICO gate unconditionally, which was wrong
+			// twice over: the lexical exclusions vanished from the report
+			// entirely, and on a benefit claim the PICO gate had not run at all.
+			// V6 is stricter than the rule it replaces, so this branch gets more
+			// common, not less.
 			if relevantCount == 0 {
 				out := consensusOutput{
 					Claim:            claim,
@@ -211,17 +357,18 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 					EvidenceStrength: scengine.StrengthInsufficient,
 					// Explicit, for the same reason Consensus() seeds it: an
 					// unset Design marshals as "" rather than as a design.
-					ApexDesign:      scengine.DesignUnknown,
-					Method:          stanceMethodLabel(nil),
-					RelevantCount:   0,
-					EvidenceGuarded: true,
-					TopSupporting:   []workBrief{},
-					TopRefuting:     []workBrief{},
-					AllStudies:      []workBrief{},
-					Note: fmt.Sprintf(
-						"no works matched both the intervention (%v) and outcome (%v) tokens in abstract/title (PICO gate); consensus not available — try restating the claim with the terms the literature uses",
-						ivTokens, outTokens),
+					ApexDesign:        scengine.DesignUnknown,
+					Method:            stanceMethodLabel(nil),
+					FetchedCount:      relReport.Fetched,
+					RelevanceExcluded: relReport.Excluded,
+					PICOExcluded:      picoDropped,
+					RelevantCount:     0,
+					EvidenceGuarded:   true,
+					TopSupporting:     []workBrief{},
+					TopRefuting:       []workBrief{},
+					AllStudies:        []workBrief{},
 				}
+				out.Note = noSurvivorsNote(ledger)
 				return emit(cmd, flags, out, func(w io.Writer) { renderConsensus(w, out) })
 			}
 
@@ -257,6 +404,9 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 			scorable, retractedExcluded := scorableWorks(scored, stances)
 			result := scengine.Consensus(scorable)
 
+			ledger.retractedExcluded = retractedExcluded
+			ledger.studyCount = result.StudyCount
+
 			// Low-evidence safety guard. method is resolved BEFORE the guard
 			// because the guard's first question is "did an LLM vet relevance?"
 			// — with an LLM the strength ladder is trustworthy, without one a
@@ -279,6 +429,9 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 				Supporting: result.Supporting, Refuting: result.Refuting, Mixed: result.Mixed,
 				Inconclusive: result.Inconclusive, TotalCitations: result.TotalCitations,
 				Method:            method,
+				FetchedCount:      relReport.Fetched,
+				RelevanceExcluded: relReport.Excluded,
+				PICOExcluded:      picoDropped,
 				RelevantCount:     relevantCount,
 				NearUnanimous:     result.NearUnanimous,
 				EvidenceGuarded:   evidenceGuarded,
@@ -296,19 +449,7 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 			} else if result.Verdict == scengine.VerdictInsufficient {
 				out.Note = "fewer than 3 directional studies; treat as preliminary"
 			}
-			if dropped > 0 {
-				out.Note = appendNote(out.Note, fmt.Sprintf("%d off-topic work(s) excluded by relevance gate", dropped))
-			}
-			if picoDropped > 0 {
-				out.Note = appendNote(out.Note, fmt.Sprintf(
-					"%d work(s) excluded by PICO gate (missing intervention %v or outcome %v in abstract/title)",
-					picoDropped, ivTokens, outTokens))
-			}
-			if retractedExcluded > 0 {
-				out.Note = appendNote(out.Note, fmt.Sprintf(
-					"%d retracted work(s) excluded from the score (still listed in all_studies)",
-					retractedExcluded))
-			}
+			out.Note = appendGateNotes(out.Note, ledger)
 			if evidenceGuarded {
 				out.Note = appendNote(out.Note, fmt.Sprintf(
 					"evidence strength forced to %q: keyless run with only %d relevant work(s) (threshold %d) — no AI relevance filtering ran, so listed studies may be off-topic",
@@ -444,6 +585,13 @@ func renderConsensus(w io.Writer, o consensusOutput) {
 		o.StudyCount, o.Supporting, o.Refuting, o.Mixed, o.Inconclusive)
 	fmt.Fprintf(w, "  Total citations:   %d\n", o.TotalCitations)
 	fmt.Fprintf(w, "  Stance method:     %s\n", o.Method)
+	// The exclusion ledger, on the human path too. A reader who sees "32
+	// studies analyzed" without being told that 17 were removed first is being
+	// shown a filtered corpus as if it were the whole one.
+	if o.FetchedCount > 0 && o.FetchedCount != o.RelevantCount {
+		fmt.Fprintf(w, "  Works fetched:     %d  (relevance gate removed %d, PICO gate %d)\n",
+			o.FetchedCount, o.RelevanceExcluded, o.PICOExcluded)
+	}
 	if o.RetractedExcluded > 0 {
 		fmt.Fprintf(w, "  ⚠ Retracted:       %d work(s) excluded from the score\n", o.RetractedExcluded)
 	}

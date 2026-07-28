@@ -64,13 +64,24 @@ These capabilities aren't available in any other tool for this API.
   scientific-consensus consensus "vitamin D reduces respiratory infections" --agent
   ```
 
-  Abstracts in the JSON output are capped at 1500 characters so downstream LLM prompts stay bounded. The engine always scores the full abstract — the cap applies only to serialization — so a study can be excluded by the PICO gate on text you cannot see in the output. Pass `--full-abstracts` to emit them untruncated when you need the JSON as a measurement or regression-testing input. Output can reach several MB and may exceed downstream LLM prompt limits, so leave it off for normal agent use.
+  Abstracts in the JSON output are capped at 1500 characters so downstream LLM prompts stay bounded. The engine always scores the full abstract — the cap applies only to serialization — so a study can be excluded by the relevance gate or the PICO gate on text you cannot see in the output. Pass `--full-abstracts` to emit them untruncated when you need the JSON as a measurement or regression-testing input. Output can reach several MB and may exceed downstream LLM prompt limits, so leave it off for normal agent use.
 
   ```bash
   scientific-consensus consensus "vitamin D reduces respiratory infections" --full-abstracts --json
   ```
 
-  Retracted studies are withheld from the score. Two signals are used: the publisher's retraction marker in the title, and the source index's retraction flag. The flag is needed because a retracted meta-analysis can be served with an unmarked title, and it is reported as a separate tier because index flags over-mark — a work carrying only the flag may have received a correction rather than a retraction. Excluded works are never dropped from the output: they stay in `all_studies` with a `retraction` field naming which tier fired, and `retracted_excluded` reports how many were withheld. Expect `relevant_count - retracted_excluded == study_count`; do not assume `study_count` equals the number of works that passed the relevance gates.
+  Retracted studies are withheld from the score. Two signals are used: the publisher's retraction marker in the title, and the source index's retraction flag. The flag is needed because a retracted meta-analysis can be served with an unmarked title, and it is reported as a separate tier because index flags over-mark — a work carrying only the flag may have received a correction rather than a retraction. Excluded works are never dropped from the output: they stay in `all_studies` with a `retraction` field naming which tier fired, and `retracted_excluded` reports how many were withheld.
+
+  Every gate reports what it removed, so the exclusion arithmetic closes:
+
+  ```
+  fetched_count  = relevance_excluded + pico_excluded + relevant_count
+  relevant_count = retracted_excluded + study_count
+  ```
+
+  Do not assume `study_count` is the number of works the search returned — on a well-populated claim the relevance gate alone can remove a third of them. A work is kept by the relevance gate when it shares at least two distinct claim stems with the claim across its abstract, title and topic; a work with no abstract needs only one, because a second stem could only come from text the record does not carry. When `relevant_count` is 0, `note` names the gate that emptied the corpus rather than reporting an empty result without explanation.
+
+  One caveat on `pico_excluded`: a 0 there does not mean the PICO gate found nothing to exclude. That gate only splits harm-shaped claims ("X causes Y"); for a benefit-shaped claim ("X prevents Y") it cannot name the two sides and passes every work through, so the count is 0 by construction.
 - **`evidence`** — Classify retrieved studies by design (meta-analysis to case report) and render the evidence pyramid for a topic.
 
   _Reach for this to judge whether a claim rests on RCTs/meta-analyses or just case series._
