@@ -36,7 +36,21 @@ var (
 	increaseHarmContext = regexp.MustCompile(`(?i)\bincreas\w+\s+(the\s+|a\s+)?(risk|mortality|morbidity|incidence|harm\w*|adverse|complication\w*|death\w*|odds of)`)
 
 	// Null / no-effect cues.
-	nullCues = regexp.MustCompile(`(?i)\b(no (significant )?(association|effect|difference|benefit|evidence|impact|correlation)|not (significant\w*|associated|effective)|did not (significantly )?(improv|increas|reduc|affect|differ|change)|ineffective|no statistically significant|failed to|without (a )?(significant )?(effect|benefit)|null (result|effect|finding))`)
+	//
+	// The last three alternatives are Cochrane-style hedges that the earlier
+	// list missed entirely: "recent trials have NOT CONFIRMED this", "there is
+	// LITTLE EVIDENCE of effects of eating fish", "results were INCONSISTENT".
+	// They read as null findings and are counted as such.
+	//
+	// "unclear" was measured as a candidate here and deliberately REJECTED. It
+	// expresses uncertainty rather than a null result, and on the archived
+	// corpora it flipped two zero-cue works in the calibrated harm controls
+	// (10.1056/nejmoa1112010, 10.1111/j.1365-2214.2006.00655.x) from
+	// inconclusive straight to refuting/0.90. This list feeds the harm branch
+	// too (see the neg count in classifyAgainstHarmClaim), so anything added
+	// here must be re-measured against those controls first —
+	// TestBenefitGateControlCorporaUnmoved is that measurement.
+	nullCues = regexp.MustCompile(`(?i)\b(no (significant )?(association|effect|difference|benefit|evidence|impact|correlation)|not (significant\w*|associated|effective)|did not (significantly )?(improv|increas|reduc|affect|differ|change)|ineffective|no statistically significant|failed to|without (a )?(significant )?(effect|benefit)|null (result|effect|finding)|not confirmed|little evidence|inconsistent)`)
 
 	// Harm / negative-effect cues (treated as refuting an intervention claim).
 	harmCues = regexp.MustCompile(`(?i)\b(increas\w+ (the )?(risk|mortality|morbidity|incidence)|harmful|adverse (effect|event|outcome)|worsen\w*|associated with (a )?(higher|increas\w+|greater) (risk|mortality|incidence)|detrimental|toxic\w*|negative (effect|impact|association)|deteriorat\w+)`)
@@ -72,6 +86,10 @@ var (
 	// claimTokenSplit tokenizes a lowercased claim for content-token
 	// extraction (shared with the CLI relevance gate via ClaimContentTokens).
 	claimTokenSplit = regexp.MustCompile(`[^a-z0-9]+`)
+
+	// wordToken matches one bare lowercase word. Used only by
+	// firstPolarityTokenLoc, the last-resort claim splitter.
+	wordToken = regexp.MustCompile(`[a-z]+`)
 
 	// strongRefutCues (Option C) are syntactically unambiguous refutations of a
 	// causal claim. They are matched against the FULL text and need no pairing:
@@ -145,19 +163,36 @@ const (
 // The claim's asserted direction is detected first: a HARM-asserting claim
 // ("X causes Y") counts a paper reporting the harm as supporting and a paper
 // reporting benefit or less of the harm as refuting. BENEFIT-asserting and
-// ambiguous claims (including the empty claim) keep the claim-agnostic
-// baseline: stance from the reported finding's polarity. confidence is 0..1.
+// ambiguous claims (including the empty claim) take the claim-agnostic
+// baseline below: stance from the reported finding's polarity, with two of the
+// harm branch's four gates applied to each support cue. confidence is 0..1.
 func ClassifyStance(title, abstract, claim string) (Stance, float64) {
 	hay := strings.ToLower(title + ". " + abstract)
 	if detectClaimDirection(claim) == claimHarm {
 		return classifyAgainstHarmClaim(hay, claim)
 	}
-	// Count support matches, excluding "increas*" hits whose immediate context
-	// is a harm claim ("increased risk/mortality/..."). RE2 has no negative
-	// lookahead, so each match window is re-inspected instead.
+	// The baseline used to count every supportCues hit outright. That read a
+	// null result as agreement, because the verb naming an INTERVENTION is
+	// itself a support cue: the Cochrane omega-3 review says "little or no
+	// effect of increasing LCn3 on all-cause mortality", and the word
+	// "increasing" scored a point FOR the claim in the very sentence reporting
+	// that there is no effect. Two of the four gates classifyAgainstHarmClaim
+	// applies are therefore applied here as well.
+	//
+	// Framing and pairing are deliberately NOT transferred. Both were measured
+	// on the thirteen archived corpora: framing moved zero works of 295, and
+	// pairing moved ninety — drowning the meditation benefit control from
+	// +0.91/evidence-supports to -0.71/evidence-refutes and pushing sixty-one
+	// works into inconclusive, one of them a genuine null result.
+	_, outcome := claimSidesForBenefit(claim)
+
 	support := 0
 	for _, loc := range supportCues.FindAllStringIndex(hay, -1) {
-		if strings.Contains(hay[loc[0]:loc[1]], "increas") {
+		// Exclude "increas*" hits whose immediate context is a harm claim
+		// ("increased risk/mortality/..."). RE2 has no negative lookahead, so
+		// each match window is re-inspected instead.
+		isIncrease := strings.Contains(hay[loc[0]:loc[1]], "increas")
+		if isIncrease {
 			end := loc[1] + 24 // room for "increased" + " the mortality" etc.
 			if end > len(hay) {
 				end = len(hay)
@@ -166,6 +201,27 @@ func ClassifyStance(title, abstract, claim string) (Stance, float64) {
 				continue
 			}
 		}
+
+		sentStart, sentEnd := sentenceBounds(hay, loc[0])
+
+		// Negation gate, local scope, same window the harm branch uses:
+		// "no significant improvement" is not a report of improvement.
+		if negationCues.MatchString(backWindow(hay, loc[0], sentStart)) {
+			continue
+		}
+
+		// "increas*" is the one support cue that routinely names what is being
+		// DONE rather than what was FOUND — "increasing LCn3 intake",
+		// "advice to increase oily fish". A genuine finding about the claim
+		// states the claim's outcome nearby, so the cue only counts when that
+		// outcome is in scope. Skipped when the claim cannot be split at all,
+		// since an unsplittable claim yields no outcome to test against and
+		// the gate would silence every such cue.
+		if isIncrease && len(outcome) > 0 &&
+			!outcomeInScope(hay, loc[0], loc[1], sentStart, sentEnd, outcome) {
+			continue
+		}
+
 		support++
 	}
 	null := len(nullCues.FindAllString(hay, -1))
@@ -413,22 +469,47 @@ func positiveCueCounts(hay string, sp cueSpan, intervention, outcome []string, p
 	return true
 }
 
-// pairInScope reports whether the claim's intervention side and outcome side
-// both appear within posPairWindow of the cue, clipped to the cue's sentence.
-func pairInScope(hay string, sp cueSpan, sentStart, sentEnd int, intervention, outcome []string) bool {
-	lo := sp.start - posPairWindow
+// cueWindow returns the text within posPairWindow of a cue, clipped to the
+// cue's sentence; ok is false when that clipped window is empty. Shared by the
+// harm branch's pairInScope and the baseline's outcomeInScope so both gates
+// measure "in scope" over exactly the same span.
+func cueWindow(hay string, start, end, sentStart, sentEnd int) (string, bool) {
+	lo := start - posPairWindow
 	if lo < sentStart {
 		lo = sentStart
 	}
-	hi := sp.end + posPairWindow
+	hi := end + posPairWindow
 	if hi > sentEnd {
 		hi = sentEnd
 	}
 	if lo >= hi {
+		return "", false
+	}
+	return hay[lo:hi], true
+}
+
+// pairInScope reports whether the claim's intervention side and outcome side
+// both appear within posPairWindow of the cue, clipped to the cue's sentence.
+func pairInScope(hay string, sp cueSpan, sentStart, sentEnd int, intervention, outcome []string) bool {
+	win, ok := cueWindow(hay, sp.start, sp.end, sentStart, sentEnd)
+	if !ok {
 		return false
 	}
-	win := hay[lo:hi]
 	return containsAnyStem(win, intervention) && containsAnyStem(win, outcome)
+}
+
+// outcomeInScope is pairInScope's one-sided form, used by the baseline: only
+// the claim's OUTCOME side has to sit near the cue. The intervention side is
+// deliberately not required — a benefit-shaped abstract names its intervention
+// in nearly every sentence, so demanding it adds no discrimination. Measured:
+// requiring both sides (the full pairing gate) moved ninety of 295 works and
+// drove the meditation benefit control to evidence-refutes.
+func outcomeInScope(hay string, start, end, sentStart, sentEnd int, outcome []string) bool {
+	win, ok := cueWindow(hay, start, end, sentStart, sentEnd)
+	if !ok {
+		return false
+	}
+	return containsAnyStem(win, outcome)
 }
 
 // backWindow returns the text immediately before a cue, clipped to the cue's
@@ -510,6 +591,49 @@ func claimSides(claim string) (intervention, outcome []string) {
 		return nil, nil
 	}
 	return stemTokens(ClaimContentTokens(lc[:loc[0]])), stemTokens(ClaimContentTokens(lc[loc[1]:]))
+}
+
+// claimSidesForBenefit splits a claim that claimSides cannot. claimSides keys
+// on claimHarmCues alone, so it returns nothing for "X improves Y" — which is
+// why the pairing machinery has always been dead on benefit-shaped claims.
+// This is used ONLY by the claim-agnostic baseline; the harm branch keeps
+// claimSides untouched, so its calibration is provably unaffected.
+//
+// Three tiers, first hit wins:
+//
+//	1. claimHarmCues    — the same split claimSides performs
+//	2. claimBenefitCues — "improves", "prevents", "protects"
+//	3. the first polarity-prefixed word — "reduces", "lowers", …, which tier 2
+//	   misses because its reduc*/lower* alternatives require the literal word
+//	   "risk", and "vitamin D reduces respiratory infections" has none
+//
+// Tier 3 is not optional. Without it the outcome-scope gate in ClassifyStance
+// is inert on three of the thirteen archived corpora (meditation, saffron,
+// vitamind), which is indistinguishable from the gate not being there at all.
+func claimSidesForBenefit(claim string) (intervention, outcome []string) {
+	lc := strings.ToLower(claim)
+	loc := claimHarmCues.FindStringIndex(lc)
+	if loc == nil {
+		loc = claimBenefitCues.FindStringIndex(lc)
+	}
+	if loc == nil {
+		loc = firstPolarityTokenLoc(lc)
+	}
+	if loc == nil {
+		return nil, nil
+	}
+	return stemTokens(ClaimContentTokens(lc[:loc[0]])), stemTokens(ClaimContentTokens(lc[loc[1]:]))
+}
+
+// firstPolarityTokenLoc returns the span of the claim's first direction word,
+// or nil when the claim contains none.
+func firstPolarityTokenLoc(lc string) []int {
+	for _, loc := range wordToken.FindAllStringIndex(lc, -1) {
+		if hasPolarityPrefix(lc[loc[0]:loc[1]]) {
+			return loc
+		}
+	}
+	return nil
 }
 
 // windowHasClaimToken reports whether the 40 characters after a direction-cue

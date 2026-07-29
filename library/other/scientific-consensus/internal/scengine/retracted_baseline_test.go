@@ -25,7 +25,10 @@ type retractedFixture struct {
 	titlePrefix  bool
 	openAlexFlag bool
 	// wantStance and wantConf are what THIS engine produced. Recording them is
-	// the point: they are the harm, not the goal.
+	// the point: they are the harm, not the goal. wantConf is compared with
+	// approxEq, not ==: these values come out of confidenceFrom's arithmetic
+	// (0.3 + 0.6*ratio [+0.05]), so an exact comparison pins the last bits of a
+	// float and breaks on a change that is numerically nothing.
 	wantStance Stance
 	wantConf   float64
 }
@@ -58,7 +61,7 @@ var retractedFixtures = []retractedFixture{
 		titlePrefix:  false,
 		openAlexFlag: true,
 		wantStance:   StanceSupporting,
-		wantConf:     0.8999999999999999,
+		wantConf:     0.9,
 	},
 	{
 		name:  "covid_greenfoods_prefix_and_flag",
@@ -82,7 +85,16 @@ var retractedFixtures = []retractedFixture{
 		titlePrefix:  true,
 		openAlexFlag: true,
 		wantStance:   StanceSupporting,
-		wantConf:     0.95,
+		// Was 0.95 until the benefit-branch gates landed. The outcome-scope gate
+		// drops the support cue about intestinal bacteria (no "common cold"
+		// mention in scope). Support falls 4 -> 3, confidence 0.3+0.6+0.05 ->
+		// 0.3+0.6. wantStance unchanged: a retracted work still scores as
+		// supporting evidence. The bug is reproduced; only confidence narrowed.
+		//
+		// Measured alongside it: none of the four cues the old 0.95 was built on
+		// sits in a sentence naming the claim's outcome. "common cold" occurs
+		// once in the whole text, as background; "covid" occurs five times.
+		wantConf: 0.9,
 	},
 	{
 		name:  "fasting_natcomm_prefix_and_flag",
@@ -123,7 +135,7 @@ func TestRetractedFixturesReproduceCurrentBehaviour(t *testing.T) {
 			if got != f.wantStance {
 				t.Errorf("stance = %q, a mert futas %q volt — a fixture elavult", got, f.wantStance)
 			}
-			if conf != f.wantConf {
+			if !approxEq(conf, f.wantConf) {
 				t.Errorf("confidence = %v, a mert futas %v volt", conf, f.wantConf)
 			}
 		})
