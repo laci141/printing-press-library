@@ -152,12 +152,16 @@ func ClassifyStance(title, abstract, claim string) (Stance, float64) {
 	if detectClaimDirection(claim) == claimHarm {
 		return classifyAgainstHarmClaim(hay, claim)
 	}
-	// Count support matches, excluding "increas*" hits whose immediate context
-	// is a harm claim ("increased risk/mortality/..."). RE2 has no negative
-	// lookahead, so each match window is re-inspected instead.
+	// Count support matches. Two kinds of match are excluded before counting:
+	// harm-context "increas*" and purpose clauses. Both are re-inspections of
+	// the matched window, since RE2 has no lookaround.
 	support := 0
 	for _, loc := range supportCues.FindAllStringIndex(hay, -1) {
-		if strings.Contains(hay[loc[0]:loc[1]], "increas") {
+		cue := hay[loc[0]:loc[1]]
+
+		// Harm-context "increas*": "increased risk/mortality/..." is not a
+		// report of benefit, whatever the cue list says.
+		if strings.Contains(cue, "increas") {
 			end := loc[1] + 24 // room for "increased" + " the mortality" etc.
 			if end > len(hay) {
 				end = len(hay)
@@ -166,6 +170,13 @@ func ClassifyStance(title, abstract, claim string) (Stance, float64) {
 				continue
 			}
 		}
+
+		// A purpose clause names what was STUDIED, not what was FOUND, so it is
+		// not evidence for the claim. See isPurposeClauseCue.
+		if isPurposeClauseCue(hay, loc[0], cue) {
+			continue
+		}
+
 		support++
 	}
 	null := len(nullCues.FindAllString(hay, -1))
@@ -618,4 +629,50 @@ func confidenceFrom(dominant, total int) float64 {
 		conf = 0.95
 	}
 	return conf
+}
+
+// purposeClausePrefix matches the word "for" immediately before a support cue,
+// which turns the cue into a statement of purpose: "Vitamin C FOR PREVENTING
+// the common cold" is the title of a Cochrane review whose conclusion is that
+// vitamin C does not prevent colds in the general population. The verb names
+// the question, not the answer, and counting it scored that review — and two
+// others like it — as agreeing with the claim they refute.
+var purposeClausePrefix = regexp.MustCompile(`(?i)\bfor\s+$`)
+
+// purposeLookback is the window searched before a support cue for the purpose
+// preposition, mirroring negationLookback: scope is local. Eight characters is
+// the window every measurement below was taken with; changing it changes the
+// counts, so re-measure before touching it. It is wide enough to tolerate
+// doubled spacing and still too narrow for a "for" governing an earlier
+// phrase, since "for the " leaves a word between the preposition and the cue.
+const purposeLookback = 8
+
+// isPurposeClauseCue reports whether a support cue sits in a purpose clause.
+//
+// Two conditions, both narrowing. The cue must be a GERUND — "for preventing",
+// not "for prevention of" — because the -ing form after a preposition is what
+// makes the phrase name an activity rather than report one. And the
+// preposition must be "for" specifically.
+//
+// The preposition list is a measurement, not a judgement about English. Over
+// the thirteen archived corpora (295 works, 783 counted support cues):
+//
+//	for   23 cues   7 works change stance
+//	in    11 cues   1 work changes stance
+//	to     1 cue    0 works change stance
+//
+// "in" is excluded on the evidence, not for tidiness. Its occurrences are
+// findings, not purposes: "benefit of fish oil supplementation IN PREVENTING
+// cardiovascular events", "efficacy of meditation programs IN IMPROVING
+// stress-related outcomes". Gating those would delete results, and one of them
+// sits in the meditation benefit control. "to" is a single occurrence, noise.
+func isPurposeClauseCue(hay string, start int, cue string) bool {
+	if !strings.HasSuffix(strings.TrimSpace(cue), "ing") {
+		return false
+	}
+	from := start - purposeLookback
+	if from < 0 {
+		from = 0
+	}
+	return purposeClausePrefix.MatchString(hay[from:start])
 }

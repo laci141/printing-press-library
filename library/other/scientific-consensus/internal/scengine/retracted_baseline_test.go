@@ -82,7 +82,7 @@ var retractedFixtures = []retractedFixture{
 		titlePrefix:  true,
 		openAlexFlag: true,
 		wantStance:   StanceSupporting,
-		wantConf:     0.95,
+		wantConf:     0.8999999999999999,
 	},
 	{
 		name:  "fasting_natcomm_prefix_and_flag",
