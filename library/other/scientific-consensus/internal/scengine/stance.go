@@ -191,8 +191,8 @@ func ClassifyStance(title, abstract, claim string) (Stance, float64) {
 		// Exclude "increas*" hits whose immediate context is a harm claim
 		// ("increased risk/mortality/..."). RE2 has no negative lookahead, so
 		// each match window is re-inspected instead.
-		isIncrease := strings.Contains(hay[loc[0]:loc[1]], "increas")
-		if isIncrease {
+		cue := hay[loc[0]:loc[1]]
+		if strings.Contains(cue, "increas") {
 			end := loc[1] + 24 // room for "increased" + " the mortality" etc.
 			if end > len(hay) {
 				end = len(hay)
@@ -210,14 +210,14 @@ func ClassifyStance(title, abstract, claim string) (Stance, float64) {
 			continue
 		}
 
-		// "increas*" is the one support cue that routinely names what is being
-		// DONE rather than what was FOUND — "increasing LCn3 intake",
-		// "advice to increase oily fish". A genuine finding about the claim
-		// states the claim's outcome nearby, so the cue only counts when that
-		// outcome is in scope. Skipped when the claim cannot be split at all,
-		// since an unsplittable claim yields no outcome to test against and
-		// the gate would silence every such cue.
-		if isIncrease && len(outcome) > 0 &&
+		// Intent verbs name what is being DONE rather than what was FOUND:
+		// "increasing LCn3 intake", "for preventing the common cold",
+		// "protective effect". A genuine finding about the claim states the
+		// claim's outcome nearby, so such a cue only counts when that outcome
+		// is in scope. Skipped when the claim cannot be split at all, since an
+		// unsplittable claim yields no outcome to test against and the gate
+		// would silence every such cue.
+		if isIntentVerbCue(cue) && len(outcome) > 0 &&
 			!outcomeInScope(hay, loc[0], loc[1], sentStart, sentEnd, outcome) {
 			continue
 		}
@@ -601,11 +601,11 @@ func claimSides(claim string) (intervention, outcome []string) {
 //
 // Three tiers, first hit wins:
 //
-//	1. claimHarmCues    — the same split claimSides performs
-//	2. claimBenefitCues — "improves", "prevents", "protects"
-//	3. the first polarity-prefixed word — "reduces", "lowers", …, which tier 2
-//	   misses because its reduc*/lower* alternatives require the literal word
-//	   "risk", and "vitamin D reduces respiratory infections" has none
+//  1. claimHarmCues    — the same split claimSides performs
+//  2. claimBenefitCues — "improves", "prevents", "protects"
+//  3. the first polarity-prefixed word — "reduces", "lowers", …, which tier 2
+//     misses because its reduc*/lower* alternatives require the literal word
+//     "risk", and "vitamin D reduces respiratory infections" has none
 //
 // Tier 3 is not optional. Without it the outcome-scope gate in ClassifyStance
 // is inert on three of the thirteen archived corpora (meditation, saffron,
@@ -742,4 +742,38 @@ func confidenceFrom(dominant, total int) float64 {
 		conf = 0.95
 	}
 	return conf
+}
+
+// intentVerbStems are the support-cue stems that name an INTENTION or an
+// activity rather than a measured result, and are therefore subject to the
+// outcome-scope gate in ClassifyStance.
+//
+// The list is a measurement, not a category. Each verb was swept separately
+// over the seven benefit/ambiguous corpora (187 works): prevent* moved 11
+// works, protect* and enhanc* two each, reduc* and lower* one each, alleviat*
+// none — and none of them disturbed the meditation benefit control.
+//
+// improv* is deliberately ABSENT. It was the only verb that moved the
+// meditation control, which the calibration treats as a red line: a claim
+// about anxiety is answered by abstracts that report improvement, so gating
+// improv* on outcome scope silences the finding itself rather than the
+// framing. Adding it later requires re-measuring that control first.
+//
+// The subset was measured as a subset, not inferred by subtraction: the
+// single-verb counts sum to 20 while all seven together move 24, so the gates
+// interact and arithmetic on them would be wrong.
+var intentVerbStems = []string{
+	"increas", "prevent", "reduc", "protect", "enhanc", "lower", "alleviat",
+}
+
+// isIntentVerbCue reports whether a matched support cue is built on an intent
+// verb. Substring matching mirrors how the cues themselves are written
+// (reduc\\w+, prevent\\w+), so no stemming step is introduced here.
+func isIntentVerbCue(cue string) bool {
+	for _, st := range intentVerbStems {
+		if strings.Contains(cue, st) {
+			return true
+		}
+	}
+	return false
 }

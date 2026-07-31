@@ -296,19 +296,51 @@ func TestBenefitGateTargetWorks(t *testing.T) {
 //
 // Two assertions, and the second is the load-bearing one:
 //
-//  1. the set of supporting -> inconclusive moves is exactly the five works
-//     named below, so an unnoticed widening of the gates shows up here; and
+//  1. the set of supporting -> inconclusive moves is exactly the works named
+//     below, so an unnoticed widening of the gates shows up here; and
 //  2. NONE of them carries null-result vocabulary. A work that says
 //     "no significant difference" and ends up inconclusive is dissent the fix
 //     swallowed instead of surfaced — the precise failure mode that ruled out
 //     the more aggressive variants (one of which drained 43 works).
+//
+// The set grew from five to nineteen when the outcome-scope gate was extended
+// from increas* to the measured set of intent verbs. That growth is the point
+// of assertion 1 working, not a reason to stop trusting it: the alarm fired,
+// the fourteen new works were read, and assertion 2 still holds for every one
+// of them. What they have in common is that they are off-topic rather than
+// dissenting — vitamin D and vitamin A papers sitting in the vitamin C corpus,
+// and two ESC practice guidelines in the omega-3 one. A guideline document is
+// not evidence for or against the claim, and going quiet about it is the right
+// answer.
+//
+// That also names the real defect, which this change does not fix: relevance
+// belongs to the PICO gate, and here the stance layer is doing its work. The
+// user sees "this study reached no conclusion" where the truth is "this study
+// is about something else". Moving it to the right layer is a separate change.
 func TestBenefitGateNoInconclusiveDrain(t *testing.T) {
 	wantDrained := map[string]string{
+		// Recorded by the benefit-gate change (increas* only).
 		"10.1016/j.cmet.2016.04.009":       "melatonin",
 		"10.1111/j.1753-4887.2010.00287.x": "omega3",
 		"10.3390/ijms18122645":             "omega3",
 		"10.1105/tpc.111.095232":           "vitaminc",
 		"10.3390/antiox8110519":            "vitaminc",
+
+		// Added when the gate was extended to the full intent-verb set.
+		"10.1038/emm.2014.121":      "melatonin",
+		"10.1093/eurheartj/ehz486":  "omega3",
+		"10.1093/eurheartj/ehz455":  "omega3",
+		"10.3390/nu6020799":         "omega3",
+		"10.1038/srep11276":         "omega3",
+		"10.1074/jbc.m201151200":    "vitaminc",
+		"10.3390/nu9111211":         "vitaminc",
+		"10.1017/s0950268806007175": "vitaminc",
+		"10.3390/nu12040988":        "vitaminc",
+		"10.1007/s12291-013-0375-3": "vitaminc",
+		"10.3390/nu5010111":         "vitaminc",
+		"10.1172/jci29449":          "vitaminc",
+		"10.1016/j.cct.2011.09.009": "vitamind",
+		"10.1542/peds.2011-3029":    "vitamind",
 	}
 
 	checked := 0
