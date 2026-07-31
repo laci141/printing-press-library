@@ -25,6 +25,35 @@ package cli
 // TIGHTENING and is structurally unable to measure its WIDENING; the widening
 // measurement needs a raw pre-gate result set, which is not committed.
 
+// V7, CLIPPED ABSTRACT — MEASURED AND REJECTED
+//
+// The premise was that the gate reads the FULL abstract while the scorer reads
+// a 1500-rune clip, so a claim stem sitting in the tail — publisher
+// boilerplate, funding statements, copyright lines — could keep a work whose
+// body never discusses the claim. V7 was V6 over clipAbstract's output.
+//
+// Measured over all 295 archived studies: 127 abstracts run past 1500 runes,
+// and clipping flips the gate on 10 of them. Every one of those ten loses a
+// stem that sits in ORDINARY SCIENTIFIC PROSE, not boilerplate:
+//
+//	omega3 10.1161/cir.0000000000000709  "cardi" in "improving atherosclerotic
+//	                                     cardiovascular disease risk"
+//	vaccines 10.1542/peds.113.5.e472     "vacci" in "immunizations with the
+//	                                     measles-mumps-rubella vaccine"
+//	coffee 10.7326/m16-2472              "heart" in "deaths due to heart
+//	                                     disease, cancer, respiratory disease"
+//
+// Nine of the ten are findings the corpus exists to weigh. V7 would drop them.
+// The clip is a display budget, and enforcing it inside a relevance decision
+// trades recall for nothing — do not reintroduce it.
+//
+// The measurement did surface one real defect, of a different class. In
+// vitaminc 10.1074/jbc.m201151200 the stem "commo" (from "common cold")
+// matched "one of the most COMMOn oxidized adducts" — a 5-character stem hits
+// any occurrence of "common". Clipping would have masked that case by
+// accident, not fixed it. Stem-truncation false positives are their own
+// problem and want their own change.
+
 import (
 	"encoding/json"
 	"fmt"
