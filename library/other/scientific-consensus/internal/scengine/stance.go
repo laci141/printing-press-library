@@ -39,14 +39,39 @@ var (
 	nullCues = regexp.MustCompile(`(?i)\b(no (significant )?(association|effect|difference|benefit|evidence|impact|correlation)|not (significant\w*|associated|effective)|did not (significantly )?(improv|increas|reduc|affect|differ|change)|ineffective|no statistically significant|failed to|without (a )?(significant )?(effect|benefit)|null (result|effect|finding))`)
 
 	// Harm / negative-effect cues (treated as refuting an intervention claim).
-	harmCues = regexp.MustCompile(`(?i)\b(increas\w+ (the )?(risk|mortality|morbidity|incidence)|harmful|adverse (effect|event|outcome)|worsen\w*|associated with (a )?(higher|increas\w+|greater) (risk|mortality|incidence)|detrimental|toxic\w*|negative (effect|impact|association)|deteriorat\w+)`)
+	//
+	// The "risk factor" branch closes a gap the adjacent patterns could not
+	// reach: "X is a risk factor for Y" states harm without "increas*" and
+	// without "associated with", so it scored as inconclusive (measured: 0.20
+	// confidence, no direction at all), and on the claim path the harm-claim
+	// inversion therefore never ran.
+	//
+	// Two constraints on that branch are load-bearing, not style:
+	//
+	// A copula (is/are/was/were/remains/represents/as) must precede the phrase.
+	// Without it, "reduced risk factors for cardiovascular disease" — a benefit
+	// finding — would be counted as harm.
+	//
+	// The intervening adjectives are a CLOSED list, deliberately not \w+ or
+	// [a-z]+. harmCues is counted ungated on the claim-agnostic path
+	// (len(FindAllString) in ClassifyStance), where no negation gate runs, so a
+	// permissive gap would let "is not a risk factor for Y" match and invert the
+	// finding. With the list closed, "not" simply fails to match and the
+	// sentence falls back to its previous inconclusive reading — a conservative
+	// miss rather than a confident error.
+	harmCues = regexp.MustCompile(`(?i)\b(increas\w+ (the )?(risk|mortality|morbidity|incidence)|harmful|adverse (effect|event|outcome)|worsen\w*|associated with (a )?(higher|increas\w+|greater) (risk|mortality|incidence)|(is|are|was|were|remains?|represents?|as) (an? )?((major|significant|strong|independent|known|well-established|established|modifiable|potential|common|leading|key|important) ){0,2}risk factors? for|detrimental|toxic\w*|negative (effect|impact|association)|deteriorat\w+)`)
 
 	// Claim-direction cues: what the *claim itself* asserts, not what the
 	// paper found. A HARM-asserting claim ("X causes Y", "X increases the
 	// risk of Y") inverts the support/refute mapping in ClassifyStance. Both
 	// are RE2-safe keyword alternations — no lookahead, matching the cue
 	// style above and the increaseHarmContext window technique.
-	claimHarmCues    = regexp.MustCompile(`(?i)\b(caus\w+|increas\w+ (the )?risk|rais\w+ (the )?risk|worsen\w*|lead\w* to|harm\w*|damag\w*|toxic\w*)`)
+	// The risk-factor branch mirrors harmCues so that "X is a risk factor for Y"
+	// is recognised as a harm-asserting CLAIM, not only as a harm FINDING. The
+	// same copula requirement and closed adjective list apply, for the same
+	// reasons; a claim of the form "X is not a risk factor for Y" must not be
+	// read as asserting harm, since that would invert every verdict against it.
+	claimHarmCues    = regexp.MustCompile(`(?i)\b(caus\w+|increas\w+ (the )?risk|rais\w+ (the )?risk|worsen\w*|lead\w* to|harm\w*|damag\w*|toxic\w*|(is|are|was|were|remains?|represents?|as) (an? )?((major|significant|strong|independent|known|well-established|established|modifiable|potential|common|leading|key|important) ){0,2}risk factors? for)`)
 	claimBenefitCues = regexp.MustCompile(`(?i)\b(improv\w+|reduc\w+ (the )?risk|lower\w* (the )?risk|prevent\w+|treat\w+|protect\w+|benefi\w+|enhanc\w+|alleviat\w+|boost\w*|cure\w*|effective\b)`)
 
 	// Direction cues for harm-asserting claims: generic comparatives whose
@@ -169,7 +194,26 @@ func ClassifyStance(title, abstract, claim string) (Stance, float64) {
 		support++
 	}
 	null := len(nullCues.FindAllString(hay, -1))
-	harm := len(harmCues.FindAllString(hay, -1))
+	// Harm cues, negation-gated. This path previously counted them ungated,
+	// so "was not identified as a risk factor for autism" scored as refuting
+	// with 0.90 confidence — a confident inversion of what the sentence says.
+	// The gap predates the risk-factor cue; that cue only made it visible,
+	// since "not" can precede an "as ..." match while the closed adjective
+	// list blocks it inside an "is ..." one.
+	//
+	// The gate is the backward-window check the harm-claim path already
+	// applies in positiveCueCounts, reused verbatim rather than reinvented.
+	// Negation scope stays local for the same reason it does there: a
+	// sentence-wide search would silently drop genuine harm findings that
+	// merely follow an unrelated "no" earlier in the same sentence.
+	harm := 0
+	for _, loc := range harmCues.FindAllStringIndex(hay, -1) {
+		sentStart, _ := sentenceBounds(hay, loc[0])
+		if negationCues.MatchString(backWindow(hay, loc[0], sentStart)) {
+			continue
+		}
+		harm++
+	}
 
 	// Null cues frequently overlap with support phrasing ("no significant
 	// reduction in risk"); count net.
