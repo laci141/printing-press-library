@@ -1,6 +1,5 @@
 // Copyright 2026 laci141 and contributors. Licensed under Apache-2.0. See LICENSE.
 // Phase 3: personal reading list — queue DOIs locally and track read/unread state.
-
 package cli
 
 import (
@@ -144,7 +143,7 @@ func newNovelReadingListCmd(flags *rootFlags) *cobra.Command {
 				})
 			}
 
-			// 🔧 JAVÍTÁS: ellenőrizzük az iteráció során fellépő adatbázis-hibákat
+			// Surface database errors raised during row iteration.
 			if err := rows.Err(); err != nil {
 				return fmt.Errorf("reading list rows error: %w", err)
 			}
@@ -184,6 +183,94 @@ func newNovelReadingListCmd(flags *rootFlags) *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(addCmd, lsCmd)
+	// read — mark an article as read.
+	//
+	// Without this command the read_at column, the [✓] indicator in ls, and the
+	// "read" field in JSON output were unreachable: nothing ever wrote to
+	// read_at, so every entry rendered as unread forever.
+	readCmd := &cobra.Command{
+		Use:     "read <doi>",
+		Short:   "Mark an article in the reading list as read",
+		Example: "  nejm-pp-cli reading-list read 10.1056/NEJMoa2506905",
+		Args:    cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if dryRunOK(flags) {
+				return nil
+			}
+			doi := strings.TrimSpace(args[0])
+			ctx, cancel := boundCtx(cmd.Context(), flags)
+			defer cancel()
+
+			db, err := store.OpenWithContext(ctx, defaultDBPath("nejm-pp-cli"))
+			if err != nil {
+				return fmt.Errorf("opening database: %w", err)
+			}
+			defer db.Close()
+			if err := ensureReadingListTable(db); err != nil {
+				return err
+			}
+			res, err := db.DB().ExecContext(ctx,
+				`UPDATE reading_list SET read_at = ? WHERE doi = ?`,
+				time.Now().UTC().Format(time.RFC3339), doi)
+			if err != nil {
+				return fmt.Errorf("marking as read: %w", err)
+			}
+			// A DOI that is not on the list is a user error, not a silent no-op:
+			// otherwise a typo would report success and leave nothing marked.
+			n, err := res.RowsAffected()
+			if err != nil {
+				return fmt.Errorf("marking as read: %w", err)
+			}
+			if n == 0 {
+				return fmt.Errorf("%s is not in the reading list; add it first with 'reading-list add %s'", doi, doi)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "marked %s as read\n", doi)
+			return nil
+		},
+	}
+
+	// unread — clear the read mark.
+	//
+	// A tracked state has to be reversible; without this, marking an article
+	// read by mistake could only be undone by removing and re-adding it.
+	unreadCmd := &cobra.Command{
+		Use:     "unread <doi>",
+		Short:   "Mark an article in the reading list as unread",
+		Example: "  nejm-pp-cli reading-list unread 10.1056/NEJMoa2506905",
+		Args:    cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if dryRunOK(flags) {
+				return nil
+			}
+			doi := strings.TrimSpace(args[0])
+			ctx, cancel := boundCtx(cmd.Context(), flags)
+			defer cancel()
+
+			db, err := store.OpenWithContext(ctx, defaultDBPath("nejm-pp-cli"))
+			if err != nil {
+				return fmt.Errorf("opening database: %w", err)
+			}
+			defer db.Close()
+			if err := ensureReadingListTable(db); err != nil {
+				return err
+			}
+			res, err := db.DB().ExecContext(ctx,
+				`UPDATE reading_list SET read_at = NULL WHERE doi = ?`, doi)
+			if err != nil {
+				return fmt.Errorf("marking as unread: %w", err)
+			}
+			n, err := res.RowsAffected()
+			if err != nil {
+				return fmt.Errorf("marking as unread: %w", err)
+			}
+			if n == 0 {
+				return fmt.Errorf("%s is not in the reading list", doi)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "marked %s as unread\n", doi)
+			return nil
+		},
+	}
+
+	cmd.AddCommand(addCmd, lsCmd, readCmd, unreadCmd)
 	return cmd
 }
