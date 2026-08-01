@@ -148,7 +148,7 @@ const (
 // ambiguous claims (including the empty claim) keep the claim-agnostic
 // baseline: stance from the reported finding's polarity. confidence is 0..1.
 func ClassifyStance(title, abstract, claim string) (Stance, float64) {
-	hay := strings.ToLower(title + ". " + abstract)
+	hay := strings.ToLower(normalizeText(title + ". " + abstract))
 	if detectClaimDirection(claim) == claimHarm {
 		return classifyAgainstHarmClaim(hay, claim)
 	}

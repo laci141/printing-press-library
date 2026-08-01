@@ -35,7 +35,7 @@ func IsPICORelevant(workAbstract, workTitle string, ivTokens, outTokens []string
 		return true
 	}
 
-	text := strings.ToLower(workAbstract + " " + workTitle)
+	text := strings.ToLower(normalizeText(workAbstract + " " + workTitle))
 	return containsAnyToken(text, ivTokens) && containsAnyToken(text, outTokens)
 }
 
