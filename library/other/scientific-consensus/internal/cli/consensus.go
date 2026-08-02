@@ -148,6 +148,11 @@ func clipAbstract(s string) string {
 // which runs its own computeConsensus, so the seam would grow larger than the
 // repair.
 type gateLedger struct {
+	// backfill records the abstract enrichment that ran BEFORE the gates. It
+	// removes nothing, so it takes no part in consistent() below — but it
+	// changes what the gates were reading, which is why a run that recovered
+	// abstracts must say so next to the exclusions those gates produced.
+	backfill backfillReport
 	// relevance carries the lexical gate's own accounting (stems, thresholds).
 	relevance relevanceReport
 	// picoExcluded is how many works the PICO gate removed; picoIV/picoOut are
@@ -185,6 +190,12 @@ func (g gateLedger) consistent() bool {
 // number they can audit against the study list beside it.
 func gateNotes(g gateLedger) []string {
 	var out []string
+
+	// First, because it happened first: the gates below judged the corpus this
+	// step produced, not the one OpenAlex returned.
+	if n := backfillNote(g.backfill); n != "" {
+		out = append(out, n)
+	}
 
 	if g.relevance.Excluded > 0 {
 		out = append(out, fmt.Sprintf(
@@ -301,6 +312,13 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 				return classifyAPIError(err, flags)
 			}
 
+			// Abstract backfill, BEFORE both gates because supplying an
+			// abstract is what changes their verdicts. 18% of works arrive from
+			// OpenAlex with no abstract at all (52 of 295 archived studies), and
+			// a work gated on its title alone is gated on a property of
+			// OpenAlex's coverage rather than of its own content.
+			backfill := backfillAbstracts(ctx, claim, works)
+
 			// Relevance gate: drop works that do not share enough content with
 			// the claim, before enrichment so excluded works cost no PubMed
 			// lookups and never enter the score. The report is carried to the
@@ -332,6 +350,7 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 			relevantCount := len(works)
 
 			ledger := gateLedger{
+				backfill:      backfill,
 				relevance:     relReport,
 				picoExcluded:  picoDropped,
 				picoIV:        ivTokens,

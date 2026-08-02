@@ -37,6 +37,12 @@ func computeConsensus(ctx context.Context, c apiGetter, claim string, limit, yea
 		return consensusOutput{}, err
 	}
 
+	// Abstract backfill, before both gates and for the same reason the gates
+	// themselves are duplicated here: compare and batch must judge the same
+	// corpus the consensus command judges. Running it in one command and not the
+	// other would make the two report different study sets for one claim.
+	backfill := backfillAbstracts(ctx, claim, works)
+
 	// Relevance gate, before enrichment so excluded works cost no PubMed
 	// lookups and never enter the score.
 	fetched := len(works)
@@ -91,6 +97,9 @@ func computeConsensus(ctx context.Context, c apiGetter, claim string, limit, yea
 		TopSupporting:     topByStance(stances, scengine.StanceSupporting, 2),
 		TopRefuting:       topByStance(stances, scengine.StanceRefuting, 2),
 		AllStudies:        allStudyBriefs(stances),
+	}
+	if n := backfillNote(backfill); n != "" {
+		out.Note = appendNote(out.Note, n)
 	}
 	if dropped > 0 {
 		out.Note = appendNote(out.Note, fmt.Sprintf("%d off-topic work(s) excluded by relevance gate", dropped))

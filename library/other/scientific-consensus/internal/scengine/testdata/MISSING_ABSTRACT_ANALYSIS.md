@@ -451,3 +451,126 @@ Listed so nobody mistakes their absence for a null result.
 
 6. **All corpora other than omega3.** Part 3 measured one claim. The other
    eleven are untouched.
+
+---
+
+# Part 4 — PubMed abstract backfill: benefit vs. risk (2026-08-02)
+
+**Question:** should the CLI backfill missing abstracts from PubMed before the
+relevance and PICO gates run? The decision number is `returners - losers`.
+
+- **returner** = a work the gates exclude today that a PubMed abstract lets back in.
+- **loser** = a work the gates KEEP today that a PubMed abstract pushes out.
+
+Losers are not hypothetical. An abstract-less work only needs
+`relevanceMinTokensNoAbstract` (1) distinct claim stems; giving it an abstract
+raises its bar to `relevanceMinTokens` (2). Backfilling therefore **tightens**
+the gate on every work it touches, and a naive "more data is better" reading of
+this feature is wrong.
+
+## 🛑 CORRECTION — what an earlier framing of this question got wrong
+
+The task brief that opened this work carried a measurement table built by
+post-hoc scripting over `testdata/corpora_full/`, reporting *"24 works excluded
+by the PICO gate for want of an abstract"* and *"PubMed resolved 10/10 of them,
+6/10 would return"*.
+
+**Those numbers do not support the feature, and are withdrawn.**
+
+`corpora_full/` archives `all_studies`, which is the **post-gate survivor set**.
+The works a production run excluded were never written to those files — only
+their COUNT survives, in the `note` field. Anything called "the excluded works"
+that was derived from `corpora_full/` was therefore selected by the analysis
+script itself, not by a real run. The 10/10 and 6/10 describe that script's
+output; they measure nothing about the shipped gates.
+
+What the survivor set CAN answer is the risk side, and that measurement stands:
+
+| measured on `corpora_full/` (survivors only) | value |
+|---|---|
+| works with no abstract | 52 / 295 (17.6%) |
+| of those, carrying a DOI | 51 / 52 (98.1%) |
+| DOIs resolved by per-DOI `esearch` | 41 / 51 (80.4%) |
+| DOIs resolved by OR-batched `esearch` (20 per query) | 20 / 51 (39.2%) |
+| end-to-end abstract recovered | 38 / 51 (74.5%) |
+| PMID found but PubMed holds no abstract | 3 |
+| unresolvable (book chapters, non-indexed journals) | 10 |
+
+Two implementation facts fell out of that probe and are load-bearing:
+
+1. **Do not OR-batch the DOI lookup.** One `<doi>[doi]` term per request
+   resolves 41/51; OR-ing 20 terms into one request resolves 20/51. Batching is
+   ~20x cheaper and silently loses half the yield.
+2. **Path-scope the efetch XML.** A `<PubmedArticle>` carries `ArticleId` and
+   `AbstractText` elements outside its own record — every `<ReferenceList>`
+   entry has an `<ArticleIdList>`, and translations live under
+   `<OtherAbstract>`. A parser that collected `ArticleId` from anywhere in the
+   subtree mapped **8 of 41** records to a *cited paper's* DOI, which would have
+   attached an unrelated abstract to 20% of what it backfilled. Reading only
+   `PubmedData/ArticleIdList/ArticleId` and
+   `MedlineCitation/Article/Abstract/AbstractText` drops that to 0/41.
+   Separately, 5 of 59 `AbstractText` elements carry nested `<sup>`/`<sub>`, so
+   Go's `xml:",chardata"` would silently drop the nested text.
+
+## 🔵 MEASURED — the live benefit-vs-risk run
+
+Both sides measured in one run, on live OpenAlex + live PubMed, replaying the
+**shipped** gates (`relevantToClaim`, `scengine.PICOTokens`,
+`scengine.IsPICORelevant`) — no second tokenizer exists in the harness, so a
+drift between two implementations cannot be mistaken for a result.
+
+Conditions: 3 claims that have archived corpora, `--limit 40` (the `consensus`
+command's own default, so this describes production and not a widened pool).
+Note the archived corpora predate `4d81ac382` ("extend PICO gate to
+benefit-asserting claims"), so today's gate excludes more than those files show.
+
+| claim | fetched | excluded today | no-abstract among excluded | backfilled | returners | losers |
+|---|---:|---:|---:|---:|---:|---:|
+| omega-3 improves cardiovascular health | 40 | — | 3 | 3 | 0 | 0 |
+| vitamin C prevents the common cold | 40 | — | 3 | 3 | 1 | 0 |
+| meditation reduces anxiety | 40 | — | 9 | 9 | 9 | 0 |
+| **total** | **120** | **50** | **15** | **15** | **10** | **0** |
+
+Risk side, same run: 11 of the 70 currently-KEPT works have no abstract; 4 of
+those 11 were backfillable. **0 of the 4 fell out of the gate** once given one.
+
+```
+fetched 120 | currently kept 70 | currently excluded 50
+abstract-less among excluded 15 -> backfilled 15
+abstract-less among kept     11 -> backfilled 4
+RETURNERS 10   LOSERS 0   NET +10
+```
+
+**Decision number: `+10`.** Ten works per 120 fetched (8.3% of the corpus)
+re-enter the analysis, and nothing measured leaves it.
+
+## 🟡 JUDGED — reading those numbers
+
+- **The 1→2 stem threshold shift did not bite.** The mechanism: a real abstract
+  adds haystack far faster than it raises the bar, so a work that matched one
+  stem on its title alone typically matches several once its abstract is
+  present. Measured, not assumed — but measured on 4 works, which is thin.
+- **The benefit is concentrated, not uniform.** `meditation` supplied 9 of the
+  10 returners; `omega-3` supplied none. Backfill pays off where OpenAlex's
+  abstract coverage is worst, which is not evenly distributed across fields.
+- **Backfill coverage differs sharply between the two populations.** Excluded
+  works backfilled at 15/15; kept works at 4/11, and the 51-survivor probe above
+  at 38/51. Small n on the kept side; do not read 100% as the expected rate.
+
+## ⚠️ What this run does NOT establish
+
+1. **Three claims, 120 works.** Two of the three produced the entire effect.
+2. **Zero losers rests on 4 observations.** The risk side is measured on the 4
+   kept-and-backfillable works, not on 11 and not on the 51 above. A wider run
+   could surface losers; nothing here rules that out.
+3. **Returner quality was not adjudicated.** The 10 returners passed both
+   shipped gates — which for PICO means the abstract really does name the
+   intervention and the outcome — but no human read them to confirm they are
+   on-topic evidence rather than passing mentions.
+4. **Latency was not treated as a cost.** Per-DOI `esearch` at the keyless ~3
+   req/s pace is one request per abstract-less work. The probe run took 22s for
+   3 claims; an unbounded backfill on `--limit 200` would be far worse, so any
+   shipped version needs a cap the way `enrichPubTypes` has one.
+
+**Generated by:** `internal/cli/zz_live_backfill_probe_test.go`, run with
+`SC_PROBE_LIVE=1 go test ./internal/cli/ -run TestLiveBackfillBenefitVsRisk -v`.

@@ -6,9 +6,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/mvanhorn/printing-press-library/library/other/scientific-consensus/internal/scengine"
 	"github.com/mvanhorn/printing-press-library/library/other/scientific-consensus/internal/source"
@@ -455,4 +457,181 @@ func enrichPubTypes(ctx context.Context, works []scWork, capN int) {
 			works[i].PubTypes = pts
 		}
 	}
+}
+
+// noAbstractBackfillEnv disables the PubMed abstract backfill when set to any
+// non-empty value. It is an escape hatch, not a feature flag: the backfill costs
+// one PubMed request per abstract-less work, and an operator on a metered link,
+// behind a proxy that blocks NCBI, or reproducing an archived run bit-for-bit
+// needs a way to switch it off without patching the binary.
+const noAbstractBackfillEnv = "SC_NO_ABSTRACT_BACKFILL"
+
+// abstractBackfillCap bounds how many DOIs one run resolves.
+//
+// Fifty is measured, not conventional. At the command's maximum `--limit 200`,
+// three claims produced 42, 31 and 51 abstract-less works carrying a DOI (124 of
+// 600 fetched, 20.7%), so 50 covers the observed worst case almost exactly. One
+// DOI lookup costs ~631 ms at PubMed's keyless ~3 req/s pace, which puts the
+// worst case at ~32 s — the reason the cap is not simply "all of them".
+const abstractBackfillCap = 50
+
+// abstractBackfillTimeout bounds the whole backfill step, so a slow or wedged
+// NCBI degrades the enrichment instead of the query. It must exceed the cap's
+// measured cost (50 x 631 ms ~ 32 s) or the cap could never be reached on a
+// healthy link; 45 s leaves ~40% headroom over that measurement.
+const abstractBackfillTimeout = 45 * time.Second
+
+// abstractBackfiller is the PubMed lookup, indirected through a package variable
+// so tests can exercise the selection, cap, priority and fill logic without a
+// network. Production never reassigns it.
+var abstractBackfiller = source.PubMedAbstractsByDOI
+
+// backfillReport is the abstract backfill's contribution to the PRISMA ledger.
+//
+// Candidates counts works the backfill COULD help; Filled counts works it did.
+// The gap between them is not noise and must stay visible: PubMed does not index
+// book chapters or every journal, and a reader comparing two runs of the same
+// claim needs to see that the difference was coverage rather than content.
+type backfillReport struct {
+	// Disabled records that the step was switched off, which is a different
+	// statement from "there was nothing to do".
+	Disabled bool
+	// Candidates is abstract-less works carrying a DOI; NoDOI is abstract-less
+	// works without one, which no DOI-keyed source can reach.
+	Candidates int
+	NoDOI      int
+	// Requested is the distinct DOIs actually looked up and Resolved how many of
+	// them PubMed answered with an abstract; Skipped is the candidates the cap
+	// dropped. Filled counts WORKS, not DOIs, and can exceed Resolved when one
+	// DOI backs duplicate records — which is why unresolved is computed from
+	// Requested-Resolved and never from Requested-Filled.
+	Requested int
+	Resolved  int
+	Skipped   int
+	Filled    int
+}
+
+// backfillAbstracts fills missing abstracts from PubMed IN PLACE, best-effort,
+// and returns what it did. It must run BEFORE the relevance and PICO gates,
+// because supplying an abstract is precisely what changes their verdicts.
+//
+// That cuts both ways, and the direction is not obvious. An abstract-less work
+// only has to clear relevanceMinTokensNoAbstract (1) distinct claim stems;
+// giving it an abstract raises its bar to relevanceMinTokens (2). So this step
+// can EXCLUDE a work that survives today. Measured live on 2026-08-02 across
+// three claims at the command's default `--limit 40`: 15 of 15 backfillable
+// gate-excluded works were resolved and 10 of them re-entered the corpus, while
+// 0 of the 4 backfillable survivors fell out — net +10 works per 120 fetched.
+// The mechanism is that a real abstract adds haystack faster than it raises the
+// bar. The risk side of that measurement rests on 4 observations, so it is a
+// reason to keep the ledger honest, not a reason to stop counting.
+//
+// Errors are swallowed exactly as enrichPubTypes swallows them: this is optional
+// enrichment, and a PubMed outage must degrade the abstracts, never the query.
+func backfillAbstracts(ctx context.Context, claim string, works []scWork) backfillReport {
+	var rep backfillReport
+	if os.Getenv(noAbstractBackfillEnv) != "" {
+		rep.Disabled = true
+		return rep
+	}
+
+	// Provisional gate verdicts on the CURRENT abstracts, so the cap spends its
+	// budget where the payoff is. Works the gates already keep can only be
+	// harmed by a backfill (the threshold shift above); works they exclude are
+	// the only ones that can be recovered — and at `--limit 200` they were 98 of
+	// 124 candidates, so the ordering matters whenever the cap binds.
+	//
+	// These are the shipped gate functions, not a second copy of their rules: a
+	// private reimplementation that drifted would spend the budget on the wrong
+	// works while looking correct.
+	ivTokens, outTokens := scengine.PICOTokens(claim)
+	var excluded, survivors []int
+	for i := range works {
+		if strings.TrimSpace(works[i].Abstract) != "" {
+			continue
+		}
+		if strings.TrimSpace(works[i].DOI) == "" {
+			rep.NoDOI++
+			continue
+		}
+		rep.Candidates++
+		if relevantToClaim(claim, works[i]) &&
+			scengine.IsPICORelevant(works[i].Abstract, works[i].Title, ivTokens, outTokens) {
+			survivors = append(survivors, i)
+		} else {
+			excluded = append(excluded, i)
+		}
+	}
+
+	order := append(excluded, survivors...)
+	if len(order) == 0 {
+		return rep
+	}
+	if len(order) > abstractBackfillCap {
+		rep.Skipped = len(order) - abstractBackfillCap
+		order = order[:abstractBackfillCap]
+	}
+
+	// One DOI may back several works (duplicate records in a result set), so the
+	// lookup is de-duplicated while every work behind a DOI still gets filled.
+	byDOI := make(map[string][]int, len(order))
+	dois := make([]string, 0, len(order))
+	for _, i := range order {
+		d := source.NormDOI(works[i].DOI)
+		if d == "" {
+			continue
+		}
+		if _, seen := byDOI[d]; !seen {
+			dois = append(dois, d)
+		}
+		byDOI[d] = append(byDOI[d], i)
+	}
+	if len(dois) == 0 {
+		return rep
+	}
+	rep.Requested = len(dois)
+
+	bctx, cancel := context.WithTimeout(ctx, abstractBackfillTimeout)
+	defer cancel()
+	filled, _ := abstractBackfiller(bctx, dois)
+	for d, abs := range filled {
+		if strings.TrimSpace(abs) == "" {
+			continue
+		}
+		targets := byDOI[d]
+		if len(targets) == 0 {
+			continue
+		}
+		rep.Resolved++
+		for _, i := range targets {
+			works[i].Abstract = abs
+			rep.Filled++
+		}
+	}
+	return rep
+}
+
+// backfillNote renders the backfill's PRISMA fragment, or "" when there is
+// nothing a reader could act on.
+//
+// The unresolved and capped counts are reported alongside the fill count on
+// purpose. "12 abstracts backfilled" invites the reading that the corpus is now
+// complete; "12 backfilled, 6 unresolved, 9 skipped by the cap" says how much of
+// the analysis still rests on titles alone.
+func backfillNote(r backfillReport) string {
+	if r.Disabled || (r.Filled == 0 && r.Skipped == 0) {
+		return ""
+	}
+	var note string
+	if r.Filled > 0 {
+		note = fmt.Sprintf(
+			"%d missing abstract(s) backfilled from PubMed before the relevance gates ran (%d of %d looked-up DOI(s) unresolved; %d abstract-less work(s) carried a DOI at all)",
+			r.Filled, r.Requested-r.Resolved, r.Requested, r.Candidates)
+	}
+	if r.Skipped > 0 {
+		note = appendNote(note, fmt.Sprintf(
+			"%d abstract-less work(s) were NOT looked up: the per-run backfill cap of %d was reached, so those works were gated on their title alone",
+			r.Skipped, abstractBackfillCap))
+	}
+	return note
 }
