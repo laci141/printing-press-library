@@ -67,8 +67,8 @@ func fixedPICOTokens(claim string) (ivTokens, outTokens []string) {
 	if loc == nil {
 		return nil, nil
 	}
-	iv := stemTokens(ClaimContentTokens(lc[:loc[0]]))
-	out := stemTokens(ClaimContentTokens(lc[loc[1]:]))
+	iv := picoSideTokens(lc[:loc[0]])
+	out := picoSideTokens(lc[loc[1]:])
 	if len(iv) == 0 || len(out) == 0 {
 		return nil, nil
 	}

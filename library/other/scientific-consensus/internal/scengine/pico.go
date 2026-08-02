@@ -65,27 +65,22 @@ var picoStopwords = map[string]struct{}{
 // a claim, splitting it around its polarity verb: the content tokens before the
 // verb name the intervention, the ones after it name the outcome.
 //
-// The split point comes from polarityVerbCues, NOT from claimSides. claimSides
-// locates the verb with claimHarmCues, which only fires on harm verbs (caus,
-// worsen, rais). A benefit-asserting claim ("vitamin C prevents the common
-// cold") therefore produced no split at all, and PICOTokens returned nil — so
-// the gate silently bypassed itself for every benefit claim. Measured on the
-// vitaminc corpus: 27% of works leaked through, carrying 47% of the corpus
-// citations, including vitamin D, vitamin A and vitamin K papers voting on a
-// vitamin C claim. polarityVerbCues is direction-neutral: the gate only needs
-// to know WHERE the claim splits, not which way it points.
+// The split point comes from polarityVerbCues (direction-neutral, fires on both
+// harm and benefit verbs). See the previous comment block in the git history for
+// the full rationale on why claimSides was replaced.
 //
-// detectClaimDirection is unaffected — it keeps using claimHarmCues and
-// claimBenefitCues, so the stance classifier's harm/benefit branching is
-// unchanged. So is claimSides itself, which stays calibrated for the harm
-// pairing gate in classifyAgainstHarmClaim.
+// Token extraction uses picoSideTokens instead of ClaimContentTokens+stemTokens.
+// The difference: a 1–3-character alphabetic token is glued to the preceding
+// content token rather than dropped by the 4-char length floor. This keeps the
+// "C" in "vitamin C" as the phrase token "vitamin c", which matches only vitamin
+// C papers, instead of collapsing to the stem "vitam" which matches every
+// vitamin in the literature.
 //
-// Every content token of each side is returned, not just the first: within a
-// side the gate is an OR, so more tokens mean more ways for a paper to name
-// that side. All tokens are claimStemLen-truncated stems ("sweeteners" →
-// "sweet"), which is what makes a plain strings.Contains match tolerate
-// inflection and compounding ("sweetener", "sweeteners", "non-nutritive
-// sweeteners").
+// Glued phrases are NOT stemmed. Non-glued tokens are stemmed to claimStemLen
+// characters as before. Numeric short tokens (the "3" in "omega-3") are dropped
+// rather than glued: the hyphen in "omega-3" would prevent strings.Contains
+// from matching "omega 3" against "omega-3", and the "omega" stem already covers
+// both forms correctly.
 //
 // Returns empty slices when the claim cannot be split, which callers must treat
 // as "bypass the gate".
@@ -95,12 +90,85 @@ func PICOTokens(claim string) (ivTokens, outTokens []string) {
 	if loc == nil {
 		return nil, nil
 	}
-	intervention := stemTokens(ClaimContentTokens(lc[:loc[0]]))
-	outcome := stemTokens(ClaimContentTokens(lc[loc[1]:]))
+	intervention := picoSideTokens(lc[:loc[0]])
+	outcome := picoSideTokens(lc[loc[1]:])
 	if len(intervention) == 0 || len(outcome) == 0 {
 		return nil, nil
 	}
 	return dropPICOStopwords(intervention), dropPICOStopwords(outcome)
+}
+
+// picoSideTokens extracts content tokens from one side of a claim for use in
+// IsPICORelevant. It extends ClaimContentTokens with short-qualifier gluing:
+// a 1–3-character alphabetic token is appended (with a space) to the preceding
+// content token rather than being dropped by the 4-char length floor, so
+// "vitamin C" yields the phrase token "vitamin c" instead of "vitam".
+//
+// The glued phrase is NOT stemmed. "vitamin c" already uniquely identifies the
+// substance, and stemming "vitamin c" to "vitam " would silently drop the "c".
+// Non-glued tokens are stemmed normally to claimStemLen characters.
+//
+// Only alphabetic short tokens are glued. Numeric tokens like the "3" in
+// "omega-3" are dropped rather than glued, because in abstract text "omega-3"
+// is separated by a dash that strings.Contains cannot bridge: "omega 3" would
+// not match "omega-3". The "omega" stem covers both forms correctly.
+//
+// Only used by PICOTokens. Do not use in claimSides or claimTokenStems — those
+// serve the stance classifier's pairing gate, which is calibrated on the current
+// stem-only behavior.
+func picoSideTokens(s string) []string {
+	raw := claimTokenSplit.Split(strings.ToLower(s), -1)
+	out := make([]string, 0, len(raw))
+	isGlued := make([]bool, 0, len(raw))
+
+	for _, tok := range raw {
+		if tok == "" {
+			continue
+		}
+		if len(tok) <= 3 {
+			if _, stop := picoStopwords[tok]; stop {
+				continue
+			}
+			// Glue alphabetic short qualifiers to the preceding token only.
+			// "vitamin C" → "vitamin c"; "omega 3" skipped (numeric cannot
+			// bridge the hyphen in "omega-3" via strings.Contains).
+			if isAlphaOnly(tok) && len(out) > 0 {
+				out[len(out)-1] = out[len(out)-1] + " " + tok
+				isGlued[len(isGlued)-1] = true
+			}
+			// No preceding token, or numeric: drop.
+			continue
+		}
+		if _, stop := claimStopwords[tok]; stop {
+			continue
+		}
+		if hasPolarityPrefix(tok) {
+			continue
+		}
+		out = append(out, tok)
+		isGlued = append(isGlued, false)
+	}
+
+	// Stem non-glued tokens only. Glued phrases like "vitamin c" are used
+	// as-is: stemming the phrase would corrupt the qualifier.
+	for i, tok := range out {
+		if !isGlued[i] && len(tok) > claimStemLen {
+			out[i] = tok[:claimStemLen]
+		}
+	}
+
+	return dropPICOStopwords(out)
+}
+
+// isAlphaOnly reports whether s contains only ASCII lowercase letters.
+// s is expected to be already lowercased (picoSideTokens lowercases its input).
+func isAlphaOnly(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] < 'a' || s[i] > 'z' {
+			return false
+		}
+	}
+	return true
 }
 
 // dropPICOStopwords removes function words from one side's token list. If the
