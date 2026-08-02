@@ -53,20 +53,24 @@ type consensusOutput struct {
 	// On the vitamin C corpus this is 17 of 49 — large enough that leaving it
 	// implicit would misrepresent the corpus the score was computed from.
 	RelevanceExcluded int `json:"relevance_excluded"`
-	// PICOExcluded is how many works the PICO gate dropped.
+	// PICOExcluded is how many works the PICO gate dropped: works whose abstract
+	// or title fails to name BOTH the claim's intervention and its outcome.
 	//
-	// READ THIS BEFORE TRUSTING A ZERO. Today this field is 0 for every
-	// benefit-shaped claim, and that does NOT mean the gate found nothing to
-	// exclude — it means the gate never ran. scengine.PICOTokens splits a claim
-	// with claimSides (stance.go), which searches only claimHarmCues; the
-	// benefit verbs ("prevents", "improves", "reduces the risk") live in
-	// claimBenefitCues, which claimSides never consults. So a benefit claim
-	// yields no sides, PICOTokens returns (nil, nil), and IsPICORelevant
-	// short-circuits to true for every work. The gate is dead on this path and
-	// passes noise; it is left in place because waking it was measured to drop
-	// four legitimate works, which is worse. A zero here is "not applied", not
-	// "nothing excluded" — that ambiguity is exactly how the dead gate went
-	// unnoticed for months.
+	// A zero here is a measurement. That is worth stating explicitly because it
+	// was NOT true until 2026-08-02: PICOTokens used to split claims with
+	// claimSides (stance.go), which searches only claimHarmCues, so no benefit
+	// verb ever matched. Every benefit-shaped claim yielded empty token lists,
+	// IsPICORelevant short-circuited to true for all works, and this field
+	// reported 0 because the gate had never run — indistinguishable, to a reader,
+	// from a gate that ran and excluded nothing. 4d81ac382 routed PICOTokens
+	// through the direction-neutral polarityVerbCues instead; measured on the
+	// vitaminc corpus the same field went from 0 to 23 of 49, all 23 verified
+	// correct, with no movement on the 12 harm corpora.
+	//
+	// The one case where a zero still means "not applied" is a claim PICOTokens
+	// cannot split at all — it then returns empty sides and the gate deliberately
+	// bypasses itself rather than filtering blind. TestPICOGateSplitsBenefitClaims
+	// pins that this is no longer the ordinary case for benefit claims.
 	PICOExcluded int `json:"pico_excluded"`
 	// RelevantCount is how many fetched works survived BOTH relevance gates and
 	// therefore entered scoring. It is the input to the low-evidence safety

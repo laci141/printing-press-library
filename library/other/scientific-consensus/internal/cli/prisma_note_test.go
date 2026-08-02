@@ -323,22 +323,29 @@ func TestNoSurvivorsNoteExplainsWhy(t *testing.T) {
 	t.Logf("note: %s", note)
 }
 
-// TestPICOGateIsDeadForBenefitClaims documents why pico_excluded is 0 on every
-// benefit-shaped claim, so that a future reader does not mistake the zero for
-// evidence that the gate ran and found nothing.
+// TestPICOGateSplitsBenefitClaims guards the PICO gate against silently going
+// dead on benefit-shaped claims — the state it was in until 2026-08-02.
 //
-// scengine.PICOTokens splits a claim with claimSides, which searches only
-// claimHarmCues. The benefit verbs — "prevents", "improves", "reduces the risk"
-// — live in claimBenefitCues, which claimSides never consults. A benefit claim
-// therefore yields no sides, PICOTokens returns (nil, nil), and IsPICORelevant
-// short-circuits to true for every work.
+// History, because the inversion of this test is the whole point. PICOTokens
+// used to split a claim with claimSides, which searches only claimHarmCues, so
+// the benefit verbs ("prevents", "improves", "reduces the risk") never matched.
+// A benefit claim yielded no sides, PICOTokens returned (nil, nil), and
+// IsPICORelevant short-circuited to true for every work: the gate passed
+// everything and reported 0 exclusions, which reads identically to "the gate ran
+// and found nothing". That ambiguity is how the dead gate went unnoticed for
+// months, and the predecessor of this test existed to document it.
 //
-// This is deliberate, not a bug being pinned in place: waking the gate for
-// benefit claims was measured to drop four legitimate works, and no split
-// strategy recovered them, so a gate that passes noise while losing no evidence
-// is the least-bad state. What is NOT acceptable is reporting its zero as though
-// it were a measurement.
-func TestPICOGateIsDeadForBenefitClaims(t *testing.T) {
+// 4d81ac382 ended it by routing PICOTokens through polarityVerbCues, which is
+// direction-neutral and fires on benefit verbs as well as harm verbs. Measured
+// on the vitaminc corpus (49 works): 0 exclusions before, 23 after, all 23
+// verified correct (vitamin D/K/A papers and cold-unrelated works), with no
+// regression across the 12 harm corpora.
+//
+// So the assertion is now the opposite one: these claims MUST split. A future
+// change that returns empty token lists here has not merely altered a heuristic
+// — it has reverted the gate to passing every work on the benefit path while
+// still reporting a zero that looks like a measurement.
+func TestPICOGateSplitsBenefitClaims(t *testing.T) {
 	benefit := []string{
 		"vitamin C prevents the common cold",
 		"omega-3 improves cardiovascular health",
@@ -347,15 +354,17 @@ func TestPICOGateIsDeadForBenefitClaims(t *testing.T) {
 	for _, claim := range benefit {
 		t.Run(claim, func(t *testing.T) {
 			iv, out := scengine.PICOTokens(claim)
-			if len(iv) != 0 || len(out) != 0 {
-				t.Fatalf("PICOTokens now splits a benefit claim (iv=%v out=%v) — the gate is "+
-					"no longer dead here, so pico_excluded's comment in consensus.go is stale "+
-					"and the four legitimate works that split cost must be re-measured", iv, out)
+			if len(iv) == 0 || len(out) == 0 {
+				t.Fatalf("PICOTokens(%q) = (iv=%v, out=%v) — a benefit claim no longer splits, "+
+					"so IsPICORelevant short-circuits to true for every work and pico_excluded "+
+					"reports 0 because the gate never ran, not because it excluded nothing",
+					claim, iv, out)
 			}
-			// The consequence: every work passes, so the count is 0 by
-			// construction rather than by measurement.
-			if !scengine.IsPICORelevant("", "utterly unrelated title", iv, out) {
-				t.Error("with no PICO tokens the gate must pass everything")
+			// The consequence of a live gate: a work naming neither side is
+			// excluded, so the count is a measurement rather than a constant.
+			if scengine.IsPICORelevant("", "utterly unrelated title", iv, out) {
+				t.Errorf("with both PICO sides present (iv=%v out=%v) an unrelated work must be "+
+					"excluded; the gate is passing everything again", iv, out)
 			}
 		})
 	}
