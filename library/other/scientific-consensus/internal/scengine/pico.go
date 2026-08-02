@@ -113,6 +113,32 @@ func PICOTokens(claim string) (ivTokens, outTokens []string) {
 // is separated by a dash that strings.Contains cannot bridge: "omega 3" would
 // not match "omega-3". The "omega" stem covers both forms correctly.
 //
+// Gluing attaches to the PRECEDING token, so a short qualifier that stands
+// BEFORE its head noun is dropped, not glued: len(out) is 0 when it is the
+// first token of a side. "probiotics improve gut health" therefore yields
+// out=[healt], not out=["gut health"] — and the same goes for "bone density",
+// "oral health", "eye strain". This is deliberate. Measured 2026-08-02 on the
+// archived full corpora, preserving the qualifier COSTS more than it buys:
+//
+//	probiotics corpus  out=[healt]        excludes 2 of 9 works
+//	                   out=["gut health"] excludes 7 of 9  (+5)
+//	coffee corpus      out=[heart disea]  excludes 0 of 11 works
+//	                   out=[heart]        excludes 3 of 11 (+3)
+//
+// The five and three extra exclusions are all on-topic — the ISAPP probiotics
+// consensus statement, "Probiotics and prebiotics in intestinal health and
+// disease", two coffee/cardiovascular meta-analyses — and they fail only
+// because the literature writes "intestinal health" where the claim says "gut
+// health", and "cardiovascular" where it says "heart". A loose outcome token is
+// what absorbs that vocabulary gap. It does not admit noise on its own either:
+// IsPICORelevant is an AND over the two sides, so the intervention token
+// ("probi", "coffe") still does the filtering.
+//
+// What this measurement does NOT establish: the archived corpora hold only works
+// that SURVIVED the gate, so the price of tightening is measured while the
+// benefit — how much noise the loose token lets in — is not. That asymmetry is
+// why this note records a decision rather than an optimum.
+//
 // Only used by PICOTokens. Do not use in claimSides or claimTokenStems — those
 // serve the stance classifier's pairing gate, which is calibrated on the current
 // stem-only behavior.
