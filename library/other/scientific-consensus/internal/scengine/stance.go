@@ -49,6 +49,12 @@ var (
 	claimHarmCues    = regexp.MustCompile(`(?i)\b(caus\w+|increas\w+ (the )?risk|rais\w+ (the )?risk|worsen\w*|lead\w* to|harm\w*|damag\w*|toxic\w*)`)
 	claimBenefitCues = regexp.MustCompile(`(?i)\b(improv\w+|reduc\w+ (the )?risk|lower\w* (the )?risk|prevent\w+|treat\w+|protect\w+|benefi\w+|enhanc\w+|alleviat\w+|boost\w*|cure\w*|effective\b)`)
 
+	// polarityVerbCues locates the split point in a claim for PICOTokens.
+	// Direction-neutral: fires on both harm and benefit verbs so the PICO
+	// gate activates for both claim directions. Used only by PICOTokens in
+	// pico.go — detectClaimDirection keeps using claimHarmCues/claimBenefitCues.
+	polarityVerbCues = regexp.MustCompile(`(?i)\b(caus|improv|reduc|increas|decreas|prevent|lower|rais|protect|worsen|treat|affect|promot|contribut|alleviat)\w*`)
+
 	// Direction cues for harm-asserting claims: generic comparatives whose
 	// surrounding scope must name the claim's content before they count (see
 	// positiveCueCounts), so "greater weight gain" ties to a weight-gain claim

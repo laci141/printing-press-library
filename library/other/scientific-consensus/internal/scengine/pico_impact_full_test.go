@@ -58,7 +58,7 @@ func mustLoadFullCorpus(t *testing.T, name string) corpusResult {
 // claimSides only matches claimHarmCues. These are the corpora where the
 // widened splitter would newly start excluding works, so they are where the
 // truncation correction matters most.
-var benefitCorpora = []string{"saffron", "melatonin", "meditation", "omega3", "vitamind", "probiotics"}
+var benefitCorpora = []string{"saffron", "melatonin", "meditation", "omega3", "vitamind", "probiotics", "vitaminc"}
 
 // TestPICOImpactFull is the headline measurement: the same widened-splitter
 // exclusion count computed on truncated vs untruncated abstracts. The truncated

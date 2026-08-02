@@ -62,9 +62,23 @@ var picoStopwords = map[string]struct{}{
 }
 
 // PICOTokens derives the intervention and outcome token lists for the gate from
-// a claim, reusing the same claimSides split that the stance classifier's
-// pairing gate uses — so the gate and the classifier never disagree about which
-// side of the claim is which.
+// a claim, splitting it around its polarity verb: the content tokens before the
+// verb name the intervention, the ones after it name the outcome.
+//
+// The split point comes from polarityVerbCues, NOT from claimSides. claimSides
+// locates the verb with claimHarmCues, which only fires on harm verbs (caus,
+// worsen, rais). A benefit-asserting claim ("vitamin C prevents the common
+// cold") therefore produced no split at all, and PICOTokens returned nil — so
+// the gate silently bypassed itself for every benefit claim. Measured on the
+// vitaminc corpus: 27% of works leaked through, carrying 47% of the corpus
+// citations, including vitamin D, vitamin A and vitamin K papers voting on a
+// vitamin C claim. polarityVerbCues is direction-neutral: the gate only needs
+// to know WHERE the claim splits, not which way it points.
+//
+// detectClaimDirection is unaffected — it keeps using claimHarmCues and
+// claimBenefitCues, so the stance classifier's harm/benefit branching is
+// unchanged. So is claimSides itself, which stays calibrated for the harm
+// pairing gate in classifyAgainstHarmClaim.
 //
 // Every content token of each side is returned, not just the first: within a
 // side the gate is an OR, so more tokens mean more ways for a paper to name
@@ -76,7 +90,13 @@ var picoStopwords = map[string]struct{}{
 // Returns empty slices when the claim cannot be split, which callers must treat
 // as "bypass the gate".
 func PICOTokens(claim string) (ivTokens, outTokens []string) {
-	intervention, outcome := claimSides(claim)
+	lc := strings.ToLower(claim)
+	loc := polarityVerbCues.FindStringIndex(lc)
+	if loc == nil {
+		return nil, nil
+	}
+	intervention := stemTokens(ClaimContentTokens(lc[:loc[0]]))
+	outcome := stemTokens(ClaimContentTokens(lc[loc[1]:]))
 	if len(intervention) == 0 || len(outcome) == 0 {
 		return nil, nil
 	}
