@@ -72,6 +72,15 @@ type consensusOutput struct {
 	// bypasses itself rather than filtering blind. TestPICOGateSplitsBenefitClaims
 	// pins that this is no longer the ordinary case for benefit claims.
 	PICOExcluded int `json:"pico_excluded"`
+	// DuplicateExcluded is how many works were dropped as superseded editions
+	// of a work already in the corpus (Cochrane .pubN republications).
+	//
+	// Measured on the vitamin C corpus 2026-08-03: of 9 works surviving the
+	// gates, 4 were the same review CD000980 (.pub4 2013, .pub3 2007, .pub2
+	// 2004, original 1998). One review cast 44% of the votes and, because
+	// Consensus() weights by citations, carried its authority in four times
+	// over. A zero here means the corpus held no multi-edition families.
+	DuplicateExcluded int `json:"duplicate_excluded"`
 	// RelevantCount is how many fetched works survived BOTH relevance gates and
 	// therefore entered scoring. It is the input to the low-evidence safety
 	// guard, and consumers need it to judge how thin the corpus was.
@@ -89,7 +98,7 @@ type consensusOutput struct {
 	// Together with the fields above this makes the whole pipeline checkable
 	// arithmetic rather than prose:
 	//
-	//	fetched_count  = relevance_excluded + pico_excluded + relevant_count
+	//	fetched_count  = relevance_excluded + pico_excluded + duplicate_excluded + relevant_count
 	//	relevant_count = retracted_excluded + study_count
 	//
 	// gateLedger.consistent enforces both, and a run that violates either says
@@ -164,6 +173,10 @@ type gateLedger struct {
 	// claim could not be split, which is when the gate does not run at all.
 	picoExcluded    int
 	picoIV, picoOut []string
+	// dedupe carries the version-collapse accounting: how many superseded
+	// editions were dropped and which families they came from. Unlike backfill
+	// this one DOES remove works, so it takes part in consistent() below.
+	dedupe dedupeReport
 	// relevantCount is the corpus size after both gates: the set that reaches
 	// scoring.
 	relevantCount int
@@ -174,14 +187,14 @@ type gateLedger struct {
 
 // consistent reports whether the ledger adds up. Both chains must hold:
 //
-//	fetched        = relevance_excluded + pico_excluded + relevant_count
+//	fetched        = relevance_excluded + pico_excluded + duplicate_excluded + relevant_count
 //	relevant_count = retracted_excluded + study_count
 //
 // The second is the invariant the retraction gate introduced; the first is its
-// counterpart for the two relevance gates, and is what makes a 17-work exclusion
-// verifiable instead of merely stated.
+// counterpart for the relevance gates and the version dedupe, and is what makes
+// a 17-work exclusion verifiable instead of merely stated.
 func (g gateLedger) consistent() bool {
-	return g.relevance.Fetched == g.relevance.Excluded+g.picoExcluded+g.relevantCount &&
+	return g.relevance.Fetched == g.relevance.Excluded+g.picoExcluded+g.dedupe.Excluded+g.relevantCount &&
 		g.relevantCount == g.retractedExcluded+g.studyCount
 }
 
@@ -214,6 +227,12 @@ func gateNotes(g gateLedger) []string {
 			g.picoExcluded, g.picoIV, g.picoOut))
 	}
 
+	if g.dedupe.Excluded > 0 {
+		out = append(out, fmt.Sprintf(
+			"%d superseded edition(s) collapsed: newest edition kept, citations NOT summed [%s]",
+			g.dedupe.Excluded, strings.Join(g.dedupe.Families, "; ")))
+	}
+
 	if g.retractedExcluded > 0 {
 		out = append(out, fmt.Sprintf(
 			"%d retracted work(s) excluded from the score (still listed in all_studies)",
@@ -222,8 +241,8 @@ func gateNotes(g gateLedger) []string {
 
 	if !g.consistent() {
 		out = append(out, fmt.Sprintf(
-			"WARNING: exclusion accounting does not add up (fetched %d; relevance %d + pico %d + relevant %d; relevant %d = retracted %d + scored %d) — treat the counts as unreliable",
-			g.relevance.Fetched, g.relevance.Excluded, g.picoExcluded, g.relevantCount,
+			"WARNING: exclusion accounting does not add up (fetched %d; relevance %d + pico %d + duplicate %d + relevant %d; relevant %d = retracted %d + scored %d) — treat the counts as unreliable",
+			g.relevance.Fetched, g.relevance.Excluded, g.picoExcluded, g.dedupe.Excluded, g.relevantCount,
 			g.relevantCount, g.retractedExcluded, g.studyCount))
 	}
 
@@ -349,6 +368,13 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 			}
 			picoDropped := len(works) - len(picoRelevant)
 			works = picoRelevant
+
+			// Version dedupe. Runs after both relevance gates so its count is a
+			// property of the corpus that survived them, and before
+			// relevantCount so the number entering scoring and the low-evidence
+			// guard is a count of distinct works rather than of editions.
+			works, dedupeRep := dedupeVersions(works)
+
 			// relevantCount is the post-gate corpus size — exactly the set that
 			// reaches scoring, and the input to the low-evidence safety guard.
 			relevantCount := len(works)
@@ -359,6 +385,7 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 				picoExcluded:  picoDropped,
 				picoIV:        ivTokens,
 				picoOut:       outTokens,
+				dedupe:        dedupeRep,
 				relevantCount: relevantCount,
 			}
 
@@ -385,6 +412,7 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 					FetchedCount:      relReport.Fetched,
 					RelevanceExcluded: relReport.Excluded,
 					PICOExcluded:      picoDropped,
+					DuplicateExcluded: dedupeRep.Excluded,
 					RelevantCount:     0,
 					EvidenceGuarded:   true,
 					TopSupporting:     []workBrief{},
@@ -455,6 +483,7 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 				FetchedCount:      relReport.Fetched,
 				RelevanceExcluded: relReport.Excluded,
 				PICOExcluded:      picoDropped,
+				DuplicateExcluded: dedupeRep.Excluded,
 				RelevantCount:     relevantCount,
 				NearUnanimous:     result.NearUnanimous,
 				EvidenceGuarded:   evidenceGuarded,
@@ -612,8 +641,8 @@ func renderConsensus(w io.Writer, o consensusOutput) {
 	// studies analyzed" without being told that 17 were removed first is being
 	// shown a filtered corpus as if it were the whole one.
 	if o.FetchedCount > 0 && o.FetchedCount != o.RelevantCount {
-		fmt.Fprintf(w, "  Works fetched:     %d  (relevance gate removed %d, PICO gate %d)\n",
-			o.FetchedCount, o.RelevanceExcluded, o.PICOExcluded)
+		fmt.Fprintf(w, "  Works fetched:     %d  (relevance gate removed %d, PICO gate %d, duplicate editions %d)\n",
+			o.FetchedCount, o.RelevanceExcluded, o.PICOExcluded, o.DuplicateExcluded)
 	}
 	if o.RetractedExcluded > 0 {
 		fmt.Fprintf(w, "  ⚠ Retracted:       %d work(s) excluded from the score\n", o.RetractedExcluded)
