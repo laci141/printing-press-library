@@ -280,11 +280,43 @@ func classifyAgainstHarmClaim(hay, claim string) (Stance, float64) {
 			neg++
 		}
 	}
-	// A reported benefit contradicts a harm claim. "increas*" support matches
-	// are direction-ambiguous here and already handled by directionUpCues.
-	for _, m := range supportCues.FindAllString(hay, -1) {
-		if strings.Contains(m, "increas") {
+	// A reported benefit contradicts a harm claim — but only a benefit
+	// reported ABOUT THIS CLAIM. The cue must sit in the same sentence-clipped
+	// window as both claim sides, the gate positiveCueCounts already applies
+	// on the other side of the ledger.
+	//
+	// Measured 2026-08-05 on "HPV vaccine causes infertility": a Tanzanian
+	// vaccine-uptake study and a scoping review of religious beliefs both
+	// scored refuting at 0.90. Neither says anything about infertility. Both
+	// contain "effective HPV vaccines" as background, and every such word was
+	// counted as evidence against the claim. The cue was about cervical cancer
+	// prevention; nothing asked what it was about.
+	//
+	// Measured across the 6 archived harm corpora (the 7 benefit ones never
+	// reach this branch): support-as-negative drops 78 to 6, and 22 works
+	// change stance. Every flip shown in the probe moves a background or
+	// review paper from refuting to inconclusive — "Epidemiology of primary
+	// brain tumors", "The Genetics of Autism", "Cancer is a Preventable
+	// Disease" — which is the honest label for a work that does not address
+	// the claim. The refuting majority survives everywhere it was correct:
+	// vaccines 17 to 14 against 1 supporting, coffee 6 to 4, redmeat 4 to 2.
+	//
+	// cellphones moves most, 14 refuting to 7 with inconclusive rising from
+	// 11 to 18 of 31. That corpus was carried by works that merely mention
+	// mobile phones and cancer in the same abstract, and this change makes
+	// that visible instead of scoring it.
+	//
+	// "increas*" matches stay excluded here: they are direction-ambiguous and
+	// directionUpCues already handles them.
+	for _, loc := range supportCues.FindAllStringIndex(hay, -1) {
+		if strings.Contains(hay[loc[0]:loc[1]], "increas") {
 			continue
+		}
+		if paired {
+			sentStart, sentEnd := sentenceBounds(hay, loc[0])
+			if !pairInScope(hay, cueSpan{start: loc[0], end: loc[1]}, sentStart, sentEnd, intervention, outcome) {
+				continue
+			}
 		}
 		neg++
 	}
