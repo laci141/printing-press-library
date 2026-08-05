@@ -127,10 +127,27 @@ func verdict(r ConsensusResult, directional int) Verdict {
 		return VerdictMixed
 	case r.ConsensusScore > -0.15 && r.ConsensusScore < 0.15:
 		return VerdictInconclusive
-	case r.ConsensusScore > 0:
-		return VerdictSupports
 	default:
-		return VerdictRefutes
+		// 0.15..0.40 either way. The switch already answered "which
+		// direction"; this band answers "is the direction worth a
+		// headline", and the answer is no. A reader takes the direction
+		// from the headline, so a 0.27 corpus labelled evidence-supports
+		// reads the same as a 0.95 one.
+		//
+		// Measured live 2026-08-05: "vitamin C prevents the common cold"
+		// scored 0.27 with 4 supporting, 1 refuting, 1 mixed and 2
+		// inconclusive, and printed evidence-supports above it. The AI
+		// synthesis said mixed on the same screen and the divergence
+		// warning fired — three signals disagreeing on one result.
+		//
+		// No archived corpus moves: all 38 scores are 0.62 or stronger in
+		// one direction, the narrowest being -0.62 and 0.65. That gap is
+		// itself an artifact of the fulltext search, which crowded a
+		// corpus into agreement with itself. The narrowed search shipped
+		// today is what starts filling this band — vitamin C 0.27,
+		// creatine 0.59 — so the band is empty in the archive and will
+		// not stay empty in production.
+		return VerdictMixed
 	}
 }
 
