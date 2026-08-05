@@ -90,8 +90,8 @@ func PICOTokens(claim string) (ivTokens, outTokens []string) {
 	if loc == nil {
 		return nil, nil
 	}
-	intervention := picoSideTokens(lc[:loc[0]])
-	outcome := picoSideTokens(lc[loc[1]:])
+	intervention := picoSideTokens(lc[:loc[0]], true)
+	outcome := picoSideTokens(lc[loc[1]:], false)
 	if len(intervention) == 0 || len(outcome) == 0 {
 		return nil, nil
 	}
@@ -142,10 +142,25 @@ func PICOTokens(claim string) (ivTokens, outTokens []string) {
 // Only used by PICOTokens. Do not use in claimSides or claimTokenStems — those
 // serve the stance classifier's pairing gate, which is calibrated on the current
 // stem-only behavior.
-func picoSideTokens(s string) []string {
+// forwardGlue, when true, holds a leading short qualifier and attaches it to
+// the NEXT content token instead of dropping it. PICOTokens passes true for the
+// intervention side and false for the outcome side. The asymmetry is measured,
+// not stylistic: on the intervention side a short qualifier IDENTIFIES the
+// thing ("HPV vaccine" is not "vaccine", "IUD" is not anything else), while on
+// the outcome side it NARROWS it ("gut health" is a subset of "health"), and
+// the literature routinely writes the outcome differently from the claim.
+//
+// Measured 2026-08-05 across all 13 archived full corpora: forward-gluing the
+// intervention side left 11 corpora byte-identical and moved redmeat only,
+// 214 works kept to 212 — one work, counted twice because redmeat has two
+// archived runs. Applying the same rule to the OUTCOME side would reverse the
+// 2026-08-02 decision recorded above, where "gut health" excluded 7 of 9
+// probiotics works against 2 of 9 for "healt".
+func picoSideTokens(s string, forwardGlue bool) []string {
 	raw := claimTokenSplit.Split(strings.ToLower(s), -1)
 	out := make([]string, 0, len(raw))
 	isGlued := make([]bool, 0, len(raw))
+	pending := ""
 
 	for _, tok := range raw {
 		if tok == "" {
@@ -158,11 +173,17 @@ func picoSideTokens(s string) []string {
 			// Glue alphabetic short qualifiers to the preceding token only.
 			// "vitamin C" → "vitamin c"; "omega 3" skipped (numeric cannot
 			// bridge the hyphen in "omega-3" via strings.Contains).
-			if isAlphaOnly(tok) && len(out) > 0 {
+			if isAlphaOnly(tok) && len(out) > 0 && pending == "" {
 				out[len(out)-1] = out[len(out)-1] + " " + tok
 				isGlued[len(isGlued)-1] = true
+				continue
 			}
-			// No preceding token, or numeric: drop.
+			// Nothing before it: hold it for the next content token when
+			// forward-gluing, otherwise drop it as before.
+			if isAlphaOnly(tok) && forwardGlue && pending == "" {
+				pending = tok
+			}
+			// Numeric, or backward-only mode with nothing before it: drop.
 			continue
 		}
 		if _, stop := claimStopwords[tok]; stop {
@@ -171,8 +192,22 @@ func picoSideTokens(s string) []string {
 		if hasPolarityPrefix(tok) {
 			continue
 		}
+		if pending != "" {
+			out = append(out, pending+" "+tok)
+			isGlued = append(isGlued, true)
+			pending = ""
+			continue
+		}
 		out = append(out, tok)
 		isGlued = append(isGlued, false)
+	}
+
+	// A held qualifier with no content token after it is the whole side:
+	// "IUD causes infertility" would otherwise return an empty list, and an
+	// empty list is the caller's signal to bypass the gate entirely.
+	if pending != "" {
+		out = append(out, pending)
+		isGlued = append(isGlued, true)
 	}
 
 	// Stem non-glued tokens only. Glued phrases like "vitamin c" are used
