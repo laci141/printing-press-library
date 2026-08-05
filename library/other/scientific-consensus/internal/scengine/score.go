@@ -230,9 +230,9 @@ func nearUnanimous(r ConsensusResult) bool {
 // EvidenceStrength label.
 const LowEvidenceThreshold = 5
 
-// ApplyLowEvidenceGuard downgrades EvidenceStrength to StrengthInsufficient
-// when stance classification ran WITHOUT an LLM and too few relevant studies
-// survived the relevance gate.
+// ApplyLowEvidenceGuard neutralises the two headline labels — EvidenceStrength
+// and Verdict — when stance classification ran WITHOUT an LLM and too few
+// relevant studies survived the relevance gate.
 //
 // Rationale (the vaccines/autism run): with no LLM the only relevance filter is
 // lexical, so a handful of off-topic papers can carry a false claim to a
@@ -241,10 +241,19 @@ const LowEvidenceThreshold = 5
 // is wrong — so design quality must not be allowed to certify a corpus this
 // thin. Correctness must not depend on the LLM being reachable.
 //
+// The verdict is downgraded alongside the strength because the headline is
+// louder than the footnote. Measured on "HPV vaccine causes infertility"
+// (keyless, limit 20): one refuting work out of three relevant ones produced a
+// perfect -1.00 and still printed "evidence-refutes", with "insufficient"
+// underneath it in smaller type. A reader takes the direction from the
+// headline, so downgrading only the badge left the wrong claim standing.
+//
+// ConsensusScore and Confidence are deliberately still untouched: they are a
+// reproducible heuristic, and blanking them would destroy the record of which
+// way the thin evidence pointed.
+//
 // method is the stance_method string ("heuristic" or "llm:<provider>");
-// relevantCount is the number of works remaining after filterRelevant. Verdict,
-// ConsensusScore, and Confidence are deliberately left untouched — this guard
-// is a labelling safeguard, not a change to the scoring math.
+// relevantCount is the number of works remaining after filterRelevant.
 func ApplyLowEvidenceGuard(r ConsensusResult, method string, relevantCount int) ConsensusResult {
 	if strings.HasPrefix(method, "llm:") {
 		return r // an LLM vetted relevance; the ladder is trustworthy
@@ -253,6 +262,7 @@ func ApplyLowEvidenceGuard(r ConsensusResult, method string, relevantCount int) 
 		return r
 	}
 	r.EvidenceStrength = StrengthInsufficient
+	r.Verdict = VerdictInsufficient
 	return r
 }
 
