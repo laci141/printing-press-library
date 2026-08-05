@@ -133,6 +133,7 @@ func fetchWorks(ctx context.Context, c apiGetter, search, filter, sortBy string,
 		if title == "" {
 			title = w.DisplayName
 		}
+		title = cleanMarkupText(title)
 		sw := scWork{
 			ID:       w.ID,
 			DOI:      strings.TrimPrefix(w.DOI, "https://doi.org/"),
