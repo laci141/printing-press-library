@@ -27,11 +27,12 @@ import (
 // narrowSearchEnabled reports whether to send the claim as a
 // title_and_abstract.search filter instead of the fulltext ?search= parameter.
 //
-// Off unless SC_NARROW_SEARCH=1. This is an A/B switch, matching the shape of
-// the SC_NO_ABSTRACT_BACKFILL measurement from 2026-08-03: one binary, one
-// environment variable, two corpora that differ in exactly one input.
+// ON by default since 2026-08-05. Set SC_NARROW_SEARCH=0 to restore the old
+// fulltext path. The escape hatch stays because fifteen claims are not the
+// whole literature, and a claim whose words live only in an article's body
+// would fetch less under narrowing than it does today.
 func narrowSearchEnabled() bool {
-	return os.Getenv("SC_NARROW_SEARCH") == "1"
+	return os.Getenv("SC_NARROW_SEARCH") != "0"
 }
 
 // searchStopwords are dropped from the narrowed query. The polarity verbs go

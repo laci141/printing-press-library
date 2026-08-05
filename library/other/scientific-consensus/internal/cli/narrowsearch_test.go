@@ -68,21 +68,21 @@ func TestBuildNarrowedSearch(t *testing.T) {
 	}
 }
 
-func TestNarrowSearchDefaultsOff(t *testing.T) {
+func TestNarrowSearchDefaultsOn(t *testing.T) {
 	t.Setenv("SC_NARROW_SEARCH", "")
-	if narrowSearchEnabled() {
-		t.Fatal("narrowed search must be off unless SC_NARROW_SEARCH=1")
-	}
-	t.Setenv("SC_NARROW_SEARCH", "0")
-	if narrowSearchEnabled() {
-		t.Fatal("SC_NARROW_SEARCH=0 must not enable narrowing")
-	}
-	t.Setenv("SC_NARROW_SEARCH", "true")
-	if narrowSearchEnabled() {
-		t.Fatal("only the exact value 1 enables narrowing")
+	if !narrowSearchEnabled() {
+		t.Fatal("narrowed search must be on when the variable is unset")
 	}
 	t.Setenv("SC_NARROW_SEARCH", "1")
 	if !narrowSearchEnabled() {
-		t.Fatal("SC_NARROW_SEARCH=1 must enable narrowing")
+		t.Fatal("SC_NARROW_SEARCH=1 must keep narrowing on")
+	}
+	t.Setenv("SC_NARROW_SEARCH", "0")
+	if narrowSearchEnabled() {
+		t.Fatal("SC_NARROW_SEARCH=0 is the escape hatch and must disable narrowing")
+	}
+	t.Setenv("SC_NARROW_SEARCH", "false")
+	if !narrowSearchEnabled() {
+		t.Fatal("only the exact value 0 disables narrowing")
 	}
 }
