@@ -136,15 +136,33 @@ func newNovelControversiesCmd(flags *rootFlags) *cobra.Command {
 				}
 			}
 			directional := out.Supporting + out.Refuting
+			minor := out.Supporting
+			if out.Refuting < minor {
+				minor = out.Refuting
+			}
 			if directional > 0 {
-				minor := out.Supporting
-				if out.Refuting < minor {
-					minor = out.Refuting
-				}
 				// 2*minority/total => 1.0 when evenly split, 0 when one-sided.
 				out.ControversyScore = round2f(2 * float64(minor) / float64(directional))
 			}
-			out.Contested = out.ControversyScore >= 0.5 && directional >= 4
+			// A minority of one is not a controversy. Measured 2026-08-05 on
+			// "HPV vaccine causes infertility": supporting 1, refuting 3, so
+			// 2*1/4 lands exactly on 0.5 and directional lands exactly on 4 —
+			// both thresholds met at their boundary by a single work, and that
+			// work was the social-media sentiment study the AI filter then
+			// excluded as off-topic. One misclassification was enough to label
+			// a settled question contested, on the one topic where that label
+			// does real harm.
+			//
+			// Measured across 8 live harm claims: this changes HPV only. cell
+			// phones (2/3), aspartame (3/2) and red meat (4/4) all keep
+			// contested; vaccines/autism (1/6), statins (1/5) and 5G (0/6)
+			// were already false. Across the 12 archived corpora it changes
+			// nothing at all — no archived corpus has a minority of exactly
+			// one above the score threshold.
+			//
+			// Two is the floor rather than three because redmeat sits at 5/2
+			// and is genuinely contested; a floor of three would erase it.
+			out.Contested = out.ControversyScore >= 0.5 && directional >= 4 && minor >= 2
 
 			out.SupportingSide = topByStance(stances, scengine.StanceSupporting, 3)
 			out.RefutingSide = topByStance(stances, scengine.StanceRefuting, 3)
