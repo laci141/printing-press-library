@@ -4,6 +4,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/mvanhorn/printing-press-library/library/other/scientific-consensus/internal/scengine"
 	"github.com/spf13/cobra"
@@ -19,7 +20,17 @@ type controversyOutput struct {
 	Contested        bool        `json:"contested"`
 	SupportingSide   []workBrief `json:"supporting_side"`
 	RefutingSide     []workBrief `json:"refuting_side"`
-	Note             string      `json:"note,omitempty"`
+
+	// Exclusion ledger. fetched is what OpenAlex returned; the three counts
+	// and StudyCount must sum back to it, so a reader can audit where every
+	// work went instead of wondering why 10 became 3.
+	Fetched           int      `json:"fetched"`
+	RelevanceExcluded int      `json:"relevance_excluded"`
+	PICOExcluded      int      `json:"pico_excluded"`
+	DuplicateExcluded int      `json:"duplicate_excluded"`
+	DuplicateFamilies []string `json:"duplicate_families,omitempty"`
+
+	Note string `json:"note,omitempty"`
 }
 
 func newNovelControversiesCmd(flags *rootFlags) *cobra.Command {
@@ -52,10 +63,52 @@ func newNovelControversiesCmd(flags *rootFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			works, _, err := fetchWorks(ctx, c, query, "", "relevance_score:desc", limit)
+
+			// Same narrowing switch as consensus. Measured 2026-08-05: the
+			// fulltext path returns works that merely mention the terms
+			// somewhere in the body, and this command classifies stance, so
+			// an off-topic work does not just pad a count — it votes.
+			search := query
+			filter := ""
+			if narrowSearchEnabled() {
+				if narrowed := buildNarrowedSearch(query); narrowed != "" {
+					filter = "title_and_abstract.search:" + narrowed
+					search = ""
+				}
+			}
+			works, _, err := fetchWorks(ctx, c, search, filter, "relevance_score:desc", limit)
 			if err != nil {
 				return classifyAPIError(err, flags)
 			}
+			fetched := len(works)
+
+			// The four gates below are the consensus pipeline, in the same
+			// order and with the same calls. Measured 2026-08-05 on "HPV
+			// vaccine causes infertility": with no gates at all, this command
+			// classified a study of vaccine ACCEPTABILITY in Kenya and a study
+			// of HPV INFECTION and sperm as refuting at 0.90 confidence each.
+			// Only the AI filter caught them, and the AI is optional.
+			//
+			// Two commands disagreeing about which works count is worse than
+			// no gate at all, which is why this is a copy of the pipeline
+			// rather than a variation on it.
+			backfillAbstracts(ctx, query, works)
+
+			works, relReport := filterRelevantReport(query, works)
+			relevanceExcluded := fetched - len(works)
+
+			ivTokens, outTokens := scengine.PICOTokens(query)
+			picoRelevant := make([]scWork, 0, len(works))
+			for _, w := range works {
+				if scengine.IsPICORelevant(w.Abstract, w.Title, ivTokens, outTokens) {
+					picoRelevant = append(picoRelevant, w)
+				}
+			}
+			picoExcluded := len(works) - len(picoRelevant)
+			works = picoRelevant
+
+			works, dedupeRep := dedupeVersions(works)
+
 			if enrich {
 				enrichPubTypes(ctx, works, 50)
 			}
@@ -64,7 +117,14 @@ func newNovelControversiesCmd(flags *rootFlags) *cobra.Command {
 			_, stances := scoreWorks(ctx, works, query)
 			prog.done()
 
-			out := controversyOutput{Query: query, StudyCount: len(works)}
+			out := controversyOutput{
+				Query:             query,
+				StudyCount:        len(works),
+				Fetched:           fetched,
+				RelevanceExcluded: relevanceExcluded,
+				PICOExcluded:      picoExcluded,
+				DuplicateExcluded: dedupeRep.Excluded,
+			}
 			for _, s := range stances {
 				switch s.Stance {
 				case scengine.StanceSupporting:
@@ -85,19 +145,48 @@ func newNovelControversiesCmd(flags *rootFlags) *cobra.Command {
 				out.ControversyScore = round2f(2 * float64(minor) / float64(directional))
 			}
 			out.Contested = out.ControversyScore >= 0.5 && directional >= 4
+
 			out.SupportingSide = topByStance(stances, scengine.StanceSupporting, 3)
 			out.RefutingSide = topByStance(stances, scengine.StanceRefuting, 3)
-			if len(works) == 0 {
-				out.Note = "no works found; try a broader query"
-			} else if directional < 4 {
-				out.Note = "too few directional studies to assess controversy reliably"
-			}
+
+			out.Note = controversyNote(out, relReport)
+
 			return emit(cmd, flags, out, func(w io.Writer) { renderControversy(w, out) })
 		},
 	}
 	cmd.Flags().IntVar(&limit, "limit", 50, "number of works to analyze (max 200)")
 	cmd.Flags().BoolVar(&enrich, "enrich", true, "enrich classification with PubMed publication types")
 	return cmd
+}
+
+// controversyNote states what the gates removed and whether the surviving
+// corpus can carry a controversy verdict at all.
+//
+// The exclusion sentence comes first and is unconditional whenever anything
+// was dropped. A reader who sees "Studies: 3" after asking for 10 is owed the
+// reason in the same breath, not in a separate panel they may not open.
+func controversyNote(o controversyOutput, rel relevanceReport) string {
+	var parts []string
+
+	excluded := o.RelevanceExcluded + o.PICOExcluded + o.DuplicateExcluded
+	if excluded > 0 {
+		parts = append(parts, fmt.Sprintf(
+			"%d of %d fetched works excluded before scoring (%d off-topic, %d failed the intervention/outcome gate, %d superseded editions)",
+			excluded, o.Fetched, o.RelevanceExcluded, o.PICOExcluded, o.DuplicateExcluded))
+	}
+	if len(o.DuplicateFamilies) > 0 {
+		parts = append(parts, "collapsed editions: "+strings.Join(o.DuplicateFamilies, "; "))
+	}
+
+	directional := o.Supporting + o.Refuting
+	switch {
+	case o.StudyCount == 0:
+		parts = append(parts, "no works survived the relevance gates; try a broader query")
+	case directional < 4:
+		parts = append(parts, "too few directional studies to assess controversy reliably")
+	}
+
+	return strings.Join(parts, "; ")
 }
 
 func renderControversy(w io.Writer, o controversyOutput) {
@@ -107,7 +196,12 @@ func renderControversy(w io.Writer, o controversyOutput) {
 		verdict = "CONTESTED"
 	}
 	fmt.Fprintf(w, "  Controversy score: %.2f  (%s)\n", o.ControversyScore, verdict)
-	fmt.Fprintf(w, "  Studies: %d  (support %d / refute %d / mixed %d)\n\n", o.StudyCount, o.Supporting, o.Refuting, o.Mixed)
+	fmt.Fprintf(w, "  Studies: %d  (support %d / refute %d / mixed %d)\n", o.StudyCount, o.Supporting, o.Refuting, o.Mixed)
+	if o.Fetched != o.StudyCount {
+		fmt.Fprintf(w, "  Fetched %d, excluded %d off-topic / %d PICO / %d duplicate\n",
+			o.Fetched, o.RelevanceExcluded, o.PICOExcluded, o.DuplicateExcluded)
+	}
+	fmt.Fprintln(w)
 	if len(o.SupportingSide) > 0 {
 		fmt.Fprintln(w, "  Supporting side:")
 		for _, b := range o.SupportingSide {
