@@ -330,7 +330,22 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 			if yearFrom > 0 {
 				filter = fmt.Sprintf("from_publication_date:%d-01-01", yearFrom)
 			}
-			works, _, err := fetchWorks(ctx, c, claim, filter, "relevance_score:desc", limit)
+			// A/B switch, default off: send the claim as a
+			// title_and_abstract.search filter instead of the fulltext
+			// ?search= parameter. Falls back to the old path when the
+			// claim reduces to nothing, because an empty
+			// title_and_abstract.search matches every work in OpenAlex.
+			search := claim
+			if narrowSearchEnabled() {
+				if narrowed := buildNarrowedSearch(claim); narrowed != "" {
+					if filter != "" {
+						filter += ","
+					}
+					filter += "title_and_abstract.search:" + narrowed
+					search = ""
+				}
+			}
+			works, _, err := fetchWorks(ctx, c, search, filter, "relevance_score:desc", limit)
 			if err != nil {
 				return classifyAPIError(err, flags)
 			}
