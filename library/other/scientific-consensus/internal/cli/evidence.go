@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"strings"
 
 	"github.com/mvanhorn/printing-press-library/library/other/scientific-consensus/internal/scengine"
 	"github.com/spf13/cobra"
@@ -67,6 +68,25 @@ func newNovelEvidenceCmd(flags *rootFlags) *cobra.Command {
 			if err != nil {
 				return classifyAPIError(err, flags)
 			}
+
+			// Version dedupe before classification. Every number this command
+			// prints is a count over the corpus: the pyramid percentages, the
+			// study count, the apex design. A Cochrane family of four editions
+			// would put four bars where one belongs, and the percentages
+			// underneath would be computed against an inflated denominator.
+			// Measured 2026-08-03 on vitamin C: 9 works, 6 distinct.
+			//
+			// Runs before enrichPubTypes so dropped editions cost no PubMed
+			// lookups, and before the exemplar map is built so each level's
+			// example names a work that survived.
+			//
+			// The relevance and PICO gates are deliberately NOT copied here.
+			// This command counts designs rather than assigning stances, so an
+			// off-topic work distorts a count instead of casting a vote, and
+			// the UI already states that no AI filtering ran. Duplicates are
+			// the one defect that corrupts a pure count.
+			works, dedupeRep := dedupeVersions(works)
+
 			if enrich {
 				enrichPubTypes(ctx, works, 50)
 			}
@@ -103,6 +123,9 @@ func newNovelEvidenceCmd(flags *rootFlags) *cobra.Command {
 			}
 			if len(works) == 0 {
 				out.Note = "no works found; try a broader query or --data-source live"
+			} else if dedupeRep.Excluded > 0 {
+				out.Note = fmt.Sprintf("%d superseded edition(s) collapsed before counting: %s",
+					dedupeRep.Excluded, strings.Join(dedupeRep.Families, "; "))
 			}
 			return emit(cmd, flags, out, func(w io.Writer) { renderEvidence(w, out) })
 		},

@@ -78,10 +78,28 @@ func newNovelGapsCmd(flags *rootFlags) *cobra.Command {
 			if err != nil {
 				return classifyAPIError(err, flags)
 			}
+
+			// Version dedupe before anything counts the corpus. A Cochrane
+			// family of four editions would otherwise report four works, and
+			// every number this command prints — Analyzed, the latest year,
+			// the design mix behind HasRCT — is a count over that corpus.
+			// Measured 2026-08-03 on vitamin C: 9 works, 6 distinct.
+			//
+			// The relevance and PICO gates are deliberately NOT copied here.
+			// This command reports gaps rather than a stance, so an off-topic
+			// work distorts a count instead of casting a vote, and the UI
+			// already states that no AI filtering ran. Duplicates are the one
+			// defect that corrupts a pure count.
+			works, dedupeRep := dedupeVersions(works)
+
 			out := gapsOutput{Query: query, TotalMatches: total, Analyzed: len(works)}
 			if len(works) == 0 {
 				out.Note = "no works found; this topic itself may be a gap, or the query is too narrow"
 				return emit(cmd, flags, out, func(w io.Writer) { renderGaps(w, out) })
+			}
+			if dedupeRep.Excluded > 0 {
+				out.Note = fmt.Sprintf("%d superseded edition(s) collapsed before counting: %s",
+					dedupeRep.Excluded, strings.Join(dedupeRep.Families, "; "))
 			}
 
 			enrichPubTypes(ctx, works, 50)
