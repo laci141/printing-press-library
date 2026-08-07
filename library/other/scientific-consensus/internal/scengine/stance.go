@@ -1,6 +1,7 @@
 package scengine
 
 import (
+	"math"
 	"regexp"
 	"sort"
 	"strings"
@@ -143,7 +144,8 @@ const (
 	// refutationConfidence is the confidence reported when an Option C cue
 	// decides the stance. It matches what a single dominant cue earns from
 	// confidenceFrom, so a decisive refutation is not scored as more certain
-	// than the counting path can justify.
+	// than the counting path can justify. The equality now holds exactly
+	// because the counting path rounds its result to two decimals.
 	refutationConfidence = 0.9
 )
 
@@ -655,5 +657,9 @@ func confidenceFrom(dominant, total int) float64 {
 	if conf > 0.95 {
 		conf = 0.95
 	}
-	return conf
+	// Round once, at the single exit: float64(dominant)/float64(total) leaks a
+	// long tail (0.8999999999999999, 0.7250000000000001) into the exported JSON.
+	// Confidence carries no meaning past two decimals; rounding intermediate
+	// steps instead would compound error rather than remove it.
+	return math.Round(conf*100) / 100
 }

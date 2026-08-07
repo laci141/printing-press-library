@@ -58,7 +58,9 @@ var retractedFixtures = []retractedFixture{
 		titlePrefix:  false,
 		openAlexFlag: true,
 		wantStance:   StanceSupporting,
-		wantConf:     0.8999999999999999,
+		// Was 0.8999999999999999 before confidenceFrom rounded its single exit
+		// to two decimals; the stance and the cue counts behind it are unchanged.
+		wantConf: 0.9,
 	},
 	{
 		name:  "covid_greenfoods_prefix_and_flag",
