@@ -21,7 +21,9 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -35,6 +37,9 @@ type Client struct {
 	NoCache    bool
 	cacheDir   string
 	limiter    *cliutil.AdaptiveLimiter
+
+	quotaMu     sync.Mutex
+	quotaWarned bool
 }
 
 // RequestBaseURL returns the base URL used for requests.
@@ -42,6 +47,59 @@ type Client struct {
 // concatenating c.BaseURL directly.
 func (c *Client) RequestBaseURL() string {
 	return c.BaseURL
+}
+
+// quotaWarnRequests is the remaining-request count below which warnLowQuota
+// speaks. OpenAlex answers every /works call with X-RateLimit-Limit: 1000 and
+// a matching X-RateLimit-Limit-USD: 0.1, and the quota is per IP, so a whole
+// deployment shares those thousand requests. Sized against the most expensive
+// single run this CLI performs: `citations` at its default --max-nodes 50
+// issues one seed lookup plus up to two neighbor calls per expanded node —
+// roughly a hundred requests. Below that the next graph run cannot finish,
+// while a `consensus` run (one /works call) still has ample headroom. Warning
+// any earlier would fire on budgets that are in no trouble: at 949 remaining
+// there is nothing for the reader to do.
+const quotaWarnRequests = 100
+
+// warnLowQuota reports a nearly exhausted per-IP request budget once per
+// client. It keys off the headers rather than the host because this client
+// also serves PubMed, Crossref and Europe PMC, none of which send them — a
+// host allowlist would drift as soon as another quota-metered API is added.
+// The warning matters because exhaustion surfaces as a 429 that the retry
+// path treats like a transient failure, yet X-RateLimit-Reset measures the
+// wait in hours (26641 seconds when measured), so no retry can succeed.
+func (c *Client) warnLowQuota(h http.Header) {
+	raw := h.Get("X-RateLimit-Remaining")
+	if raw == "" {
+		return
+	}
+	remaining, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil || remaining < 0 || remaining > quotaWarnRequests {
+		return
+	}
+
+	c.quotaMu.Lock()
+	defer c.quotaMu.Unlock()
+	if c.quotaWarned {
+		return
+	}
+	c.quotaWarned = true
+
+	reset := "unknown"
+	if secs, err := strconv.Atoi(strings.TrimSpace(h.Get("X-RateLimit-Reset"))); err == nil && secs > 0 {
+		// The header is raw seconds; a reader deciding whether to wait or stop
+		// needs hours.
+		reset = formatResetIn(time.Duration(secs) * time.Second)
+	}
+	fmt.Fprintf(os.Stderr, "quota nearly exhausted, %d requests remaining (shared per IP, resets in %s)\n", remaining, reset)
+}
+
+// formatResetIn renders a reset delay at the coarsest unit that stays honest.
+func formatResetIn(d time.Duration) string {
+	if d >= time.Hour {
+		return fmt.Sprintf("%.1fh", d.Hours())
+	}
+	return fmt.Sprintf("%.0fm", d.Minutes())
 }
 
 // APIError carries HTTP status information for structured exit codes.
@@ -542,6 +600,7 @@ func (c *Client) doInternal(ctx context.Context, method, path string, params map
 		// Success
 		if resp.StatusCode < 400 {
 			c.limiter.OnSuccess()
+			c.warnLowQuota(resp.Header)
 			if method != http.MethodGet && !c.DryRun {
 				c.invalidateCache()
 			}

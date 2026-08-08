@@ -1,0 +1,14 @@
+{
+  "schema_version": 2,
+  "id": "quota-headers-warn-before-the-unretryable-429",
+  "applied_at": "2026-08-08",
+  "base_run_id": "20260620-165352-e55cec69",
+  "base_printing_press_version": "4.24.0",
+  "summary": "A successful response that carries remaining-quota headers must warn once, before the budget runs out, when the remainder is small enough that the next run cannot finish. Detection is header-driven, never host-driven.",
+  "reason": "OpenAlex meters /works per IP (measured live: X-RateLimit-Limit 1000, X-RateLimit-Limit-USD 0.1, X-RateLimit-Reset 26641 seconds), so an entire deployment shares one budget. Exhaustion arrives as a 429 that the retry path treats like a transient failure, but the reset is hours away, so no retry can ever succeed and the caller cannot tell the two apart. The check keys off the headers being present and parseable rather than off the host, because this client also serves PubMed, Crossref and Europe PMC — a host allowlist would drift the moment another metered API is added, and those APIs must cost nothing and stay silent. A regen must preserve the header-driven condition, the warn-once-per-client behaviour (a long run would otherwise flood stderr), and a reset rendered in hours rather than raw seconds.",
+  "files": [
+    "internal/client/client.go",
+    "internal/client/client_quota_test.go"
+  ],
+  "validated_outcome": "Threshold set at 100 remaining requests, sized from the most expensive single run this CLI performs: `citations` at its default --max-nodes 50 issues one seed lookup plus up to two neighbour calls per expanded node, roughly a hundred requests, while a `consensus` run costs a single /works call. Below 100 the next graph run cannot complete; above it there is nothing for the reader to do (949 remaining is not news). go build/vet green, go test -count=1 ./... green."
+}
