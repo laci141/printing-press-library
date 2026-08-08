@@ -92,7 +92,15 @@ type openAlexWork struct {
 	} `json:"authorships"`
 }
 
-// defaultMailto is OpenAlex's polite-pool courtesy parameter.
+// defaultMailto identifies this client to OpenAlex. It no longer buys a
+// higher rate limit: OpenAlex replaced the polite pool with per-request USD
+// pricing in February 2026. Measured 2026-08-08 against the live API, the
+// same request with and without the parameter returns identical headers —
+// X-RateLimit-Limit 1000, X-RateLimit-Limit-USD 0.1, reset in about 7.4
+// hours — so the quota is per IP and every user of a deployment shares it.
+// The parameter stays because identifying the caller is still courteous and
+// costs nothing; it is kept here rather than removed so the next reader does
+// not add it back expecting the old benefit.
 const defaultMailto = "scientific-consensus-pp-cli@users.noreply.github.com"
 
 // fetchWorks queries OpenAlex /works and returns normalized works. search is the
