@@ -37,7 +37,20 @@ var (
 	increaseHarmContext = regexp.MustCompile(`(?i)\bincreas\w+\s+(the\s+|a\s+)?(risk|mortality|morbidity|incidence|harm\w*|adverse|complication\w*|death\w*|odds of)`)
 
 	// Null / no-effect cues.
-	nullCues = regexp.MustCompile(`(?i)\b(no (significant )?(association|effect|difference|benefit|evidence|impact|correlation)|not (significant\w*|associated|effective)|did not (significantly )?(improv|increas|reduc|affect|differ|change)|ineffective|no statistically significant|failed to|without (a )?(significant )?(effect|benefit)|null (result|effect|finding))`)
+	//
+	// "benefi\w*" rather than "benefit": a live keyless run of "homeopathy
+	// treats allergies" scored 0.99 evidence-supports, and the heaviest work
+	// voting the wrong way (weight 28.88 of 120.06 total — an RCT with 35
+	// citations, stance=supporting at confidence 0.90) is titled "No
+	// beneficial effect of isopathic prophylactic treatment for birch pollen
+	// allergy ...". The literal alternative missed it on one suffix. The
+	// preceding "no" is still required by the enclosing group, so
+	// "Beneficial effect of vitamin D on bone density" stays unmatched.
+	// Measured before shipping (nullcue_widen_probe_test.go): across all 14
+	// corpora in testdata/corpora_full, zero works gain a cue and zero
+	// stances flip — the only "no benefi..." occurrences on record are two
+	// literal "no benefit" hits in vitaminc, which matched already.
+	nullCues = regexp.MustCompile(`(?i)\b(no (significant )?(association|effect|difference|benefi\w*|evidence|impact|correlation)|not (significant\w*|associated|effective)|did not (significantly )?(improv|increas|reduc|affect|differ|change)|ineffective|no statistically significant|failed to|without (a )?(significant )?(effect|benefit)|null (result|effect|finding))`)
 
 	// Harm / negative-effect cues (treated as refuting an intervention claim).
 	harmCues = regexp.MustCompile(`(?i)\b(increas\w+ (the )?(risk|mortality|morbidity|incidence)|harmful|adverse (effect|event|outcome)|worsen\w*|associated with (a )?(higher|increas\w+|greater) (risk|mortality|incidence)|detrimental|toxic\w*|negative (effect|impact|association)|deteriorat\w+)`)

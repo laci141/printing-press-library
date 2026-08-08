@@ -1,0 +1,14 @@
+{
+  "schema_version": 2,
+  "id": "null-cues-must-catch-every-benefit-suffix-after-no",
+  "applied_at": "2026-08-08",
+  "base_run_id": "20260620-165352-e55cec69",
+  "base_printing_press_version": "4.24.0",
+  "summary": "A null finding negated with 'no' must be recognised whatever suffix follows the stem — 'no beneficial effect' is the same finding as 'no benefit', and a stance classifier that reads only the exact noun scores a paper as supporting the thing its own title says it did not do.",
+  "reason": "A live keyless run of 'homeopathy treats allergies' scored 0.99 evidence-supports because the heaviest work voting the wrong way (28.88 of 120.06 total weight — an RCT with 35 citations, stance=supporting at confidence 0.90) is titled 'No beneficial effect of isopathic prophylactic treatment for birch pollen allergy ...'. nullCues carried the literal alternative 'benefit', so one suffix hid a null result behind a supporting label. A regen must keep the stem widened and must keep the widening INSIDE the group that already requires a preceding 'no' — a bare benefi-stem cue would read 'Beneficial effect of vitamin D on bone density' as a null finding and invert the baseline for every benefit-asserting claim.",
+  "files": [
+    "internal/scengine/stance.go",
+    "internal/scengine/nullcue_widen_probe_test.go"
+  ],
+  "validated_outcome": "Measured before shipping across all 14 corpora in testdata/corpora_full (nullcue_widen_probe_test.go, which pins the pre-change regex so the delta stays measurable after the change lands): zero works gain a cue, zero stances flip, no verdict moves. The only 'no benefi...' occurrences on record are two literal 'no benefit' hits in vitaminc, which matched already. Full go test -count=1 ./... green."
+}
