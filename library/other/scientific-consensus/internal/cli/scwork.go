@@ -460,11 +460,13 @@ func enrichPubTypes(ctx context.Context, works []scWork, capN int) {
 	}
 }
 
-// noAbstractBackfillEnv disables the PubMed abstract backfill when set to any
-// non-empty value. It is an escape hatch, not a feature flag: the backfill costs
-// one PubMed request per abstract-less work, and an operator on a metered link,
-// behind a proxy that blocks NCBI, or reproducing an archived run bit-for-bit
-// needs a way to switch it off without patching the binary.
+// noAbstractBackfillEnv disables the abstract backfill — BOTH sources — when set
+// to any non-empty value. It is an escape hatch, not a feature flag: the backfill
+// costs one PubMed request per abstract-less work, and an operator on a metered
+// link, behind a proxy that blocks NCBI, or reproducing an archived run
+// bit-for-bit needs a way to switch it off without patching the binary. A switch
+// that silenced only the first source would leave exactly the reproducibility
+// hole it exists to close.
 const noAbstractBackfillEnv = "SC_NO_ABSTRACT_BACKFILL"
 
 // abstractBackfillCap bounds how many DOIs one run resolves.
@@ -482,10 +484,27 @@ const abstractBackfillCap = 50
 // healthy link; 45 s leaves ~40% headroom over that measurement.
 const abstractBackfillTimeout = 45 * time.Second
 
-// abstractBackfiller is the PubMed lookup, indirected through a package variable
-// so tests can exercise the selection, cap, priority and fill logic without a
-// network. Production never reassigns it.
-var abstractBackfiller = source.PubMedAbstractsByDOI
+// europePMCBackfillTimeout bounds the SECOND source's whole step.
+//
+// It is not a second helping of abstractBackfillTimeout, and it deliberately
+// cannot be: the command has about 120 s in total and PubMed already claims 45 s
+// of it. Europe PMC does not need a comparable share because it answers a whole
+// batch in one request — measured over the 51 abstract-less DOIs in the full
+// corpora, one OR-joined query returned the same 38 abstracts a per-DOI loop did
+// (12.44 s) in 0.60 s. Five seconds is roughly eight times that measurement,
+// which is headroom for a slow day rather than budget for a different design. A
+// wedged Europe PMC therefore costs the query five seconds it can afford, not
+// forty-five it cannot.
+const europePMCBackfillTimeout = 5 * time.Second
+
+// abstractBackfiller is the PubMed lookup and europePMCBackfiller the fallback,
+// both indirected through package variables so tests can exercise the selection,
+// cap, priority, ordering and fill logic without a network. Production never
+// reassigns either.
+var (
+	abstractBackfiller  = source.PubMedAbstractsByDOI
+	europePMCBackfiller = source.EuropePMCAbstractsByDOI
+)
 
 // backfillReport is the abstract backfill's contribution to the PRISMA ledger.
 //
@@ -493,6 +512,13 @@ var abstractBackfiller = source.PubMedAbstractsByDOI
 // The gap between them is not noise and must stay visible: PubMed does not index
 // book chapters or every journal, and a reader comparing two runs of the same
 // claim needs to see that the difference was coverage rather than content.
+//
+// With two sources that distinction gets finer rather than coarser, so the
+// per-source counts sit alongside the totals instead of replacing them. Measured
+// over the 14 full corpora, 52 of 324 works (16.0%) carry no abstract and the
+// shortfall is wildly uneven — 50% on meditation, 44% on probiotics, 0% on
+// hpvinfertility. A reader who cannot see WHICH source reached a corpus cannot
+// tell a claim PubMed simply does not index from one nobody has written about.
 type backfillReport struct {
 	// Disabled records that the step was switched off, which is a different
 	// statement from "there was nothing to do".
@@ -502,14 +528,25 @@ type backfillReport struct {
 	Candidates int
 	NoDOI      int
 	// Requested is the distinct DOIs actually looked up and Resolved how many of
-	// them PubMed answered with an abstract; Skipped is the candidates the cap
+	// them a source answered with an abstract; Skipped is the candidates the cap
 	// dropped. Filled counts WORKS, not DOIs, and can exceed Resolved when one
 	// DOI backs duplicate records — which is why unresolved is computed from
-	// Requested-Resolved and never from Requested-Filled.
+	// Requested-Resolved and never from Requested-Filled. Both totals span both
+	// sources, because a reader asking "how much of this corpus rests on titles
+	// alone" is asking about the corpus, not about NCBI.
 	Requested int
 	Resolved  int
 	Skipped   int
 	Filled    int
+	// The per-source split. PubMed runs first and unconditionally, so its
+	// requested count is always Requested; Europe PMC only ever sees what PubMed
+	// left behind, which is why EuropePMCRequested is recorded separately and is
+	// the honest denominator for what the fallback bought.
+	PubMedResolved     int
+	PubMedFilled       int
+	EuropePMCRequested int
+	EuropePMCResolved  int
+	EuropePMCFilled    int
 }
 
 // backfillAbstracts fills missing abstracts from PubMed IN PLACE, best-effort,
@@ -527,8 +564,21 @@ type backfillReport struct {
 // bar. The risk side of that measurement rests on 4 observations, so it is a
 // reason to keep the ledger honest, not a reason to stop counting.
 //
+// PubMed is asked first and Europe PMC only for what PubMed did not resolve.
+// That ordering is not a preference between the two APIs; it is what keeps this
+// change from altering any existing result. PubMed's answer for a DOI is exactly
+// what it was before, and the fallback can only turn a blank into text.
+//
+// Europe PMC is here and Crossref is not, on measurement rather than taste. On
+// the first 15 of the 51 abstract-less DOIs in the full corpora, Europe PMC
+// returned an abstract for 10 and Crossref for 0 — Crossref's metadata records
+// simply do not carry abstract text for this population, so wiring it would have
+// bought a request per DOI and nothing else. Across all 51, Europe PMC reaches
+// 38, so roughly two thirds of the 16% abstract-less share is recoverable.
+//
 // Errors are swallowed exactly as enrichPubTypes swallows them: this is optional
-// enrichment, and a PubMed outage must degrade the abstracts, never the query.
+// enrichment, and an outage at either source must degrade the abstracts, never
+// the query.
 func backfillAbstracts(ctx context.Context, claim string, works []scWork) backfillReport {
 	var rep backfillReport
 	if os.Getenv(noAbstractBackfillEnv) != "" {
@@ -594,8 +644,40 @@ func backfillAbstracts(ctx context.Context, claim string, works []scWork) backfi
 
 	bctx, cancel := context.WithTimeout(ctx, abstractBackfillTimeout)
 	defer cancel()
-	filled, _ := abstractBackfiller(bctx, dois)
-	for d, abs := range filled {
+	answered, _ := abstractBackfiller(bctx, dois)
+	rep.PubMedResolved, rep.PubMedFilled = applyAbstracts(works, byDOI, answered)
+
+	// Only what PubMed left blank reaches the fallback. `dois` is already in the
+	// gate-excluded-first order the cap was spent on, and filtering preserves it,
+	// so the second source inherits that priority instead of re-deriving it.
+	var unresolved []string
+	for _, d := range dois {
+		if strings.TrimSpace(answered[d]) == "" {
+			unresolved = append(unresolved, d)
+		}
+	}
+	if len(unresolved) > 0 {
+		ectx, ecancel := context.WithTimeout(ctx, europePMCBackfillTimeout)
+		defer ecancel()
+		rep.EuropePMCRequested = len(unresolved)
+		eanswered, _ := europePMCBackfiller(ectx, unresolved)
+		rep.EuropePMCResolved, rep.EuropePMCFilled = applyAbstracts(works, byDOI, eanswered)
+	}
+
+	rep.Resolved = rep.PubMedResolved + rep.EuropePMCResolved
+	rep.Filled = rep.PubMedFilled + rep.EuropePMCFilled
+	return rep
+}
+
+// applyAbstracts writes one source's answers into the works behind each DOI and
+// reports how many DOIs and how many WORKS it accounted for.
+//
+// It skips works that already carry an abstract so that running it twice cannot
+// double-count or overwrite: the second source is a fallback, and a fallback that
+// could replace a PubMed abstract would make two runs of the same claim differ on
+// nothing but which host answered first.
+func applyAbstracts(works []scWork, byDOI map[string][]int, answered map[string]string) (resolved, filled int) {
+	for d, abs := range answered {
 		if strings.TrimSpace(abs) == "" {
 			continue
 		}
@@ -603,13 +685,16 @@ func backfillAbstracts(ctx context.Context, claim string, works []scWork) backfi
 		if len(targets) == 0 {
 			continue
 		}
-		rep.Resolved++
+		resolved++
 		for _, i := range targets {
+			if strings.TrimSpace(works[i].Abstract) != "" {
+				continue
+			}
 			works[i].Abstract = abs
-			rep.Filled++
+			filled++
 		}
 	}
-	return rep
+	return resolved, filled
 }
 
 // backfillNote renders the backfill's PRISMA fragment, or "" when there is
@@ -619,15 +704,31 @@ func backfillAbstracts(ctx context.Context, claim string, works []scWork) backfi
 // purpose. "12 abstracts backfilled" invites the reading that the corpus is now
 // complete; "12 backfilled, 6 unresolved, 9 skipped by the cap" says how much of
 // the analysis still rests on titles alone.
+//
+// The per-source clause exists for the same reason and is only printed when
+// Europe PMC was actually asked. Naming both sources unconditionally would imply
+// a fallback ran when there was nothing left for it to do, which is the same kind
+// of false completeness the totals are worded to avoid.
 func backfillNote(r backfillReport) string {
 	if r.Disabled || (r.Filled == 0 && r.Skipped == 0) {
 		return ""
 	}
 	var note string
 	if r.Filled > 0 {
+		from := "PubMed"
+		if r.EuropePMCFilled > 0 {
+			from = "PubMed and Europe PMC"
+		}
 		note = fmt.Sprintf(
-			"%d missing abstract(s) backfilled from PubMed before the relevance gates ran (%d of %d looked-up DOI(s) unresolved; %d abstract-less work(s) carried a DOI at all)",
-			r.Filled, r.Requested-r.Resolved, r.Requested, r.Candidates)
+			"%d missing abstract(s) backfilled from %s before the relevance gates ran (%d of %d looked-up DOI(s) unresolved; %d abstract-less work(s) carried a DOI at all)",
+			r.Filled, from, r.Requested-r.Resolved, r.Requested, r.Candidates)
+	}
+	if r.EuropePMCRequested > 0 {
+		note = appendNote(note, fmt.Sprintf(
+			"PubMed resolved %d of %d DOI(s) and filled %d work(s); Europe PMC was asked for the remaining %d, resolved %d and filled %d, leaving %d DOI(s) neither source could reach",
+			r.PubMedResolved, r.Requested, r.PubMedFilled,
+			r.EuropePMCRequested, r.EuropePMCResolved, r.EuropePMCFilled,
+			r.EuropePMCRequested-r.EuropePMCResolved))
 	}
 	if r.Skipped > 0 {
 		note = appendNote(note, fmt.Sprintf(

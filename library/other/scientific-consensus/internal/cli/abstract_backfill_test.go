@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -17,8 +18,13 @@ const backfillClaim = "meditation reduces anxiety"
 // asked for. Returns a pointer to the recorded DOIs and the call count, so a
 // test can assert that no request happened at all — the difference between
 // "found nothing" and "never asked" is the whole point of the skip paths.
+//
+// It also silences the Europe PMC fallback, because a test that leaves a DOI
+// unresolved on purpose would otherwise reach the live network to find that out.
+// Tests that care about the fallback install their own stub over this one.
 func stubBackfill(t *testing.T, resp map[string]string) (*[]string, *int) {
 	t.Helper()
+	stubEuropePMCBackfill(t, nil, nil)
 	var seen []string
 	calls := 0
 	orig := abstractBackfiller
@@ -28,6 +34,24 @@ func stubBackfill(t *testing.T, resp map[string]string) (*[]string, *int) {
 		return resp, nil
 	}
 	t.Cleanup(func() { abstractBackfiller = orig })
+	return &seen, &calls
+}
+
+// stubEuropePMCBackfill is stubBackfill's twin for the fallback source, with one
+// addition: the error return is settable, because "Europe PMC answered nothing"
+// and "Europe PMC failed" must leave the caller in the same state and only a
+// stub that can do both proves it.
+func stubEuropePMCBackfill(t *testing.T, resp map[string]string, err error) (*[]string, *int) {
+	t.Helper()
+	var seen []string
+	calls := 0
+	orig := europePMCBackfiller
+	europePMCBackfiller = func(_ context.Context, dois []string) (map[string]string, error) {
+		calls++
+		seen = append(seen, dois...)
+		return resp, err
+	}
+	t.Cleanup(func() { europePMCBackfiller = orig })
 	return &seen, &calls
 }
 
@@ -55,11 +79,15 @@ func TestBackfillAbstractsNoCandidatesMakesNoRequest(t *testing.T) {
 func TestBackfillAbstractsDisabledByEnv(t *testing.T) {
 	t.Setenv(noAbstractBackfillEnv, "1")
 	_, calls := stubBackfill(t, map[string]string{"10.1/a": "would have been filled"})
+	_, epmcCalls := stubEuropePMCBackfill(t, map[string]string{"10.1/a": "so would this"}, nil)
 	works := []scWork{{Title: "Meditation and anxiety", DOI: "10.1/a"}}
 
 	rep := backfillAbstracts(t.Context(), backfillClaim, works)
 	if *calls != 0 {
 		t.Errorf("%s must prevent every lookup, got %d", noAbstractBackfillEnv, *calls)
+	}
+	if *epmcCalls != 0 {
+		t.Errorf("%s is one switch for both sources; Europe PMC was asked %d time(s)", noAbstractBackfillEnv, *epmcCalls)
 	}
 	if !rep.Disabled {
 		t.Error("report must record that the step was switched off, not that it found nothing")
@@ -219,6 +247,159 @@ func TestBackfillAbstractsIgnoresBlankAnswers(t *testing.T) {
 	}
 	if rep.Resolved != 0 || rep.Filled != 0 {
 		t.Errorf("report %+v; a blank answer counts as unresolved", rep)
+	}
+}
+
+// The fallback is a fallback. When PubMed answers every DOI there is nothing
+// left to ask about, and asking anyway would spend a request and a second source's
+// goodwill on a question already answered.
+func TestBackfillAbstractsEuropePMCUnusedWhenPubMedResolvesEverything(t *testing.T) {
+	stubBackfill(t, map[string]string{
+		"10.5/a": "meditation and anxiety, resolved by pubmed",
+		"10.5/b": "more meditation and anxiety text",
+	})
+	_, epmcCalls := stubEuropePMCBackfill(t, map[string]string{"10.5/a": "must never be used"}, nil)
+	works := []scWork{
+		{Title: "Ceramic glaze A", DOI: "10.5/a"},
+		{Title: "Ceramic glaze B", DOI: "10.5/b"},
+	}
+	rep := backfillAbstracts(t.Context(), backfillClaim, works)
+
+	if *epmcCalls != 0 {
+		t.Errorf("Europe PMC asked %d time(s) with nothing unresolved", *epmcCalls)
+	}
+	if rep.EuropePMCRequested != 0 || rep.EuropePMCFilled != 0 {
+		t.Errorf("report %+v; the fallback must be absent from the ledger when it did not run", rep)
+	}
+	if rep.PubMedResolved != 2 || rep.PubMedFilled != 2 || rep.Resolved != 2 || rep.Filled != 2 {
+		t.Errorf("report %+v; want PubMedResolved=2 PubMedFilled=2 Resolved=2 Filled=2", rep)
+	}
+	if note := backfillNote(rep); strings.Contains(note, "Europe PMC") {
+		t.Errorf("note names a source that never ran: %q", note)
+	}
+}
+
+// The case the second source exists for: PubMed does not index the work, Europe
+// PMC does. Only the DOIs PubMed left blank may be forwarded, and they must
+// arrive in the gate-excluded-first order the cap was already spent on.
+func TestBackfillAbstractsFallsBackToEuropePMC(t *testing.T) {
+	const survivorDOI = "10.6/survivor"
+	works := []scWork{
+		{Title: "Ceramic glaze firing schedule", DOI: "10.6/excluded"},
+		{Title: "Meditation reduces anxiety in adults", DOI: survivorDOI},
+		{Title: "Ceramic kiln temperatures", DOI: "10.6/pubmed"},
+	}
+	if !relevantToClaim(backfillClaim, works[1]) {
+		t.Fatalf("test setup broken: %q must pass the relevance gate", works[1].Title)
+	}
+	stubBackfill(t, map[string]string{"10.6/pubmed": "pubmed text about meditation"})
+	seen, epmcCalls := stubEuropePMCBackfill(t, map[string]string{
+		"10.6/excluded": "europe pmc text about meditation and anxiety",
+	}, nil)
+
+	rep := backfillAbstracts(t.Context(), backfillClaim, works)
+
+	if *epmcCalls != 1 {
+		t.Fatalf("want exactly one batched fallback lookup, got %d", *epmcCalls)
+	}
+	if got := *seen; len(got) != 2 || got[0] != "10.6/excluded" || got[1] != survivorDOI {
+		t.Errorf("fallback saw %v; want only the DOIs PubMed left blank, gate-excluded first", got)
+	}
+	if works[0].Abstract == "" {
+		t.Error("Europe PMC's answer was not written back to the work")
+	}
+	if works[2].Abstract != "pubmed text about meditation" {
+		t.Errorf("PubMed's answer was disturbed by the fallback: %q", works[2].Abstract)
+	}
+	if works[1].Abstract != "" {
+		t.Errorf("a DOI neither source answered must stay empty, got %q", works[1].Abstract)
+	}
+	if rep.PubMedResolved != 1 || rep.EuropePMCRequested != 2 || rep.EuropePMCResolved != 1 ||
+		rep.EuropePMCFilled != 1 || rep.Resolved != 2 || rep.Filled != 2 {
+		t.Errorf("report %+v; want PubMedResolved=1 EuropePMCRequested=2 EuropePMCResolved=1 "+
+			"EuropePMCFilled=1 Resolved=2 Filled=2", rep)
+	}
+	note := backfillNote(rep)
+	for _, want := range []string{
+		"2 missing abstract(s) backfilled from PubMed and Europe PMC",
+		"1 of 3 looked-up DOI(s) unresolved",
+		"PubMed resolved 1 of 3 DOI(s) and filled 1 work(s)",
+		"Europe PMC was asked for the remaining 2, resolved 1 and filled 1",
+		"leaving 1 DOI(s) neither source could reach",
+	} {
+		if !strings.Contains(note, want) {
+			t.Errorf("note missing %q\n got: %s", want, note)
+		}
+	}
+}
+
+// Both sources down is the degradation case. The command must still return, the
+// works it already had must be untouched, and the ledger must say plainly that
+// nothing was recovered rather than staying silent about the attempt.
+func TestBackfillAbstractsSurvivesBothSourcesFailing(t *testing.T) {
+	orig := abstractBackfiller
+	abstractBackfiller = func(_ context.Context, _ []string) (map[string]string, error) {
+		return nil, errors.New("pubmed unreachable")
+	}
+	t.Cleanup(func() { abstractBackfiller = orig })
+	_, epmcCalls := stubEuropePMCBackfill(t, nil, errors.New("europe pmc unreachable"))
+
+	works := []scWork{
+		{Title: "Ceramic glaze", DOI: "10.7/down"},
+		{Title: "Meditation reduces anxiety", DOI: "10.7/kept", Abstract: "an abstract we already had"},
+	}
+	rep := backfillAbstracts(t.Context(), backfillClaim, works)
+
+	if *epmcCalls != 1 {
+		t.Errorf("a PubMed failure must still hand its unresolved DOIs on, got %d call(s)", *epmcCalls)
+	}
+	if works[0].Abstract != "" || works[1].Abstract != "an abstract we already had" {
+		t.Errorf("a total outage must leave the corpus exactly as it was: %+v", works)
+	}
+	if rep.Resolved != 0 || rep.Filled != 0 {
+		t.Errorf("report %+v; nothing was recovered", rep)
+	}
+	if rep.Requested != 1 || rep.EuropePMCRequested != 1 {
+		t.Errorf("report %+v; both attempts must stay on the ledger", rep)
+	}
+	if rep.Disabled {
+		t.Error("a failed step is not a disabled one; Disabled must keep meaning 'switched off'")
+	}
+}
+
+// The cap is spent once, before either source runs. The fallback inherits the
+// capped set rather than reopening the budget — otherwise the second source
+// would quietly undo the time bound the first one is capped for.
+func TestBackfillAbstractsCapBindsAcrossBothSources(t *testing.T) {
+	var works []scWork
+	for i := 0; i < abstractBackfillCap+5; i++ {
+		works = append(works, scWork{
+			Title: "Ceramic glaze firing schedule " + strconv.Itoa(i),
+			DOI:   fmt.Sprintf("10.8/x-%d", i),
+		})
+	}
+	stubBackfill(t, map[string]string{"10.8/x-0": "meditation and anxiety text"})
+	seen, epmcCalls := stubEuropePMCBackfill(t, nil, nil)
+
+	rep := backfillAbstracts(t.Context(), backfillClaim, works)
+
+	if rep.Skipped != 5 {
+		t.Errorf("Skipped = %d, want 5 over the cap of %d", rep.Skipped, abstractBackfillCap)
+	}
+	if *epmcCalls != 1 {
+		t.Fatalf("want one fallback lookup, got %d", *epmcCalls)
+	}
+	if len(*seen) != abstractBackfillCap-1 {
+		t.Errorf("fallback saw %d DOI(s); want the capped %d minus the 1 PubMed resolved",
+			len(*seen), abstractBackfillCap)
+	}
+	for _, d := range *seen {
+		if d == "10.8/x-0" {
+			t.Error("a DOI PubMed already resolved was re-asked of the fallback")
+		}
+	}
+	if rep.EuropePMCRequested != abstractBackfillCap-1 {
+		t.Errorf("EuropePMCRequested = %d, want %d", rep.EuropePMCRequested, abstractBackfillCap-1)
 	}
 }
 

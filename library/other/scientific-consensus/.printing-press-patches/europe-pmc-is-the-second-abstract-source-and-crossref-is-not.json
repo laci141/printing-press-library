@@ -1,0 +1,15 @@
+{
+  "schema_version": 2,
+  "id": "europe-pmc-is-the-second-abstract-source-and-crossref-is-not",
+  "applied_at": "2026-08-08",
+  "base_run_id": "20260620-165352-e55cec69",
+  "base_printing_press_version": "4.24.0",
+  "summary": "The abstract backfill must have a second DOI-keyed source behind PubMed, because PubMed's own coverage is what decides whether a work is gated on its title, and that coverage is uneven across claims rather than uniformly thin. The fallback sees only the DOIs PubMed left blank, inherits the same per-run cap and the same gate-excluded-first ordering, may never overwrite a PubMed answer, and reports its own resolved/filled counts so a reader can tell which source reached a corpus and what neither could.",
+  "reason": "16.0% of works across the 14 archived corpora have no abstract (52 of 324), but the shortfall is uneven — 50% on meditation, 44% on probiotics, 0% on hpvinfertility — so a single source's coverage silently changes how much of a given claim rests on titles alone. 51 of the 52 carry a DOI, so a second DOI-reachable source is reachable in principle. Three findings must survive a regen. (1) EUROPE PMC, NOT CROSSREF: on the first 15 of those DOIs Europe PMC returned an abstract for 10 and Crossref for 0 — Crossref's metadata does not carry abstract text for this population, so adding it costs a request per DOI and buys nothing. Across all 51, Europe PMC reaches 38. (2) BATCH THE FALLBACK, unlike PubMed. Europe PMC's query language accepts OR-joined DOI clauses and, measured over the same 51 DOIs, one batched request returned exactly the same 38 abstracts as a per-DOI loop, at 0.60s against 12.44s. This is the OPPOSITE of the PubMed finding recorded in pubmed-abstract-backfill-before-the-relevance-gates, where OR-batching halved the yield, so a regen must not generalise either result to the other host. (3) THE TIME BUDGET IS THE CONSTRAINT, not the API. The command has ~120s and PubMed already claims 45s; the fallback gets a 5s deadline because one batched request measured 0.60s, so its failure mode is a five-second delay rather than a second forty-five-second one. The kill switch (SC_NO_ABSTRACT_BACKFILL) must keep disabling BOTH sources, and Disabled must keep meaning 'switched off' rather than 'found nothing'.",
+  "files": [
+    "internal/source/europepmc.go",
+    "internal/cli/scwork.go",
+    "internal/cli/abstract_backfill_test.go"
+  ],
+  "validated_outcome": "go build, go vet and go test -count=1 ./... green across the module. The two source measurements were taken live on 2026-08-08 against the abstract-less DOIs extracted from internal/scengine/testdata/corpora_full: per-DOI 38/51 in 12.44s versus one OR-joined request 38/51 in 0.60s, with the resolved sets identical (no DOI reachable by only one shape). The Crossref comparison (0 of 15) is what removed it from scope. NOT established: whether the works Europe PMC recovers change any verdict — the earlier PubMed measurement showed a backfill can push a work OUT as well as in, and that benefit/risk run has not been repeated with the fallback in place."
+}
