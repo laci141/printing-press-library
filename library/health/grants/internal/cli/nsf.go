@@ -24,11 +24,11 @@ func cmdNSF(args []string) int {
 		return 2
 	}
 
-	awards, err := sources.SearchNSF(keyword, *rows)
+	awards, stats, err := sources.SearchNSF(keyword, *rows)
 	if err != nil {
 		return fail(err)
 	}
-	fetched := len(awards)
+	shownBeforeAmount := len(awards)
 	if *minAmount > 0 {
 		var kept []sources.NSFAward
 		for _, a := range awards {
@@ -37,18 +37,23 @@ func cmdNSF(args []string) int {
 			}
 		}
 		awards = kept
-		// The NSF API returns an unordered page, so a client-side amount filter
-		// only ever sees the first `rows` records. A full page means there are
-		// almost certainly matching awards we never fetched.
-		if fetched == *rows {
+		// The amount filter runs on the rows we are about to show, not on the
+		// whole candidate pool. When those rows filled the requested page,
+		// matching awards below the cut almost certainly exist.
+		if shownBeforeAmount == *rows && stats.Matched > *rows {
 			fmt.Fprintf(os.Stderr,
-				"  (warn: --min-amount applies only to the first %d unsorted NSF results; increase --rows to fetch more)\n",
-				*rows)
+				"  (warn: --min-amount applies only to the top %d ranked NSF results of %d matches; increase --rows to fetch more)\n",
+				*rows, stats.Matched)
 		}
 	}
 
 	if *asJSON {
-		return printJSON(map[string]any{"keyword": keyword, "shown": len(awards), "awards": awards})
+		return printJSON(map[string]any{
+			"keyword":   keyword,
+			"shown":     len(awards),
+			"awards":    awards,
+			"relevance": stats,
+		})
 	}
 
 	fmt.Printf("🔬 NSF %q — %d awarded grants shown\n", keyword, len(awards))
@@ -59,6 +64,11 @@ func cmdNSF(args []string) int {
 	}
 	if len(awards) == 0 {
 		fmt.Println("  (no results)")
+	}
+	fmt.Printf("  searched %d recent NSF awards; %d mention every word of your query, %d in the title\n",
+		stats.Examined, stats.Matched, stats.TitleMatched)
+	if stats.Matched < 10 {
+		fmt.Println("  few awards use all of these words together — try fewer or broader words (e.g. one topic word instead of two)")
 	}
 	return 0
 }

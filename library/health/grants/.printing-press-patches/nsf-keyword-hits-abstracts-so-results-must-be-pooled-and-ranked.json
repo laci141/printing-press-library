@@ -1,0 +1,11 @@
+{
+  "schema_version": 2,
+  "id": "nsf-keyword-hits-abstracts-so-results-must-be-pooled-and-ranked",
+  "applied_at": "2026-08-10",
+  "base_run_id": "20260705-183000",
+  "base_printing_press_version": "4.25.0",
+  "summary": "NSF's keyword matches anywhere in the ~2,900-character abstract and returns the newest matches rather than the most relevant, so a single-page passthrough is not a topical search: the CLI must pool several pages, require every query term by stem, deduplicate collaborative re-registrations by title, and rank title hits above abstract hits.",
+  "reason": "One page of NSF results for 'quantum computing' is dominated by awards whose abstract mentions the phrase once in boilerplate, and the genuinely on-topic awards sit below the page boundary where no client-side filter can reach them. Stem matching is required because abstracts say 'resilient' where the user typed 'resilience'. Dedup must key on the normalised title, not the award ID, because collaborative awards are registered once per institution with distinct IDs. A regen that restores a single keyword request, or an exact-string filter over it, brings back off-topic results that look like a data problem rather than a client one.",
+  "files": ["internal/sources/nsf.go", "internal/cli/nsf.go"],
+  "validated_outcome": "Six pooled pages vs one page, counting awards containing every term: gene therapy 2 -> 34 (11 title hits), artificial intelligence 18 -> 115 (21), climate resilience 2 -> 6 (2)."
+}

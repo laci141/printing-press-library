@@ -25,7 +25,7 @@ func cmdDoctor() int {
 		fmt.Printf("  ✔ NIH RePORTER OK (%d 'cancer' projects)\n", total)
 	}
 
-	if awards, err := sources.SearchNSF("science", 1); err != nil {
+	if awards, _, err := sources.SearchNSF("science", 1); err != nil {
 		failed = true
 		fmt.Printf("  ✘ NSF          %v\n", err)
 	} else {
