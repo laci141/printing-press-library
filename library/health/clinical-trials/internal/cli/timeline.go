@@ -1,9 +1,9 @@
 // Copyright 2026 laci141 and contributors. Licensed under Apache-2.0. See LICENSE.
 
 // timeline.go implements the `timeline` command: outputs a trial's key dates
-// in chronological order. It fetches an expanded set of date fields directly
-// from the /studies/{nctId} endpoint so it can include PrimaryCompletionDate
-// and CompletionDate, which are not part of the shared normalizedFields const.
+// in chronological order. It fetches a date-only field list directly from the
+// /studies/{nctId} endpoint, since the command needs nothing but dates and
+// identity.
 package cli
 
 import (
@@ -31,9 +31,12 @@ type timelineView struct {
 	Note   string          `json:"note,omitempty"`
 }
 
-// timelineFields is the fields request sent to /studies/{nctId} — a superset
-// of normalizedFields that adds the two completion-date fields not in the
-// shared const. Kept local so the shared Trial struct stays unchanged.
+// timelineFields is the fields request sent to /studies/{nctId}. Every field
+// here is now also in normalizedFields, but this const stays local and stays a
+// strict subset: `timeline` renders dates only, so requesting the sponsor,
+// condition, intervention, and location arrays would inflate the response for
+// data the command discards. Switching to normalizedFields would also couple
+// this command to changes made for the intelligence commands' benefit.
 const timelineFields = "NCTId,BriefTitle,OverallStatus,StartDate,PrimaryCompletionDate,CompletionDate,LastUpdatePostDate,WhyStopped"
 
 // rawTimelineStudy captures only the date-related portions of the CT.gov
@@ -46,8 +49,8 @@ type rawTimelineStudy struct {
 			BriefTitle string `json:"briefTitle"`
 		} `json:"identificationModule"`
 		StatusModule struct {
-			OverallStatus string `json:"overallStatus"`
-			WhyStopped    string `json:"whyStopped"`
+			OverallStatus   string `json:"overallStatus"`
+			WhyStopped      string `json:"whyStopped"`
 			StartDateStruct struct {
 				Date string `json:"date"`
 			} `json:"startDateStruct"`

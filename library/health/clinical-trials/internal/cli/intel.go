@@ -20,29 +20,33 @@ import (
 // normalizedFields is the CT.gov field list every intelligence command requests.
 // Keeping it narrow bounds response size (the full protocolSection is tens of KB
 // per study) while covering every field the unified Trial model needs.
-const normalizedFields = "NCTId,BriefTitle,OverallStatus,Phase,LeadSponsorName,LeadSponsorClass,LocationCountry,Condition,InterventionName,InterventionType,EnrollmentCount,StartDate,LastUpdatePostDate,WhyStopped,HasResults,SecondaryId"
+const normalizedFields = "NCTId,BriefTitle,OverallStatus,Phase,LeadSponsorName,LeadSponsorClass,LocationCountry,Condition,InterventionName,InterventionType,EnrollmentCount,StartDate,PrimaryCompletionDate,CompletionDate,LastUpdatePostDate,WhyStopped,HasResults,SecondaryId"
 
 // Trial is the single normalized model every source maps into. It is the
 // "Layer 2" unified structure: one shape regardless of which registry the row
 // came from.
 type Trial struct {
-	NCTID         string        `json:"id"`
-	Title         string        `json:"title"`
-	Status        string        `json:"status"`
-	Phase         string        `json:"phase,omitempty"`
-	Phases        []string      `json:"phases,omitempty"`
-	Conditions    []string      `json:"conditions,omitempty"`
-	Interventions []string      `json:"interventions,omitempty"`
-	Sponsor       string        `json:"sponsor,omitempty"`
-	SponsorClass  string        `json:"sponsor_class,omitempty"`
-	Countries     []string      `json:"countries,omitempty"`
-	StartDate     string        `json:"start_date,omitempty"`
-	LastUpdate    string        `json:"last_update,omitempty"`
-	Enrollment    int           `json:"enrollment"`
-	WhyStopped    string        `json:"why_stopped,omitempty"`
-	HasResults    bool          `json:"has_results"`
-	Source        string        `json:"source"`
-	SecondaryIDs  []SecondaryID `json:"secondary_ids,omitempty"`
+	NCTID         string   `json:"id"`
+	Title         string   `json:"title"`
+	Status        string   `json:"status"`
+	Phase         string   `json:"phase,omitempty"`
+	Phases        []string `json:"phases,omitempty"`
+	Conditions    []string `json:"conditions,omitempty"`
+	Interventions []string `json:"interventions,omitempty"`
+	Sponsor       string   `json:"sponsor,omitempty"`
+	SponsorClass  string   `json:"sponsor_class,omitempty"`
+	Countries     []string `json:"countries,omitempty"`
+	StartDate     string   `json:"start_date,omitempty"`
+	// PrimaryCompletionDate and CompletionDate stay omitempty so a trial with no
+	// date posted yields an absent field, distinguishable from "not requested".
+	PrimaryCompletionDate string        `json:"primary_completion_date,omitempty"`
+	CompletionDate        string        `json:"completion_date,omitempty"`
+	LastUpdate            string        `json:"last_update,omitempty"`
+	Enrollment            int           `json:"enrollment"`
+	WhyStopped            string        `json:"why_stopped,omitempty"`
+	HasResults            bool          `json:"has_results"`
+	Source                string        `json:"source"`
+	SecondaryIDs          []SecondaryID `json:"secondary_ids,omitempty"`
 }
 
 // SecondaryID carries a cross-registry identifier (EU CTR, WHO, etc.) that
@@ -86,6 +90,12 @@ type rawStudy struct {
 			StartDateStruct struct {
 				Date string `json:"date"`
 			} `json:"startDateStruct"`
+			PrimaryCompletionDateStruct struct {
+				Date string `json:"date"`
+			} `json:"primaryCompletionDateStruct"`
+			CompletionDateStruct struct {
+				Date string `json:"date"`
+			} `json:"completionDateStruct"`
 			LastUpdatePostDateStruct struct {
 				Date string `json:"date"`
 			} `json:"lastUpdatePostDateStruct"`
@@ -139,11 +149,15 @@ func normalizeStudy(raw json.RawMessage) (Trial, bool) {
 		Sponsor:      cliutil.CleanText(s.ProtocolSection.SponsorCollaboratorsModule.LeadSponsor.Name),
 		SponsorClass: s.ProtocolSection.SponsorCollaboratorsModule.LeadSponsor.Class,
 		StartDate:    s.ProtocolSection.StatusModule.StartDateStruct.Date,
-		LastUpdate:   s.ProtocolSection.StatusModule.LastUpdatePostDateStruct.Date,
-		Enrollment:   s.ProtocolSection.DesignModule.EnrollmentInfo.Count,
-		WhyStopped:   cliutil.CleanText(s.ProtocolSection.StatusModule.WhyStopped),
-		HasResults:   s.HasResults,
-		Source:       "clinicaltrials.gov",
+
+		PrimaryCompletionDate: s.ProtocolSection.StatusModule.PrimaryCompletionDateStruct.Date,
+		CompletionDate:        s.ProtocolSection.StatusModule.CompletionDateStruct.Date,
+
+		LastUpdate: s.ProtocolSection.StatusModule.LastUpdatePostDateStruct.Date,
+		Enrollment: s.ProtocolSection.DesignModule.EnrollmentInfo.Count,
+		WhyStopped: cliutil.CleanText(s.ProtocolSection.StatusModule.WhyStopped),
+		HasResults: s.HasResults,
+		Source:     "clinicaltrials.gov",
 	}
 	for _, iv := range s.ProtocolSection.ArmsInterventionsModule.Interventions {
 		if iv.Name != "" {
