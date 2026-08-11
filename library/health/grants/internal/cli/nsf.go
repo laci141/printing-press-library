@@ -28,6 +28,18 @@ func cmdNSF(args []string) int {
 	if err != nil {
 		return fail(err)
 	}
+
+	// Paging stopped early on an upstream error, so the results below were
+	// ranked from part of the intended pool. Reported before anything else:
+	// the relevance counts and the "few awards match" advice further down are
+	// both unreliable in this state, and a silent partial search would read as
+	// a genuine shortage of matching awards.
+	if stats.Partial() {
+		fmt.Fprintf(os.Stderr,
+			"  (warn: NSF returned an error after %d of %d pages; results are ranked from a partial pool and may be incomplete: %s)\n",
+			stats.PagesFetched, stats.PagesPlanned, stats.PoolError)
+	}
+
 	shownBeforeAmount := len(awards)
 	if *minAmount > 0 {
 		var kept []sources.NSFAward
@@ -65,10 +77,19 @@ func cmdNSF(args []string) int {
 	if len(awards) == 0 {
 		fmt.Println("  (no results)")
 	}
-	fmt.Printf("  searched %d recent NSF awards; %d mention every word of your query, %d in the title\n",
-		stats.Examined, stats.Matched, stats.TitleMatched)
-	if stats.Matched < 10 {
-		fmt.Println("  few awards use all of these words together — try fewer or broader words (e.g. one topic word instead of two)")
+
+	if stats.Partial() {
+		fmt.Printf("  searched %d recent NSF awards from %d of %d pages; %d mention every word of your query, %d in the title\n",
+			stats.Examined, stats.PagesFetched, stats.PagesPlanned, stats.Matched, stats.TitleMatched)
+		fmt.Println("  the search was cut short by an upstream error, so these counts are a floor — retry for the full picture")
+	} else {
+		fmt.Printf("  searched %d recent NSF awards; %d mention every word of your query, %d in the title\n",
+			stats.Examined, stats.Matched, stats.TitleMatched)
+		// Only worth advising when the pool was complete. After a partial
+		// fetch a low count says more about the failure than about the query.
+		if stats.Matched < 10 {
+			fmt.Println("  few awards use all of these words together — try fewer or broader words (e.g. one topic word instead of two)")
+		}
 	}
 	return 0
 }

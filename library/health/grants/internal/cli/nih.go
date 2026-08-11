@@ -41,7 +41,7 @@ func cmdNIH(args []string) int {
 	}
 
 	// The listing is sorted by amount descending, which shows the largest
-	// awards rather than a representative one. The median below is what
+	// awards rather than a representative one. The estimate below is what
 	// answers "how much is granted for this topic", so it is fetched
 	// alongside. A failure here must not sink the listing.
 	typical, typicalErr := sources.TypicalNIHAward(query)
@@ -55,11 +55,15 @@ func cmdNIH(args []string) int {
 			"projects":        projects,
 		}
 		if typicalErr == nil && typical.Population > 0 {
+			// Reported as an estimate with its bounds, not as an exact order
+			// statistic: it is located by counting awards above a series of
+			// amounts, so the true middle sits somewhere in [low, high].
 			out["typical_award"] = map[string]any{
 				"population":   typical.Population,
-				"median":       typical.Median,
+				"estimate":     typical.Estimate,
 				"bracket_low":  typical.Low,
 				"bracket_high": typical.High,
+				"method":       "count-based bisection on award amount; estimate is the midpoint of the bracket",
 			}
 		}
 		return printJSON(out)
@@ -83,11 +87,11 @@ func cmdNIH(args []string) int {
 
 	if typicalErr == nil && typical.Population > 0 {
 		if typical.High > 0 {
-			fmt.Printf("\n  Typical award: around %s (median of %d matching awards, bracket %s - %s)\n",
-				FormatMoney(typical.Median), typical.Population,
+			fmt.Printf("\n  Typical award: about %s — half of the %d matching awards fall between %s and %s\n",
+				FormatMoney(typical.Estimate), typical.Population,
 				FormatMoney(typical.Low), FormatMoney(typical.High))
 		} else {
-			fmt.Printf("\n  Typical award: above %s (median of %d matching awards)\n",
+			fmt.Printf("\n  Typical award: above %s (%d matching awards)\n",
 				FormatMoney(typical.Low), typical.Population)
 		}
 		fmt.Println("  The list above is sorted by size, so it shows the largest awards, not typical ones.")

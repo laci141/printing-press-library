@@ -29,12 +29,6 @@ const nihSearchFields = "projecttitle,abstracttext"
 
 // NIHResearchCodes are activity codes for investigator-initiated research
 // awards: the grants an individual researcher competes for.
-//
-// Measured on 2026-08-11 (FY2024, keyword "cancer", 5,286 R01 awards), the
-// amount distribution of these awards is the answer to "how much is granted
-// for this topic": roughly $450,000 at the median, with only 28 awards above
-// $1M. Sorting by amount alone never shows this, because the top of the list
-// is occupied by awards an order of magnitude larger.
 var NIHResearchCodes = []string{
 	"R01", "R03", "R15", "R21", "R33", "R34", "R35", "R37", "R56", "R61",
 	"DP1", "DP2", "DP5", "RF1", "K99",
@@ -48,9 +42,9 @@ var NIHResearchCodes = []string{
 // they are one to two orders of magnitude larger. Measured on 2026-08-11
 // (FY2024, keyword "cancer"): 16 of the top 25 awards by amount were P30
 // "Cancer Center Support Grant" entries between $5.7M and $13.5M, and the
-// largest award shown was a $21.3M UM1 consortium, versus a $450,000 median
-// R01. Including them by default makes a typical grant look about 47 times
-// larger than it is, so they are opt-in.
+// largest award shown was a $21.3M UM1 consortium, against a research-award
+// median near $417,000. Including them by default makes a typical grant look
+// roughly fifty times larger than it is, so they are opt-in.
 var NIHCenterCodes = []string{
 	"U01", "UM1", "UG1", "UH2", "UH3", "U10", "U19", "U24", "U54",
 	"P01", "P20", "P30", "P50",
@@ -142,43 +136,58 @@ func SearchNIH(q NIHQuery) ([]NIHProject, int, error) {
 	return resp.Results, resp.Meta.Total, nil
 }
 
-// NIHTypical is the amount distribution of matching awards.
+// NIHTypical describes where the middle of the matching awards sits.
+//
+// The reported figure is an estimate located by counting, not an exact
+// order statistic. Low and High bound the interval the true median falls in;
+// Estimate is its midpoint and is only as good as that interval is narrow.
 type NIHTypical struct {
 	Population int   // how many awards the estimate covers
-	Median     int64 // amount that splits the population in half
-	Low        int64 // lower bound of the bracket the median falls in
-	High       int64 // upper bound of that bracket, 0 if open-ended
+	Estimate   int64 // midpoint of [Low, High]
+	Low        int64 // largest probed amount with more than half the awards above it
+	High       int64 // smallest probed amount with at most half the awards above it
 }
 
-// nihProbeAmounts are the thresholds used to locate the median. They are
-// spaced to match how NIH awards actually cluster: measured on 2026-08-11
-// (FY2024, "cancer", R01 only), 4,617 awards were above $300k, 3,381 above
-// $400k, 2,273 above $500k and only 28 above $1M, so the interesting range is
-// narrow and low.
-var nihProbeAmounts = []int64{
+// nihCoarseProbes bracket the median on the first pass. They are spaced to
+// match how NIH awards cluster: measured on 2026-08-11 (FY2024, "cancer",
+// research codes only), 4,317 awards were above $400k, 3,870 above $420k and
+// only 28 above $1M, so the interesting range is narrow and low.
+var nihCoarseProbes = []int64{
 	50000, 100000, 200000, 300000, 400000, 500000, 600000,
 	750000, 1000000, 1500000, 2500000, 5000000,
 }
 
-// TypicalNIHAward estimates the median award amount for a query.
+// nihRefineRounds is how many bisection steps run inside the coarse bracket.
+//
+// Without refinement the midpoint of a coarse bracket is not the median and
+// must not be called one. Measured on 2026-08-11 (FY2024, "cancer"): the
+// coarse bracket was $400,000-$500,000, whose midpoint is $450,000, but the
+// half-population line (3,911 of 7,823) actually falls between $415,000 and
+// $420,000 — the unrefined figure was 8% high. Four rounds cut a $100,000
+// bracket to $6,250, at a cost of four extra count requests.
+const nihRefineRounds = 4
+
+// TypicalNIHAward estimates the middle award amount for a query.
 //
 // It does not sample rows. RePORTER caps a response at a few hundred entries
 // while topic totals run into the thousands, so any single page is a biased
 // slice: taking the largest rows overstates the typical award by an order of
 // magnitude, and taking the smallest understates it by the same margin.
 // Measured on 2026-08-11 (FY2024, "cancer"), the 300 smallest matching awards
-// had a median of $34,465 against a true median near $450,000.
+// had a median of $34,465 and the largest 25 a median of $1,256,124, against a
+// true median near $417,000.
 //
-// Instead it asks the API how many awards exceed each threshold and finds
-// where the count crosses half the population. Only the reported total is
-// used, so each probe is a single cheap request.
+// Instead it asks the API how many awards exceed each amount and finds where
+// that count crosses half the population, first over a coarse ladder and then
+// by bisecting the bracket it lands in. Only the reported total is read, so
+// each probe is a single cheap request.
 //
-// The median always describes the full result set for the topic, ignoring any
-// MinAmount the caller set for the listing. The question it answers is "how
-// much is granted for this topic", which a user-chosen display floor must not
-// distort: restricting the probes to amounts above that floor would report the
-// median of the large awards only. Measured on 2026-08-11, doing so returned
-// $750,000 for a population whose true median is $450,000.
+// The estimate always describes the full result set for the topic, ignoring
+// any MinAmount the caller set for the listing. The question it answers is
+// "how much is granted for this topic", which a user-chosen display floor must
+// not distort: restricting the probes to amounts above that floor would
+// describe the large awards only. Measured on 2026-08-11, doing so reported
+// $750,000 for a population whose middle sits near $417,000.
 func TypicalNIHAward(q NIHQuery) (NIHTypical, error) {
 	base := q
 	base.MinAmount = 0
@@ -193,34 +202,61 @@ func TypicalNIHAward(q NIHQuery) (NIHTypical, error) {
 	}
 	half := total / 2
 
-	result := NIHTypical{Population: total}
-	prevAmount := int64(0)
+	low := int64(0)   // more than half the awards are above this
+	high := int64(-1) // at most half are above this; -1 means not found yet
 
-	for _, threshold := range nihProbeAmounts {
-		probe := base
-		probe.MinAmount = threshold
-
-		above, err := nihCount(probe)
+	for _, threshold := range nihCoarseProbes {
+		above, err := nihCount(withMinAmount(base, threshold))
 		if err != nil {
 			return NIHTypical{}, err
 		}
-		// Once fewer than half the awards remain above the threshold, the
-		// median sits between this threshold and the previous one.
 		if above <= half {
-			result.Low = prevAmount
-			result.High = threshold
-			result.Median = (prevAmount + threshold) / 2
-			return result, nil
+			high = threshold
+			break
 		}
-		prevAmount = threshold
+		low = threshold
 	}
 
 	// Every probe left more than half above it: the median is above the
-	// highest threshold tested.
-	result.Low = prevAmount
-	result.High = 0
-	result.Median = prevAmount
-	return result, nil
+	// highest amount tested and cannot be bracketed from this ladder.
+	if high < 0 {
+		return NIHTypical{
+			Population: total,
+			Estimate:   low,
+			Low:        low,
+			High:       0,
+		}, nil
+	}
+
+	// Bisect the bracket. Each round halves the interval the median can be in.
+	for i := 0; i < nihRefineRounds; i++ {
+		mid := (low + high) / 2
+		if mid <= low || mid >= high {
+			break
+		}
+		above, err := nihCount(withMinAmount(base, mid))
+		if err != nil {
+			return NIHTypical{}, err
+		}
+		if above <= half {
+			high = mid
+		} else {
+			low = mid
+		}
+	}
+
+	return NIHTypical{
+		Population: total,
+		Estimate:   (low + high) / 2,
+		Low:        low,
+		High:       high,
+	}, nil
+}
+
+// withMinAmount copies a query with a different amount floor.
+func withMinAmount(q NIHQuery, amount int64) NIHQuery {
+	q.MinAmount = amount
+	return q
 }
 
 // nihCount runs a search and returns only the reported total.

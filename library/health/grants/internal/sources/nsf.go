@@ -63,6 +63,24 @@ type NSFStats struct {
 	Examined     int `json:"examined"`      // candidate awards fetched from the API
 	Matched      int `json:"matched"`       // awards containing every query term
 	TitleMatched int `json:"title_matched"` // of those, awards with a term in the title
+
+	// PagesFetched and PagesPlanned expose how much of the candidate pool was
+	// actually retrieved. A later-page request can fail after the first page
+	// succeeded; the partial pool is still worth ranking, but the counts above
+	// then describe less than the intended search and must not be presented as
+	// if they were complete.
+	PagesFetched int `json:"pages_fetched"`
+	PagesPlanned int `json:"pages_planned"`
+
+	// PoolError carries the error that stopped paging early, if any. Empty
+	// when paging ended because the results ran out, which is not a failure.
+	PoolError string `json:"pool_error,omitempty"`
+}
+
+// Partial reports whether the candidate pool was cut short by an upstream
+// failure rather than by running out of results.
+func (s NSFStats) Partial() bool {
+	return s.PoolError != ""
 }
 
 // nsfStopWords are dropped from the query before matching; requiring them would
@@ -201,10 +219,19 @@ func nsfRank(pool []nsfAwardRaw, terms []string, rows int) ([]NSFAward, NSFStats
 // whose title or abstract contains every query term (matched by stem),
 // deduplicates collaborative re-registrations, and returns the top `rows` by
 // relevance along with the counts behind that selection.
+//
+// A failure on the first page is fatal: there is nothing to rank. A failure on
+// a later page is not, because the pages already fetched still carry useful
+// results — but it is reported through NSFStats rather than swallowed, since
+// the relevance counts then describe only part of the intended pool and a low
+// match count could reflect the failure rather than the topic.
 func SearchNSF(keyword string, rows int) ([]NSFAward, NSFStats, error) {
 	terms := nsfTerms(keyword)
 
 	var pool []nsfAwardRaw
+	var poolErr error
+	pagesFetched := 0
+
 	// Sequential, never parallel: one keyless client should not fan out six
 	// concurrent requests at a public API.
 	for page := 0; page < nsfPoolPages; page++ {
@@ -218,8 +245,10 @@ func SearchNSF(keyword string, rows int) ([]NSFAward, NSFStats, error) {
 			if page == 0 {
 				return nil, NSFStats{}, fmt.Errorf("NSF awards: %w", err)
 			}
-			break // partial pool is still useful
+			poolErr = err
+			break
 		}
+		pagesFetched++
 		pool = append(pool, resp.Response.Award...)
 		if len(resp.Response.Award) < nsfPageSize {
 			break // last page reached
@@ -227,5 +256,10 @@ func SearchNSF(keyword string, rows int) ([]NSFAward, NSFStats, error) {
 	}
 
 	awards, stats := nsfRank(pool, terms, rows)
+	stats.PagesFetched = pagesFetched
+	stats.PagesPlanned = nsfPoolPages
+	if poolErr != nil {
+		stats.PoolError = poolErr.Error()
+	}
 	return awards, stats, nil
 }
