@@ -102,14 +102,21 @@ func cmdSearch(args []string) int {
 	if *asJSON {
 		return printJSON(map[string]any{"keyword": keyword, "totalHits": total, "shown": len(opps), "opportunities": opps})
 	}
-
-	fmt.Printf("🔎 %q — %d open opportunities total, %d shown", keyword, total, len(opps))
+	fmt.Printf("🔎 %q — %d open opportunities total, %d shown, newest posting first", keyword, total, len(opps))
 	if !cutoff.IsZero() {
 		fmt.Printf(" (deadline ≤ %s)", cutoff.Format("2006-01-02"))
 	}
 	fmt.Println()
 	for _, o := range opps {
-		fmt.Printf("  %-14s %-9s closes: %-10s  %s\n", o.Number, o.AgencyCode, o.CloseDate, truncate(o.Title, 70))
+		deadline := o.CloseDate
+		if !o.HasDeadline() {
+			deadline = "not stated"
+		}
+		marker := ""
+		if o.Stale() {
+			marker = "  [posted " + o.OpenDate + "]"
+		}
+		fmt.Printf("  %-14s %-9s closes: %-10s  %s%s\n", o.Number, o.AgencyCode, deadline, truncate(o.Title, 70), marker)
 		if o.Details != nil {
 			label := "ceiling"
 			if o.Details.AwardCeiling == 0 && o.Details.EstimatedFunding > 0 {
@@ -125,9 +132,17 @@ func cmdSearch(args []string) int {
 	if len(opps) == 0 {
 		fmt.Println("  (no results with these filters)")
 	}
+
+	// "posted" means published and never closed, not that applications are
+	// still accepted; Grants.gov leaves stale records in that state for years.
+	if stale := sources.CountStale(opps); stale > 0 {
+		fmt.Fprintf(os.Stderr,
+			"  (warning: %d of %d shown were posted over two years ago; \"posted\" does not guarantee they still accept applications — verify at the agency)\n",
+			stale, len(opps))
+	}
+
 	return 0
 }
-
 func printJSON(v any) int {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
