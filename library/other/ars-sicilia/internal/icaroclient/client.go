@@ -66,12 +66,24 @@ type Record struct {
 }
 
 // Doc is the parsed body of a single document page.
+//
+// DocID e URL non identificano il documento: `icaDocId` è la posizione nella
+// short list della sessione corrente, quindi lo stesso valore punta a un
+// documento diverso appena cambia la query, e fuori sessione l'URL risponde
+// 302. Il portale un identificatore stabile ce l'ha — è il `docno(N)` con cui
+// costruisce il proprio permalink — e sta in DocNo/Permalink: quelli si
+// possono citare, salvare e riaprire.
 type Doc struct {
-	DocID  int               `json:"doc_id"`
-	Title  string            `json:"title"`
-	Fields map[string]string `json:"fields"`
-	Body   string            `json:"body"`
-	URL    string            `json:"url"`
+	DocID int `json:"doc_id"`
+	// DocNo è il numero di documento interno del portale, stabile nel tempo.
+	DocNo int `json:"docno,omitempty"`
+	// Permalink riapre il documento in una sessione nuova. È l'unico URL di
+	// questo struct che ha senso conservare.
+	Permalink string            `json:"permalink,omitempty"`
+	Title     string            `json:"title"`
+	Fields    map[string]string `json:"fields"`
+	Body      string            `json:"body"`
+	URL       string            `json:"url"`
 }
 
 // SearchOptions tunes a single search run.
@@ -85,6 +97,32 @@ type SearchOptions struct {
 	MaxPages int
 	// Limit is a max-records ceiling honored after collecting pages.
 	Limit int
+	// Truncated, when non-nil, is set by Search to report whether the archive
+	// held more matching records than are being returned — whether because
+	// Limit cut the set short or because MaxPages left later pages unread.
+	// Callers that render len(records) as a de facto total (deputato profilo,
+	// commissione dossier) use this to flag undercounts instead of silently
+	// presenting a capped count as complete.
+	Truncated *bool
+	// ForceIcaro pins the search to the legacy Icaro engine even for archives
+	// migrated to /bd/. The `get` path needs it: /bd/ rows carry no Icaro DocID
+	// and the /bd/ per-document detail is not implemented, so GetDoc must run on
+	// the Icaro DocID. On /bd/ archives this only finds records still present in
+	// Icaro's (frozen) index; recent records return not-found, which is correct.
+	ForceIcaro bool
+	// StopWhen, when non-nil, is consulted after each page with everything
+	// collected so far: returning true ends pagination. It exists because Limit
+	// counts ROWS, and in the leggi archive (indexed per article) the unit the
+	// caller wants is the law — a count knowable only after collapsing the rows
+	// fetched so far, never in advance. Estimating "10 laws ≈ 100 rows" up front
+	// is what made `leggi cerca --anno 2025` answer 4 laws out of 31: the year's
+	// first laws are the budget ones, ~25 article-rows each, and they ate the
+	// window. With the predicate the window stops on the unit that was asked for,
+	// so it also ends EARLIER than the estimate when the laws are short.
+	//
+	// Only the Icaro loop below honors it: /bd/ archives return from searchBD
+	// before it, and none of them is indexed per article.
+	StopWhen func([]Record) bool
 }
 
 // New constructs a Client with a fresh cookie jar and a 30 s default timeout.
@@ -116,6 +154,14 @@ func (c *Client) Search(ctx context.Context, arc Archive, opts SearchOptions) ([
 	if c == nil {
 		return nil, fmt.Errorf("nil icaroclient.Client")
 	}
+	// Gli archivi delle sedute migrati al backend /bd/ (sommari, resoconti,
+	// convocazioni) hanno l'indice Icaro congelato: instradiamo qui, dove i dati
+	// sono correnti. Gli altri archivi restano sul flusso Icaro sotto. Il path
+	// `get` passa ForceIcaro perché il dettaglio per-documento su /bd/ non esiste
+	// e serve il DocID Icaro (vedi SearchOptions.ForceIcaro).
+	if IsBDArchive(arc.Slug) && !opts.ForceIcaro {
+		return c.searchBD(ctx, arc, opts)
+	}
 	expr := BuildQuery(arc, opts.Params, opts.ISISRaw)
 	if err := c.bootstrapSession(ctx, arc.ID, expr); err != nil {
 		return nil, err
@@ -125,14 +171,29 @@ func (c *Client) Search(ctx context.Context, arc Archive, opts SearchOptions) ([
 		maxPages = 1
 	}
 	var all []Record
+	lastPage, lastTotalPages := 0, 0
+	// droppedByLimit records whether Limit actually cut records off the set we
+	// fetched. It is tracked separately from pagination because the two hide
+	// different halves of the same question: stopping early leaves whole pages
+	// unread (lastPage < lastTotalPages), while Limit can also slice away rows
+	// of the LAST page — in which case no page is left unread and pagination
+	// alone reports nothing was dropped.
+	droppedByLimit := false
 	for page := 1; page <= maxPages; page++ {
 		rows, totalPages, err := c.fetchPage(ctx, arc, page)
 		if err != nil {
 			return all, err
 		}
 		all = append(all, rows...)
+		lastPage, lastTotalPages = page, totalPages
 		if opts.Limit > 0 && len(all) >= opts.Limit {
+			droppedByLimit = len(all) > opts.Limit
 			all = all[:opts.Limit]
+			break
+		}
+		// Dopo il taglio per Limit, non prima: il predicato deve giudicare le
+		// righe che il chiamante riceverà davvero.
+		if opts.StopWhen != nil && opts.StopWhen(all) {
 			break
 		}
 		if page >= totalPages {
@@ -140,7 +201,11 @@ func (c *Client) Search(ctx context.Context, arc Archive, opts SearchOptions) ([
 		}
 	}
 	if opts.Limit > 0 && len(all) > opts.Limit {
+		droppedByLimit = true
 		all = all[:opts.Limit]
+	}
+	if opts.Truncated != nil {
+		*opts.Truncated = droppedByLimit || lastPage < lastTotalPages
 	}
 	return all, nil
 }
@@ -161,7 +226,20 @@ func (c *Client) GetDoc(ctx context.Context, arc Archive, docID int) (Doc, error
 		return Doc{}, err
 	}
 	doc.URL = docURL
+	if doc.DocNo > 0 {
+		doc.Permalink = PermalinkURL(c.BaseURL, arc.ID, doc.DocNo)
+	}
 	return doc, nil
+}
+
+// PermalinkURL costruisce il link stabile a un documento: è la stessa query
+// `docno(N)` che il portale mette dietro il proprio bottone «Link diretto al
+// documento», e riapre quel documento in una sessione nuova.
+func PermalinkURL(baseURL, archiveID string, docNo int) string {
+	q := url.Values{}
+	q.Set("icaDB", archiveID)
+	q.Set("icaQuery", fmt.Sprintf("docno(%d)", docNo))
+	return baseURL + "/icaro/default.jsp?" + q.Encode()
 }
 
 // bootstrapSession establishes a fresh server-side query state. icaQueryId is

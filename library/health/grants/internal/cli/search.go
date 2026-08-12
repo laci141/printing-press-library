@@ -88,7 +88,7 @@ func cmdSearch(args []string) int {
 		// client-side over the first page only, so matching opportunities on later
 		// pages are dropped silently. Kept independent of the --min-award guard so
 		// both warnings surface when both filters are active.
-		if *eligibility != "" && initialFetched == *rows {
+		if *eligibility != "" && initialFetched == *rows && total > initialFetched {
 			fmt.Fprintf(os.Stderr, "  (warning: --eligibility filter applies only to the first %d fetched results; increase --rows to fetch more)\n", *rows)
 		}
 

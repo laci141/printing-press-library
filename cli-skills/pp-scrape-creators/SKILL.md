@@ -34,7 +34,7 @@ This skill drives the `scrape-creators-pp-cli` binary. **You must verify the CLI
 2. Verify: `scrape-creators-pp-cli --version`
 3. Ensure the reported install directory is on `$PATH` for the agent/runtime that will invoke this skill.
 
-If the `npx` install fails (no Node, offline, etc.), fall back to a direct Go install (requires Go 1.26.4 or newer). This installs into `$GOPATH/bin` (default `$HOME/go/bin`), so add that directory to `$PATH` instead:
+If the `npx` install fails (no Node, offline, etc.), fall back to a direct Go install (requires Go 1.26.5 or newer). This installs into `$GOPATH/bin` (default `$HOME/go/bin`), so add that directory to `$PATH` instead:
 
 ```bash
 go install github.com/mvanhorn/printing-press-library/library/developer-tools/scrape-creators/cmd/scrape-creators-pp-cli@latest
@@ -126,6 +126,18 @@ These capabilities aren't available in any other tool for this API.
   ```bash
   scrape-creators-pp-cli account budget --agent
   ```
+
+### Full-history pagination
+
+- **`--all` on paginated feed commands** — Follows the API's response cursor (`next_max_id`, `cursor`, `continuationToken`, `after`, ...) automatically and merges every page into a single result, with a 100-page safety cap. Covers the paginated list commands across Instagram, TikTok, Facebook, YouTube, Reddit, GitHub, LinkedIn, and more. Without `--all` you get page 1 plus a truncation warning that names the flag.
+
+  _Replaces the manual loop of re-running a command with the cursor from the previous response._
+
+  ```bash
+  scrape-creators-pp-cli instagram list-user-4 --handle mrbeast --all --agent
+  ```
+
+  The two highest-traffic Instagram commands also take the handle or URL as a positional argument (`instagram list-user-4 mrbeast`) and answer to speaking aliases: `posts` for `list-user-4`, `comments` for `list-post-2`, `post` for `list-post`, `transcript` for `list-media`, and `profile` for `list-profile`.
 
 ## Command Reference
 
@@ -389,6 +401,15 @@ scrape-creators-pp-cli which "<capability in your own words>"
 `which` resolves a natural-language capability query to the best matching command from this CLI's curated feature index. Exit code `0` means at least one match; exit code `2` means no confident match — fall back to `--help` or use a narrower query.
 
 ## Recipes
+
+
+### Pull a creator's full Instagram post history
+
+```bash
+scrape-creators-pp-cli instagram list-user-4 mrbeast --all --agent
+```
+
+One command replaces the hand-rolled cursor loop: the CLI follows `next_max_id` until Instagram reports no more pages. The lone positional stands in for `--handle`.
 
 
 ### Vet an influencer shortlist

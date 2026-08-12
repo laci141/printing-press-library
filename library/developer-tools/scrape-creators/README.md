@@ -7,7 +7,7 @@ Scrape Creators exposes 164 read-only endpoints across TikTok, Instagram, YouTub
 Learn more at [Scrape Creators](https://scrapecreators.com).
 
 Created by [@adrianhorning08](https://github.com/adrianhorning08) (Adrian Horning).
-Contributors: [@tmchow](https://github.com/tmchow) (Trevin Chow).
+Contributors: [@tmchow](https://github.com/tmchow) (Trevin Chow), [@giuseppebisemi](https://github.com/giuseppebisemi) (Giuseppe Bisemi).
 
 ## Install
 
@@ -38,7 +38,7 @@ npx -y @mvanhorn/printing-press-library install scrape-creators --agent claude-c
 
 ### Without Node (Go fallback)
 
-If `npx` isn't available (no Node, offline), install the CLI directly via Go (requires Go 1.26.4 or newer):
+If `npx` isn't available (no Node, offline), install the CLI directly via Go (requires Go 1.26.5 or newer):
 
 ```bash
 go install github.com/mvanhorn/printing-press-library/library/developer-tools/scrape-creators/cmd/scrape-creators-pp-cli@latest
@@ -223,7 +223,28 @@ These capabilities aren't available in any other tool for this API.
   scrape-creators-pp-cli account budget --agent
   ```
 
+### Full-history pagination
+
+- **`--all` on paginated feed commands** — Follows the API's response cursor (`next_max_id`, `cursor`, `continuationToken`, `after`, ...) automatically and merges every page into a single result, with a 100-page safety cap. Covers the paginated list commands across Instagram, TikTok, Facebook, YouTube, Reddit, GitHub, LinkedIn, and more. Without `--all` you get page 1 plus a truncation warning that names the flag.
+
+  _Replaces the manual loop of re-running a command with the cursor from the previous response._
+
+  ```bash
+  scrape-creators-pp-cli instagram list-user-4 --handle mrbeast --all --agent
+  ```
+
+  The two highest-traffic Instagram commands also take the handle or URL as a positional argument (`instagram list-user-4 mrbeast`) and answer to speaking aliases: `posts` for `list-user-4`, `comments` for `list-post-2`, `post` for `list-post`, `transcript` for `list-media`, and `profile` for `list-profile`.
+
 ## Recipes
+
+
+### Pull a creator's full Instagram post history
+
+```bash
+scrape-creators-pp-cli instagram list-user-4 mrbeast --all --agent
+```
+
+One command replaces the hand-rolled cursor loop: the CLI follows `next_max_id` until Instagram reports no more pages. The lone positional stands in for `--handle`.
 
 
 ### Vet an influencer shortlist

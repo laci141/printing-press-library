@@ -13,18 +13,20 @@ import (
 
 // searchFlags holds the bound values for a provvedimenti search.
 type searchFlags struct {
-	testo   string
-	all     string
-	any     string
-	not     string
-	phrase  string
-	tipo    string
-	sede    string
-	anno    int
-	numero  int
-	nrg     int
-	annoNrg int
-	limit   int
+	testo    string
+	all      string
+	any      string
+	not      string
+	phrase   string
+	tipo     string
+	sede     string
+	anno     int
+	annoFrom int
+	annoTo   int
+	numero   int
+	nrg      int
+	annoNrg  int
+	limit    int
 }
 
 // addSearchFlags binds the common search flags onto a command.
@@ -37,6 +39,8 @@ func addSearchFlags(cmd *cobra.Command, f *searchFlags) {
 	cmd.Flags().StringVar(&f.tipo, "tipo", "", "Tipo: sentenza, ordinanza, decreto, parere, plenaria, generale.")
 	cmd.Flags().StringVar(&f.sede, "sede", "", "Sede: roma, milano, consiglio-di-stato, cgars, ... (28 TAR + CdS).")
 	cmd.Flags().IntVar(&f.anno, "anno", 0, "Anno del provvedimento.")
+	cmd.Flags().IntVar(&f.annoFrom, "anno-from", 0, "Sweep storico: primo anno (incluso). Itera il filtro anno; --limit vale per anno.")
+	cmd.Flags().IntVar(&f.annoTo, "anno-to", 0, "Sweep storico: ultimo anno (incluso).")
 	cmd.Flags().IntVar(&f.numero, "numero", 0, "Numero del provvedimento.")
 	cmd.Flags().IntVar(&f.nrg, "nrg", 0, "Numero di registro generale (ricorso).")
 	cmd.Flags().IntVar(&f.annoNrg, "anno-nrg", 0, "Anno del registro generale (per la ricerca per NRG).")
@@ -50,7 +54,8 @@ func (f *searchFlags) opts(positional string) gaclient.SearchOptions {
 	}
 	return gaclient.SearchOptions{
 		Testo: testo, All: f.all, Any: f.any, Not: f.not, Phrase: f.phrase,
-		Tipo: f.tipo, Sede: f.sede, Anno: f.anno, Numero: f.numero,
+		Tipo: f.tipo, Sede: f.sede, Anno: f.anno,
+		AnnoFrom: f.annoFrom, AnnoTo: f.annoTo, Numero: f.numero,
 		Nrg: f.nrg, AnnoNrg: f.annoNrg, Limit: f.limit,
 	}
 }

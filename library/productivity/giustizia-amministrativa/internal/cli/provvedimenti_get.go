@@ -9,6 +9,7 @@ import (
 
 func newProvvedimentiGetCmd(flags *rootFlags) *cobra.Command {
 	var format, sede, nrg, file string
+	var frontMatter bool
 	cmd := &cobra.Command{
 		Use:         "get [id]",
 		Short:       "Scarica il testo integrale di un provvedimento (per ECLI o idprovv).",
@@ -22,12 +23,13 @@ func newProvvedimentiGetCmd(flags *rootFlags) *cobra.Command {
 			if id == "" && sede == "" {
 				return cmd.Help()
 			}
-			return runGAGet(cmd, flags, id, format, sede, nrg, file)
+			return runGAGet(cmd, flags, id, format, sede, nrg, file, frontMatter)
 		},
 	}
 	cmd.Flags().StringVar(&format, "format", "md", "Formato di output: md, text, html, json.")
 	cmd.Flags().StringVar(&sede, "sede", "", "Schema sede (es. tar_rm) per il fetch diretto senza ricerca.")
 	cmd.Flags().StringVar(&nrg, "nrg", "", "NRG per il fetch diretto.")
 	cmd.Flags().StringVar(&file, "file", "", "nomeFile per il fetch diretto (es. 202611307_01.html).")
+	cmd.Flags().BoolVar(&frontMatter, "front-matter", false, "Anteponi un blocco YAML con i metadati (solo output md/text).")
 	return cmd
 }

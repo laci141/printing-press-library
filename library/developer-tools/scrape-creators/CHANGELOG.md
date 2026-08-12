@@ -2,6 +2,14 @@
 
 This file is maintained by printing-press-library release automation. Do not hand-edit release sections in normal PRs.
 
+## 2026.8.1 - 2026-08-08
+
+- feat(scrape-creators): make --all follow response cursors; add --all, aliases, positional handle to feed commands (#1624).
+
+## 2026.7.1 - 2026-07-08
+
+- fix(catalog): require Go 1.26.5 across published modules (#1467).
+
 ## 2026.6.3 - 2026-06-30
 
 - feat(scrape-creators): add scrape-creators (#1408).

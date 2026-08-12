@@ -472,6 +472,22 @@ func writeAPIErrorEnvelope(flags *rootFlags, err error, code int) {
 	})
 }
 
+// PATCH(amend-2026-07-29: accept a positional value for a command's lone
+// required flag) — transcripts show repeated `required flag "handle" not set`
+// errors from natural invocations like `instagram list-user-4 mrbeast`.
+// adoptLonePositionalArg lets that positional stand in for the flag; explicit
+// flags always win.
+func adoptLonePositionalArg(cmd *cobra.Command, args []string, flagName string, target *string) {
+	if len(args) != 1 || args[0] == "" {
+		return
+	}
+	if cmd.Flags().Changed(flagName) || *target != "" {
+		return
+	}
+	*target = args[0]
+	_ = cmd.Flags().Set(flagName, args[0])
+}
+
 // classifyAPIError maps API errors to structured exit codes with actionable hints.
 func classifyAPIError(err error, flags *rootFlags) error {
 	var typed *cliError
@@ -498,11 +514,15 @@ func classifyAPIError(err error, flags *rootFlags) error {
 			" Set your API key with: export SCRAPECREATORS_API_KEY=\"your-token-here\""+
 			"\n      See API docs: https://scrapecreators.com"+
 			"\n      Run 'scrape-creators-pp-cli doctor' to check auth status.", err))
+	// PATCH(amend-2026-07-29: 403s here are usually upstream content blocks, not
+	// credential problems) — a session hit identical 403s on one Instagram post
+	// from 4 regions; the old hint sent the user debugging a valid API key.
 	case strings.Contains(msg, "HTTP 403"):
-		return authErr(fmt.Errorf("%w\nhint: permission denied. Your credentials are valid but lack access to this resource."+
-			"\n      Check that your credentials have the required permissions and match the API's expected auth scheme."+
-			"\n      Set your API key with: export SCRAPECREATORS_API_KEY=\"your-token-here\""+
-			"\n      See API docs: https://scrapecreators.com"+
+		return authErr(fmt.Errorf("%w\nhint: forbidden. If your API key works for other commands, the upstream platform is"+
+			"\n      blocking this specific content (private, removed, or geo-restricted) — retrying or"+
+			"\n      switching regions will not help."+
+			"\n      If every command fails with 403, check your API key:"+
+			"\n      export SCRAPECREATORS_API_KEY=\"your-token-here\""+
 			"\n      Run 'scrape-creators-pp-cli doctor' to check auth status.", err))
 	case strings.Contains(msg, "HTTP 404"):
 		return notFoundErr(fmt.Errorf("%w\nhint: resource not found. Run the 'list' command to see available items", err))
@@ -1185,10 +1205,59 @@ var compactVerboseListFields = map[string]bool{
 // for a `get` command those fields are the primary payload, and stripping
 // them under `--agent`/`--compact` silently emits a useless envelope.
 // Use `--select` to drop them explicitly.
+//
+// The same hazard reaches the keys that ARE listed here: "comments" is a
+// sidecar on a post object but the whole payload on the comments commands.
+// resolveVerboseObjectFields decides which of the two a given response is;
+// the raw map is a starting point, not the final answer.
 var compactVerboseObjectFields = map[string]bool{
 	"description": true,
 	"comments":    true,
 	"attachments": true,
+}
+
+// resolveVerboseObjectFields narrows compactVerboseObjectFields against one
+// response. A blocked key holding the response's only array is payload, not
+// metadata: `instagram list-post-2` returns {"comments": [...]} beside scalar
+// envelope fields, so stripping it emits {"success": true, "cursor": "..."} —
+// a paid call that reports success and returns no data. Sidecar arrays (a post
+// object carrying comments next to its own arrays) are still stripped.
+//
+// Rule: never strip the only array in the response.
+//
+// "Array" is judged by two deliberately different bars. A blocked key is
+// spared on any `[]any` — an empty `comments: []` is still the answer "zero
+// comments" and must survive. An unblocked key counts as a competing payload
+// only when compactObjectArrayValue accepts it (non-empty array of objects):
+// a scalar array like `tags: ["a"]` or an empty `related: []` is envelope
+// garnish, and letting it count would strip the comments beside it — the
+// exact silent loss this resolver exists to prevent. Reusing
+// compactObjectArrayValue as the judge keeps the two criteria from drifting.
+func resolveVerboseObjectFields(obj map[string]any) map[string]bool {
+	strip := map[string]bool{}
+	blockedArrayKeys := make([]string, 0, len(compactVerboseObjectFields))
+	unblockedArrays := 0
+	for k, v := range obj {
+		if compactVerboseObjectFields[k] {
+			strip[k] = true
+			if _, isArray := v.([]any); isArray {
+				blockedArrayKeys = append(blockedArrayKeys, k)
+			}
+			continue
+		}
+		if envelopeMetadataArrayKeys[k] {
+			continue
+		}
+		if _, isPayload := compactObjectArrayValue(v); isPayload {
+			unblockedArrays++
+		}
+	}
+	if unblockedArrays == 0 {
+		for _, k := range blockedArrayKeys {
+			delete(strip, k)
+		}
+	}
+	return strip
 }
 
 // compactFields keeps only the most important fields for agent consumption.
@@ -1314,13 +1383,14 @@ func isCompactScalar(v any) bool {
 // under `--agent`/`--compact` is a silent loss; agents who want to omit them
 // can pass `--select` to specify only the fields they need.
 func compactObjectFields(obj map[string]any) json.RawMessage {
+	strip := resolveVerboseObjectFields(obj)
 	if compacted, ok := compactListEnvelopeObject(obj); ok {
 		result, _ := json.Marshal(compacted)
 		return result
 	}
 	compact := map[string]any{}
 	for k, v := range obj {
-		if !compactVerboseObjectFields[k] {
+		if !strip[k] {
 			compact[k] = v
 		}
 	}
@@ -1329,10 +1399,11 @@ func compactObjectFields(obj map[string]any) json.RawMessage {
 }
 
 func compactListEnvelopeObject(obj map[string]any) (map[string]any, bool) {
+	strip := resolveVerboseObjectFields(obj)
 	out := map[string]any{}
 	foundArray := false
 	for k, v := range obj {
-		if compactVerboseObjectFields[k] {
+		if strip[k] {
 			continue
 		}
 		if envelopeMetadataArrayKeys[k] {

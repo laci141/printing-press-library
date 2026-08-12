@@ -9,10 +9,12 @@ func newDdlCercaCmd(flags *rootFlags) *cobra.Command {
 	var (
 		flagLegisl     int
 		flagAnno       int
+		flagNumero     int
 		flagFirmatario string
 		flagMateria    string
 		flagIter       string
 		flagTesto      string
+		flagFrase      string
 		flagISIS       string
 		flagLimit      int
 		flagMaxPages   int
@@ -20,6 +22,7 @@ func newDdlCercaCmd(flags *rootFlags) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:     "cerca",
+		Args:    rejectPositionalArgs,
 		Short:   "Cerca disegni di legge per legislatura, anno, firmatario o materia.",
 		Example: "  ars-sicilia-pp-cli ddl cerca --legisl 18 --anno 2024 --json",
 		Annotations: map[string]string{
@@ -34,6 +37,9 @@ func newDdlCercaCmd(flags *rootFlags) *cobra.Command {
 			if flagAnno != 0 {
 				params["anno"] = itoa(flagAnno)
 			}
+			if flagNumero != 0 {
+				params["numero"] = itoa(flagNumero)
+			}
 			if flagFirmatario != "" {
 				params["firmatario"] = flagFirmatario
 			}
@@ -46,6 +52,9 @@ func newDdlCercaCmd(flags *rootFlags) *cobra.Command {
 			if flagTesto != "" {
 				params["testo"] = flagTesto
 			}
+			if flagFrase != "" {
+				params["frase"] = flagFrase
+			}
 			return runCerca(cmd, flags, "ddl", cercaParams{
 				Params: params, ISISRaw: flagISIS,
 				Limit: flagLimit, MaxPages: flagMaxPages,
@@ -53,13 +62,17 @@ func newDdlCercaCmd(flags *rootFlags) *cobra.Command {
 		},
 	}
 	cmd.Flags().IntVar(&flagLegisl, "legisl", 0, "Legislatura (es. 18).")
-	cmd.Flags().IntVar(&flagAnno, "anno", 0, "Anno di presentazione.")
+	cmd.Flags().IntVar(&flagAnno, "anno", 0, "Anno di presentazione (qualificato su DATPRE come range 1 gen - 31 dic, non testo libero).")
+	cmd.Flags().IntVar(&flagNumero, "numero", 0, "Numero del DDL (campo NUMDDL; per gli stralci è l'ID numerico interno, non la sigla \"N/A Stralcio\" — vedi il campo excerpt per la designazione ufficiale).")
 	cmd.Flags().StringVar(&flagFirmatario, "firmatario", "", "Nome o cognome del firmatario.")
 	cmd.Flags().StringVar(&flagMateria, "materia", "", "Materia/settore.")
 	cmd.Flags().StringVar(&flagIter, "iter", "", "Stato dell'iter.")
 	cmd.Flags().StringVar(&flagTesto, "testo", "", "Ricerca testuale libera.")
+	cmd.Flags().StringVar(&flagFrase, "frase", "", "Cerca le parole come locuzione, adiacenti e nell'ordine dato (ISIS adj). Piu' preciso di --testo, che combina le parole in AND sull'intero documento: --testo \"aree idonee\" aggancia anche chi ha le due parole in articoli diversi.")
 	cmd.Flags().StringVar(&flagISIS, "isis-query", "", "Espressione ISIS grezza (escape hatch).")
 	cmd.Flags().IntVar(&flagLimit, "limit", 10, "Max risultati da scaricare.")
 	cmd.Flags().IntVar(&flagMaxPages, "max-pages", 0, "Pagine massime da scaricare (0 = auto da --limit).")
+	cmd.Flags().String("escludi", "", "Escludi i documenti che contengono questo termine (ISIS NOT).")
+	cmd.Flags().Bool("con-firmatari", false, "Includi l'elenco completo dei firmatari per ogni risultato: apre il documento di ogni riga (una richiesta in piu' per riga, piu' lento). Senza questo flag la lista mostra solo il primo firmatario, come il portale.")
 	return cmd
 }

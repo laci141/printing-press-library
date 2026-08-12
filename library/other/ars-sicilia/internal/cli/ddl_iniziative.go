@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -33,9 +32,7 @@ i disegni di legge per tipo di proponente.`,
 				return nil
 			}
 			if flags.asJSON || !isTerminal(cmd.OutOrStdout()) {
-				enc := json.NewEncoder(cmd.OutOrStdout())
-				enc.SetIndent("", "  ")
-				return enc.Encode(ddlIniziative)
+				return printJSONFiltered(cmd.OutOrStdout(), ddlIniziative, flags)
 			}
 			for _, i := range ddlIniziative {
 				fmt.Fprintln(cmd.OutOrStdout(), i)

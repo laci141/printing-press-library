@@ -79,13 +79,19 @@ func runGASearch(cmd *cobra.Command, flags *rootFlags, opts gaclient.SearchOptio
 	if err != nil {
 		return classifyAPIError(err, flags)
 	}
+	for _, w := range res.Warnings {
+		fmt.Fprintf(cmd.ErrOrStderr(), "Attenzione: %s\n", w)
+	}
 	// Best-effort persistence (offline search, watch, grep, stats build on this).
 	if st, serr := openGAStore(cmd.Context()); serr == nil {
 		persistProvvedimenti(st, res.Items)
 		_ = st.Close()
 	}
 	if wantsHumanTable(cmd.OutOrStdout(), flags) && res.Total > 0 {
-		fmt.Fprintf(cmd.ErrOrStderr(), "Trovati %d risultati (mostrati %d).\n", res.Total, len(res.Items))
+		// Total is the match count declared by the portal (summed per year in a
+		// sweep), not the number of rows returned: say so, or the two numbers
+		// look contradictory whenever Total exceeds --limit.
+		fmt.Fprintf(cmd.ErrOrStderr(), "Trovati %d risultati sul portale (mostrati %d).\n", res.Total, len(res.Items))
 	}
 	data, err := json.Marshal(res.Items)
 	if err != nil {
@@ -119,8 +125,10 @@ func resolveProvvedimento(ctx context.Context, st *store.Store, id string) (gacl
 }
 
 // runGAGet fetches the full text of a provvedimento and renders it in the
-// requested format (md, text, html, json).
-func runGAGet(cmd *cobra.Command, flags *rootFlags, id, format, sede, nrg, file string) error {
+// requested format (md, text, html, json). When frontMatter is set and the
+// format is md/text, a YAML front-matter block with the provvedimento metadata
+// is prepended (no-op for json/html, which already carry the fields).
+func runGAGet(cmd *cobra.Command, flags *rootFlags, id, format, sede, nrg, file string, frontMatter bool) error {
 	if gaSkip(flags) {
 		return nil
 	}
@@ -170,8 +178,14 @@ func runGAGet(cmd *cobra.Command, flags *rootFlags, id, format, sede, nrg, file 
 	}
 	switch strings.ToLower(format) {
 	case "", "md", "markdown":
+		if frontMatter {
+			fmt.Fprintln(cmd.OutOrStdout(), gaclient.FrontMatter(p))
+		}
 		fmt.Fprintln(cmd.OutOrStdout(), markdown)
 	case "text", "txt":
+		if frontMatter {
+			fmt.Fprintln(cmd.OutOrStdout(), gaclient.FrontMatter(p))
+		}
 		fmt.Fprintln(cmd.OutOrStdout(), gaclient.HTMLToText(docHTML))
 	case "html":
 		fmt.Fprintln(cmd.OutOrStdout(), docHTML)

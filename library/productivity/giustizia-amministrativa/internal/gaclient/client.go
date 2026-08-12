@@ -2,6 +2,7 @@ package gaclient
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -57,18 +58,20 @@ func New() *Client {
 
 // SearchOptions describes a provvedimenti query.
 type SearchOptions struct {
-	Testo   string // simple full-text
-	All     string // advanced: all of these words
-	Any     string // advanced: any of these words
-	Not     string // advanced: none of these words
-	Phrase  string // advanced: exact phrase
-	Tipo    string // sentenza|ordinanza|decreto|parere|plenaria|generale
-	Sede    string // roma|milano|consiglio-di-stato|...
-	Anno    int
-	Numero  int
-	Nrg     int
-	AnnoNrg int
-	Limit   int // max results to return
+	Testo    string // simple full-text
+	All      string // advanced: all of these words
+	Any      string // advanced: any of these words
+	Not      string // advanced: none of these words
+	Phrase   string // advanced: exact phrase
+	Tipo     string // sentenza|ordinanza|decreto|parere|plenaria|generale
+	Sede     string // roma|milano|consiglio-di-stato|...
+	Anno     int
+	AnnoFrom int // year-range sweep: first year (inclusive)
+	AnnoTo   int // year-range sweep: last year (inclusive)
+	Numero   int
+	Nrg      int
+	AnnoNrg  int
+	Limit    int // max results to return (per year when sweeping a year range)
 }
 
 func (c *Client) get(ctx context.Context, rawURL string) ([]byte, int, error) {
@@ -214,23 +217,148 @@ func (c *Client) buildSearchURL(opts SearchOptions, cur int) string {
 	return BaseURL + formPath + "?" + v.Encode()
 }
 
-// SearchResult bundles the rows of a search with the reported total.
+// SearchResult bundles the rows of a search with the reported total. Warnings
+// carries non-fatal notices (a year skipped during a sweep) for the caller to
+// surface on stderr; results are still usable.
 type SearchResult struct {
-	Items []Provvedimento
-	Total int
+	Items    []Provvedimento
+	Total    int
+	Warnings []string
 }
 
-// Search runs a query, paginating until Limit results are collected. It performs
-// the session handshake on first use and retries once on a 403 (expired token).
+// Search runs a query and returns up to Limit results. It performs the session
+// handshake on first use. When a year range (AnnoFrom/AnnoTo) is set it sweeps
+// the years one by one — the portal has no relevance sort and only a single-year
+// filter, so historical coverage requires iterating the year filter — applying
+// Limit per year and de-duplicating the union by id.
 func (c *Client) Search(ctx context.Context, opts SearchOptions) (*SearchResult, error) {
 	if opts.Limit <= 0 {
 		opts.Limit = defaultPageSize
+	}
+	if opts.Anno != 0 && (opts.AnnoFrom != 0 || opts.AnnoTo != 0) {
+		return nil, fmt.Errorf("usa --anno oppure --anno-from/--anno-to, non entrambi")
 	}
 	if c.token() == "" {
 		if err := c.handshake(ctx); err != nil {
 			return nil, err
 		}
 	}
+	if opts.AnnoFrom != 0 || opts.AnnoTo != 0 {
+		return c.searchSweep(ctx, opts)
+	}
+	return c.searchOnce(ctx, opts)
+}
+
+// yearRange normalizes an inclusive year span: a missing bound mirrors the
+// other, and a reversed span is swapped so from <= to.
+func yearRange(from, to int) (int, int) {
+	if from == 0 {
+		from = to
+	}
+	if to == 0 {
+		to = from
+	}
+	if from > to {
+		from, to = to, from
+	}
+	return from, to
+}
+
+// dedupKey identifies a provvedimento for de-duplication: ECLI, else idprovv,
+// else the document coordinates (schema|nrg|nome_file). It never returns "" for
+// a real result, so items lacking an ECLI/idprovv still de-duplicate instead of
+// being appended once per swept year.
+func dedupKey(p Provvedimento) string {
+	if p.Ecli != "" {
+		return p.Ecli
+	}
+	if p.Idprovv != "" {
+		return p.Idprovv
+	}
+	return p.Schema + "|" + p.Nrg + "|" + p.NomeFile
+}
+
+// fatalSweepError reports whether an error must abort a whole sweep instead of
+// skipping the failing year: rate limiting (further years would only hit more
+// of it) and a cancelled/expired context.
+func fatalSweepError(ctx context.Context, err error) bool {
+	var rle *cliutil.RateLimitError
+	if errors.As(err, &rle) {
+		return true
+	}
+	return ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
+
+// searchSweep iterates the year filter from AnnoFrom to AnnoTo (inclusive),
+// running searchOnce per year and de-duplicating the union by dedupKey. Limit
+// applies per year. Total is the sum of per-year totals.
+//
+// A transient failure on one year (timeout, network) does not discard the years
+// already collected: that year is skipped and reported in Warnings. Rate limits
+// and a cancelled context abort the sweep, and an error is returned only when no
+// year succeeded at all.
+func (c *Client) searchSweep(ctx context.Context, opts SearchOptions) (*SearchResult, error) {
+	from, to := yearRange(opts.AnnoFrom, opts.AnnoTo)
+	yearOpts := opts
+	yearOpts.AnnoFrom, yearOpts.AnnoTo = 0, 0
+	return sweepYears(ctx, from, to, func(y int) (*SearchResult, error) {
+		yearOpts.Anno = y
+		return c.searchOnce(ctx, yearOpts)
+	})
+}
+
+// appendSkippedWarning records the years dropped by a transient failure, so a
+// gap in the swept range is never silent — including when the sweep later
+// aborts for a different reason.
+func appendSkippedWarning(warnings, skipped []string, lastErr error) []string {
+	if len(skipped) == 0 {
+		return warnings
+	}
+	return append(warnings, fmt.Sprintf("anni non recuperati: %s (ultimo errore: %v)", strings.Join(skipped, ", "), lastErr))
+}
+
+// sweepYears merges the per-year results of fetch over an inclusive year span,
+// applying the skip/abort policy described on searchSweep.
+func sweepYears(ctx context.Context, from, to int, fetch func(year int) (*SearchResult, error)) (*SearchResult, error) {
+	res := &SearchResult{}
+	seen := map[string]bool{}
+	var skipped []string
+	var lastErr error
+	for y := from; y <= to; y++ {
+		part, err := fetch(y)
+		if err != nil {
+			if fatalSweepError(ctx, err) {
+				if len(res.Items) == 0 {
+					return nil, err
+				}
+				res.Warnings = append(res.Warnings, fmt.Sprintf("sweep interrotto all'anno %d: %v; risultati parziali dagli anni %d-%d", y, err, from, y-1))
+				res.Warnings = appendSkippedWarning(res.Warnings, skipped, lastErr)
+				return res, nil
+			}
+			lastErr = err
+			skipped = append(skipped, strconv.Itoa(y))
+			continue
+		}
+		res.Total += part.Total
+		for _, p := range part.Items {
+			key := dedupKey(p)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			res.Items = append(res.Items, p)
+		}
+	}
+	if len(skipped) > 0 && len(res.Items) == 0 {
+		return nil, lastErr
+	}
+	res.Warnings = appendSkippedWarning(res.Warnings, skipped, lastErr)
+	return res, nil
+}
+
+// searchOnce paginates a single query until Limit results are collected,
+// retrying once on a 403 (expired token).
+func (c *Client) searchOnce(ctx context.Context, opts SearchOptions) (*SearchResult, error) {
 	res := &SearchResult{}
 	maxPages := (opts.Limit + defaultPageSize - 1) / defaultPageSize
 	for page := 1; page <= maxPages; page++ {

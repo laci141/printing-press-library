@@ -25,14 +25,22 @@ var reUnsafe = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
 func newNovelCorpusBuildCmd(flags *rootFlags) *cobra.Command {
 	var f searchFlags
 	var out string
+	var skipExisting, plan, frontMatter bool
 	cmd := &cobra.Command{
 		Use:   "build",
 		Short: "Assembla N provvedimenti su un tema in Markdown + un CSV manifest.",
 		Long: "Esegue una ricerca, scarica il testo integrale di ogni provvedimento in Markdown e scrive\n" +
-			"una cartella con un file .md per provvedimento più un manifest.csv (ECLI, tipo, sede, data, url).",
+			"una cartella con un file .md per provvedimento più un manifest.csv (ECLI, tipo, sede, data, url).\n" +
+			"Con --skip-existing i provvedimenti il cui .md è già presente in --out non vengono riscaricati\n" +
+			"(corpus incrementale), restando comunque elencati nel manifest. Con --plan non scarica nulla:\n" +
+			"scrive solo il manifest delle candidate, per rivedere la query prima di impegnare N richieste.\n" +
+			"Con --front-matter l'intestazione di ogni .md è il blocco YAML di `get --front-matter`\n" +
+			"invece dell'intestazione Markdown predefinita.",
 		Example: strings.Trim(`
   giustizia-amministrativa-pp-cli corpus build --testo "soccorso istruttorio" --tipo sentenza --limit 3 --out ./corpus
-  giustizia-amministrativa-pp-cli corpus build --all "clausola sociale" --sede roma --limit 20 --out ./clausola-sociale`, "\n"),
+  giustizia-amministrativa-pp-cli corpus build --all "clausola sociale" --sede roma --limit 20 --out ./clausola-sociale
+  giustizia-amministrativa-pp-cli corpus build --all "accesso generalizzato" --plan --out ./corpus
+  giustizia-amministrativa-pp-cli corpus build --all "accesso generalizzato" --skip-existing --front-matter --out ./corpus`, "\n"),
 		Annotations: map[string]string{"mcp:read-only": "false"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if gaSkip(flags) {
@@ -56,6 +64,9 @@ func newNovelCorpusBuildCmd(flags *rootFlags) *cobra.Command {
 			if err != nil {
 				return classifyAPIError(err, flags)
 			}
+			for _, w := range res.Warnings {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Attenzione: %s\n", w)
+			}
 			st, _ := openGAStore(cmd.Context())
 			if st != nil {
 				defer st.Close()
@@ -75,8 +86,34 @@ func newNovelCorpusBuildCmd(flags *rootFlags) *cobra.Command {
 				File string `json:"file"`
 				URL  string `json:"url"`
 			}
+			manifestRow := func(p gaclient.Provvedimento, fname string) {
+				_ = w.Write([]string{p.Ecli, p.Tipo, p.Sede, p.Sezione, strconv.Itoa(p.Anno), strconv.Itoa(p.Numero), p.Nrg, p.DataDeposito, p.URL, fname})
+			}
+
 			var summary []built
+			var skipped, planned int
 			for _, p := range res.Items {
+				fname := sanitizeFilename(provID(p)) + ".md"
+				fpath := filepath.Join(out, fname)
+
+				// --plan: list candidates only, no document fetch, no .md written.
+				if plan {
+					manifestRow(p, fname)
+					summary = append(summary, built{Ecli: p.Ecli, File: fname, URL: p.URL})
+					planned++
+					continue
+				}
+				// --skip-existing: already-downloaded provvedimenti stay in the
+				// manifest (from search metadata) but are not refetched.
+				if skipExisting {
+					if _, statErr := os.Stat(fpath); statErr == nil {
+						manifestRow(p, fname)
+						summary = append(summary, built{Ecli: p.Ecli, File: fname, URL: p.URL})
+						skipped++
+						continue
+					}
+				}
+
 				docHTML, ferr := c.FullText(cmd.Context(), p)
 				if ferr != nil {
 					fmt.Fprintf(cmd.ErrOrStderr(), "salto %s: %v\n", provID(p), ferr)
@@ -90,13 +127,17 @@ func newNovelCorpusBuildCmd(flags *rootFlags) *cobra.Command {
 				if st != nil {
 					persistProvvedimenti(st, []gaclient.Provvedimento{p})
 				}
-				fname := sanitizeFilename(provID(p)) + ".md"
-				header := fmt.Sprintf("# %s\n\n- Tipo: %s\n- Sede: %s %s\n- Data deposito: %s\n- NRG: %s\n- URL: %s\n\n---\n\n",
-					provID(p), p.Tipo, p.Sede, p.Sezione, p.DataDeposito, p.Nrg, p.URL)
-				if werr := os.WriteFile(filepath.Join(out, fname), []byte(header+md+"\n"), 0o644); werr != nil {
+				var header string
+				if frontMatter {
+					header = gaclient.FrontMatter(p) + "\n"
+				} else {
+					header = fmt.Sprintf("# %s\n\n- Tipo: %s\n- Sede: %s %s\n- Data deposito: %s\n- NRG: %s\n- URL: %s\n\n---\n\n",
+						provID(p), p.Tipo, p.Sede, p.Sezione, p.DataDeposito, p.Nrg, p.URL)
+				}
+				if werr := os.WriteFile(fpath, []byte(header+md+"\n"), 0o644); werr != nil {
 					return werr
 				}
-				_ = w.Write([]string{p.Ecli, p.Tipo, p.Sede, p.Sezione, strconv.Itoa(p.Anno), strconv.Itoa(p.Numero), p.Nrg, p.DataDeposito, p.URL, fname})
+				manifestRow(p, fname)
 				summary = append(summary, built{Ecli: p.Ecli, File: fname, URL: p.URL})
 			}
 			w.Flush()
@@ -105,10 +146,18 @@ func newNovelCorpusBuildCmd(flags *rootFlags) *cobra.Command {
 			}
 
 			if wantsHumanTable(cmd.OutOrStdout(), flags) {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Corpus creato in %s: %d provvedimenti, manifest %s.\n", out, len(summary), manifestPath)
+				switch {
+				case plan:
+					fmt.Fprintf(cmd.ErrOrStderr(), "Piano: %d candidate elencate in %s (nessun download).\n", planned, manifestPath)
+				case skipped > 0:
+					fmt.Fprintf(cmd.ErrOrStderr(), "Corpus aggiornato in %s: %d provvedimenti (%d già presenti, saltati), manifest %s.\n", out, len(summary), skipped, manifestPath)
+				default:
+					fmt.Fprintf(cmd.ErrOrStderr(), "Corpus creato in %s: %d provvedimenti, manifest %s.\n", out, len(summary), manifestPath)
+				}
 			}
 			result := map[string]any{
 				"out": out, "manifest": manifestPath, "count": len(summary),
+				"skipped": skipped, "plan": plan,
 				"generated_at": time.Now().UTC().Format(time.RFC3339), "items": summary,
 			}
 			data, _ := json.Marshal(result)
@@ -117,6 +166,9 @@ func newNovelCorpusBuildCmd(flags *rootFlags) *cobra.Command {
 	}
 	addSearchFlags(cmd, &f)
 	cmd.Flags().StringVar(&out, "out", "", "Cartella di destinazione del corpus (richiesto).")
+	cmd.Flags().BoolVar(&skipExisting, "skip-existing", false, "Non riscaricare i provvedimenti il cui .md è già presente in --out.")
+	cmd.Flags().BoolVar(&plan, "plan", false, "Non scaricare: elenca solo le candidate nel manifest, per revisione.")
+	cmd.Flags().BoolVar(&frontMatter, "front-matter", false, "Usa il blocco YAML (come `get --front-matter`) come intestazione dei .md, invece dell'header Markdown predefinito.")
 	return cmd
 }
 
