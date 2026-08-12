@@ -51,8 +51,16 @@ var NIHCenterCodes = []string{
 }
 
 type NIHProject struct {
-	ProjectNum   string  `json:"project_num"`
-	Title        string  `json:"project_title"`
+	ProjectNum string `json:"project_num"`
+	// CoreProjectNum identifies the grant across its support years. RePORTER
+	// returns one record per fiscal year, so a project funded for a decade
+	// appears ten times under project numbers that differ only in their
+	// prefix and suffix (5R01CA092447-08, 2R01CA092447-06A1, 3R01CA092447-08S1).
+	// The core number is the same for all of them and is the only reliable
+	// dedup key — trimming the project number by character position does not
+	// work, because the prefix digit and the suffix length both vary.
+	CoreProjectNum string  `json:"core_project_num"`
+	Title          string  `json:"project_title"`
 	AwardAmount  float64 `json:"award_amount"`
 	FiscalYear   int     `json:"fiscal_year"`
 	PI           string  `json:"contact_pi_name"`
@@ -126,14 +134,67 @@ func buildNIHPayload(q NIHQuery, offset, limit int, sortOrder string) map[string
 	}
 }
 
-// SearchNIH returns awarded projects for a query, largest awards first.
+// nihOverFetch is how many records are requested per row returned.
+//
+// RePORTER returns one record per support year, so an amount-sorted page is
+// dominated by whichever long-running projects had large years. Measured on
+// 2026-08-11 (keyword "cancer", 100 records): 71 distinct projects, with one
+// study contributing 11 records; in the top 15 the duplication was worse still,
+// leaving only 7 distinct projects. Fetching several times the requested rows
+// leaves enough material to fill the page after collapsing them.
+const nihOverFetch = 6
+
+// SearchNIH returns awarded projects for a query, largest awards first, with
+// each project appearing once.
 func SearchNIH(q NIHQuery) ([]NIHProject, int, error) {
+	fetch := q.Limit * nihOverFetch
+	if fetch < 25 {
+		fetch = 25
+	}
+	if fetch > 500 {
+		fetch = 500
+	}
+
 	var resp nihResp
-	payload := buildNIHPayload(q, 0, q.Limit, "desc")
+	payload := buildNIHPayload(q, 0, fetch, "desc")
 	if err := postJSON(nihSearchURL, payload, &resp); err != nil {
 		return nil, 0, fmt.Errorf("NIH RePORTER: %w", err)
 	}
-	return resp.Results, resp.Meta.Total, nil
+
+	projects := dedupeNIHProjects(resp.Results)
+	if q.Limit > 0 && len(projects) > q.Limit {
+		projects = projects[:q.Limit]
+	}
+	return projects, resp.Meta.Total, nil
+}
+
+// dedupeNIHProjects collapses a project's support years into its largest one,
+// preserving the incoming order otherwise (the API sorts by amount descending).
+//
+// The largest year is kept because it is the most informative single row for
+// "how much does this kind of work get": it is the peak annual award rather
+// than a ramp-up or closing year. Records without a core number are passed
+// through untouched rather than grouped together.
+func dedupeNIHProjects(in []NIHProject) []NIHProject {
+	best := make(map[string]int, len(in))
+	out := make([]NIHProject, 0, len(in))
+
+	for _, p := range in {
+		key := p.CoreProjectNum
+		if key == "" {
+			out = append(out, p)
+			continue
+		}
+		if idx, seen := best[key]; seen {
+			if p.AwardAmount > out[idx].AwardAmount {
+				out[idx] = p
+			}
+			continue
+		}
+		best[key] = len(out)
+		out = append(out, p)
+	}
+	return out
 }
 
 // NIHTypical describes where the middle of the matching awards sits.
