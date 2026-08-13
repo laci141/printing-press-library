@@ -41,29 +41,33 @@ func cmdNIH(args []string) int {
 	}
 
 	// The listing is sorted by amount descending, which shows the largest
-	// awards rather than a representative one. The estimate below is what
+	// award records rather than a representative one. The estimate below is what
 	// answers "how much is granted for this topic", so it is fetched
 	// alongside. A failure here must not sink the listing.
 	typical, typicalErr := sources.TypicalNIHAward(query)
 
 	if *asJSON {
 		out := map[string]any{
-			"keyword":         keyword,
+			"keyword": keyword,
+			// RePORTER returns one record per support year, so this is a count
+			// of award records, not of distinct awarded projects.
 			"total":           total,
+			"total_unit":      "matching award records (one per support year), not distinct projects",
 			"shown":           len(projects),
 			"include_centers": *includeCenters,
 			"projects":        projects,
 		}
 		if typicalErr == nil && typical.Population > 0 {
 			// Reported as an estimate with its bounds, not as an exact order
-			// statistic: it is located by counting awards above a series of
+			// statistic: it is located by counting award records above a series of
 			// amounts, so the true middle sits somewhere in [low, high].
 			out["typical_award"] = map[string]any{
-				"population":   typical.Population,
-				"estimate":     typical.Estimate,
-				"bracket_low":  typical.Low,
-				"bracket_high": typical.High,
-				"method":       "count-based bisection on award amount; estimate is the midpoint of the bracket",
+				"population":      typical.Population,
+				"population_unit": "matching award records (one per support year), not distinct projects",
+				"estimate":        typical.Estimate,
+				"bracket_low":     typical.Low,
+				"bracket_high":    typical.High,
+				"method":          "count-based bisection on award amount over award records; estimate is the midpoint of the bracket",
 			}
 		}
 		return printJSON(out)
@@ -73,7 +77,7 @@ func cmdNIH(args []string) int {
 	if *includeCenters {
 		scope = "research grants + centers/consortia"
 	}
-	fmt.Printf("🏥 NIH RePORTER %q — %d awarded projects total, %d shown (%s, descending by award)\n",
+	fmt.Printf("🏥 NIH RePORTER %q — %d matching award records total (one per support year, so fewer distinct projects), %d shown (%s, descending by award)\n",
 		keyword, total, len(projects), scope)
 
 	for _, p := range projects {
@@ -87,14 +91,15 @@ func cmdNIH(args []string) int {
 
 	if typicalErr == nil && typical.Population > 0 {
 		if typical.High > 0 {
-			fmt.Printf("\n  Typical award: about %s — half of the %d matching awards fall between %s and %s\n",
+			fmt.Printf("\n  Typical award: about %s — half of the %d matching award records fall between %s and %s\n",
 				FormatMoney(typical.Estimate), typical.Population,
 				FormatMoney(typical.Low), FormatMoney(typical.High))
 		} else {
-			fmt.Printf("\n  Typical award: above %s (%d matching awards)\n",
+			fmt.Printf("\n  Typical award: above %s (%d matching award records)\n",
 				FormatMoney(typical.Low), typical.Population)
 		}
-		fmt.Println("  The list above is sorted by size, so it shows the largest awards, not typical ones.")
+		fmt.Println("  The list above is sorted by size, so it shows the largest award records, not typical ones.")
+		fmt.Println("  Each record is one support year of a project, and the estimate above is computed over those records.")
 	}
 	if !*includeCenters {
 		fmt.Println("  Center, program and consortium awards are excluded. Add --include-centers to see them.")

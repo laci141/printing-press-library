@@ -61,11 +61,11 @@ type NIHProject struct {
 	// work, because the prefix digit and the suffix length both vary.
 	CoreProjectNum string  `json:"core_project_num"`
 	Title          string  `json:"project_title"`
-	AwardAmount  float64 `json:"award_amount"`
-	FiscalYear   int     `json:"fiscal_year"`
-	PI           string  `json:"contact_pi_name"`
-	ActivityCode string  `json:"activity_code"`
-	Org          struct {
+	AwardAmount    float64 `json:"award_amount"`
+	FiscalYear     int     `json:"fiscal_year"`
+	PI             string  `json:"contact_pi_name"`
+	ActivityCode   string  `json:"activity_code"`
+	Org            struct {
 		Name string `json:"org_name"`
 	} `json:"organization"`
 }
