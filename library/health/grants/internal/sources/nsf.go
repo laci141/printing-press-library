@@ -1,11 +1,18 @@
 package sources
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"sort"
 	"strings"
 )
+
+// ErrPartialPool is returned by SearchNSF when paging stopped early because an
+// upstream request failed. The awards collected so far are still returned, but
+// the search did not cover the intended pool, so callers must not present the
+// result as a completed search. Test for it with errors.Is.
+var ErrPartialPool = errors.New("NSF candidate pool is incomplete")
 
 // NSF Awards API — awarded NSF grants. Keyless.
 const nsfAwardsURL = "https://api.nsf.gov/services/v1/awards.json"
@@ -221,10 +228,11 @@ func nsfRank(pool []nsfAwardRaw, terms []string, rows int) ([]NSFAward, NSFStats
 // relevance along with the counts behind that selection.
 //
 // A failure on the first page is fatal: there is nothing to rank. A failure on
-// a later page is not, because the pages already fetched still carry useful
-// results — but it is reported through NSFStats rather than swallowed, since
-// the relevance counts then describe only part of the intended pool and a low
-// match count could reflect the failure rather than the topic.
+// a later page still returns the awards already fetched, but it is reported as
+// an error wrapping ErrPartialPool as well as in NSFStats — the relevance
+// counts then describe only part of the intended pool, and a caller that only
+// checked the error must not read that as a completed search. Callers can tell
+// "nothing came back" from "some pages came back" by the returned slice.
 func SearchNSF(keyword string, rows int) ([]NSFAward, NSFStats, error) {
 	terms := nsfTerms(keyword)
 
@@ -260,6 +268,8 @@ func SearchNSF(keyword string, rows int) ([]NSFAward, NSFStats, error) {
 	stats.PagesPlanned = nsfPoolPages
 	if poolErr != nil {
 		stats.PoolError = poolErr.Error()
+		return awards, stats, fmt.Errorf("%w: %d of %d pages fetched: %w",
+			ErrPartialPool, pagesFetched, nsfPoolPages, poolErr)
 	}
 	return awards, stats, nil
 }

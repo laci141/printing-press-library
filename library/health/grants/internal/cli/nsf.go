@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -25,7 +26,12 @@ func cmdNSF(args []string) int {
 	}
 
 	awards, stats, err := sources.SearchNSF(keyword, *rows)
-	if err != nil {
+	// A partial pool is not fatal — the awards already fetched are worth
+	// showing — but it is still an error: the command keeps printing results
+	// and warnings below and then exits non-zero, so a script checking $?
+	// never mistakes an incomplete search for a completed one.
+	partial := errors.Is(err, sources.ErrPartialPool)
+	if err != nil && !partial {
 		return fail(err)
 	}
 
@@ -60,12 +66,23 @@ func cmdNSF(args []string) int {
 	}
 
 	if *asJSON {
-		return printJSON(map[string]any{
-			"keyword":   keyword,
-			"shown":     len(awards),
-			"awards":    awards,
-			"relevance": stats,
-		})
+		// incomplete/pages_* are top level on purpose: a JSON consumer must be
+		// able to see that the search was cut short without reading stderr.
+		if code := printJSON(map[string]any{
+			"keyword":         keyword,
+			"shown":           len(awards),
+			"awards":          awards,
+			"relevance":       stats,
+			"incomplete":      partial,
+			"pages_requested": stats.PagesPlanned,
+			"pages_succeeded": stats.PagesFetched,
+		}); code != 0 {
+			return code
+		}
+		if partial {
+			return 1
+		}
+		return 0
 	}
 
 	fmt.Printf("🔬 NSF %q — %d awarded grants shown\n", keyword, len(awards))
@@ -90,6 +107,9 @@ func cmdNSF(args []string) int {
 		if stats.Matched < 10 {
 			fmt.Println("  few awards use all of these words together — try fewer or broader words (e.g. one topic word instead of two)")
 		}
+	}
+	if partial {
+		return 1
 	}
 	return 0
 }

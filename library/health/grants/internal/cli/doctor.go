@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/mvanhorn/printing-press-library/library/health/grants/internal/sources"
@@ -29,8 +30,15 @@ func cmdDoctor() int {
 	}
 
 	// SearchNSF also returns relevance statistics; the reachability check does
-	// not need them.
-	if awards, _, err := sources.SearchNSF("science", 1); err != nil {
+	// not need them. A partial pool means the first page came back but a later
+	// one did not: the endpoint is reachable, yet the search it can serve is
+	// incomplete, which is exactly the kind of degradation doctor exists to
+	// report — so it counts as a failure here too, with its own wording.
+	if awards, stats, err := sources.SearchNSF("science", 1); errors.Is(err, sources.ErrPartialPool) {
+		failed = true
+		fmt.Printf("  ✘ NSF          degraded: only %d of %d pages fetched (%s)\n",
+			stats.PagesFetched, stats.PagesPlanned, stats.PoolError)
+	} else if err != nil {
 		failed = true
 		fmt.Printf("  ✘ NSF          %v\n", err)
 	} else {
