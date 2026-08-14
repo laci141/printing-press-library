@@ -90,8 +90,13 @@ func cmdNIH(args []string) int {
 	}
 
 	if typicalErr == nil && typical.Population > 0 {
+		// The bracket is how far the bisection narrowed the median's LOCATION,
+		// not how the awards themselves are spread. Award sizes are heavily
+		// right-skewed: the same result set carries multi-million dollar rows,
+		// so claiming half of them sit inside a few-thousand-dollar band would
+		// be plainly false. Word it as uncertainty about the median.
 		if typical.High > 0 {
-			fmt.Printf("\n  Typical award: about %s — half of the %d matching award records fall between %s and %s\n",
+			fmt.Printf("\n  Typical award: about %s — the median across %d award records lies between %s and %s\n",
 				FormatMoney(typical.Estimate), typical.Population,
 				FormatMoney(typical.Low), FormatMoney(typical.High))
 		} else {
