@@ -323,8 +323,41 @@ func classifyAgainstHarmClaim(hay, claim string) (Stance, float64) {
 	//
 	// "increas*" matches stay excluded here: they are direction-ambiguous and
 	// directionUpCues already handles them.
+	//
+	// So are cues inside the TITLE. A scientific title names what a paper is
+	// ABOUT; the finding lives in the abstract. pairInScope cannot discriminate
+	// there by construction: an on-topic title necessarily carries both claim
+	// sides, so every title cue passes the pairing test no matter what the paper
+	// concluded. This is the 2026-08-05 HPV gate's failure one level up — that
+	// fix gated background sentences within the abstract; this one gates the
+	// sentence the gate can never judge.
+	//
+	// Measured live for "smoking causes lung cancer": "Cigarette smoking and
+	// lung cancer: chemical mechanisms and approaches to prevention" scored
+	// refuting at 0.90 on the single title cue "prevention" — nullCues and
+	// harmCues fired zero times, and the abstract alone fires no support cue at
+	// all. The paper describes the carcinogenic mechanism. Across the 7 archived
+	// harm corpora only 7 of 137 titles carry a support cue, and four are this
+	// same mistake: "Effective Messages in Vaccine Promotion" (communications
+	// research, silent on autism), "Coffee and tea on cardiovascular disease
+	// (CVD) prevention" (topic, not finding), "Cancer is a Preventable Disease
+	// that Requires Major Lifestyle Changes" (actually supports a diet-cancer
+	// link), "Role of HPV vaccination for prevention of male infertility"
+	// (right verdict, reached by luck).
+	//
+	// nullCues titles are deliberately untouched: a title CAN state a negative
+	// finding ("No association between HPV vaccination and infertility"), and
+	// those count on the separate neg branch above. This gate is only for
+	// benefit vocabulary, which in a title names the subject.
+	//
+	// normalizeText only folds dash runes, so the title is exactly the first
+	// sentence of hay and its boundary is stable.
+	_, titleEnd := sentenceBounds(hay, 0)
 	for _, loc := range supportCues.FindAllStringIndex(hay, -1) {
 		if strings.Contains(hay[loc[0]:loc[1]], "increas") {
+			continue
+		}
+		if loc[0] < titleEnd {
 			continue
 		}
 		if paired {

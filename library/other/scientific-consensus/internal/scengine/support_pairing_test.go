@@ -10,17 +10,24 @@ import (
 // in the same sentence-clipped window as both claim sides.
 //
 // The abstracts here are shortened from works measured live that day.
+//
+// Each case carries an explicit title because ClassifyStance always builds its
+// haystack as title + ". " + abstract, and the title-cue gate keys off the
+// first sentence. Feeding a bare abstract would make sentence one look like a
+// title and measure a code path production never takes.
 func TestSupportCueNeedsClaimPairing(t *testing.T) {
 	const claim = "HPV vaccine causes infertility"
 
 	cases := []struct {
-		name string
-		text string
-		want Stance
-		why  string
+		name  string
+		title string
+		text  string
+		want  Stance
+		why   string
 	}{
 		{
-			name: "background benefit about a different outcome",
+			name:  "background benefit about a different outcome",
+			title: "Religious beliefs and HPV vaccine acceptance in Islamic countries: a scoping review",
 			text: "Despite the availability of effective HPV vaccines, their acceptance " +
 				"in Islamic countries is often influenced by religious beliefs and " +
 				"misconceptions. This review identified the current literature on " +
@@ -29,7 +36,8 @@ func TestSupportCueNeedsClaimPairing(t *testing.T) {
 			why:  "effective refers to cervical cancer prevention; the review measures acceptance, not fertility",
 		},
 		{
-			name: "uptake study with no fertility finding",
+			name:  "uptake study with no fertility finding",
+			title: "Factors influencing HPV vaccination uptake in sub-Saharan Africa: a case control study",
 			text: "There are few data on factors influencing human papillomavirus HPV " +
 				"vaccination uptake in sub-Saharan Africa. We conducted a case control " +
 				"study of HPV vaccine receivers and non-receivers within a phase IV " +
@@ -38,7 +46,8 @@ func TestSupportCueNeedsClaimPairing(t *testing.T) {
 			why:  "scored refuting at 0.90 before this change, on background vocabulary alone",
 		},
 		{
-			name: "benefit reported about the claim's own outcome still counts",
+			name:  "benefit reported about the claim's own outcome still counts",
+			title: "HPV vaccination and male fertility: a prospective cohort",
 			text: "HPV vaccination is effective in preventing infertility in men, and " +
 				"vaccinated men showed no impairment of sperm parameters compared " +
 				"with unvaccinated controls.",
@@ -49,7 +58,7 @@ func TestSupportCueNeedsClaimPairing(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			hay := strings.ToLower(tc.text)
+			hay := strings.ToLower(normalizeText(tc.title + ". " + tc.text))
 			got, _ := classifyAgainstHarmClaim(hay, claim)
 			if got != tc.want {
 				t.Errorf("stance = %q, want %q\n  %s\n  text: %s", got, tc.want, tc.why, tc.text[:80])

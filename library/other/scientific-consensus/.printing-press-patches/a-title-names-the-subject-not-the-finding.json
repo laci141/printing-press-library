@@ -1,0 +1,15 @@
+{
+  "schema_version": 2,
+  "id": "a-title-names-the-subject-not-the-finding",
+  "applied_at": "2026-08-15",
+  "base_run_id": "20260620-165352-e55cec69",
+  "base_printing_press_version": "4.24.0",
+  "summary": "Against a harm claim, a benefit word inside the TITLE is not a finding against the claim: a scientific title names what a paper is about, the abstract carries what it concluded. The support-cue loop on the harm branch must skip cues in the title sentence; nullCues stay outside this gate because a title CAN state a negative result.",
+  "reason": "The sentence-scoped pairing gate cannot discriminate a title by construction — an on-topic title necessarily contains both claim sides, so every title cue passes the pairing test regardless of what the paper found. Measured live for 'smoking causes lung cancer': 'Cigarette smoking and lung cancer: chemical mechanisms and approaches to prevention' scored refuting at 0.90 on the single title cue 'prevention', with nullCues and harmCues firing zero times, and the abstract firing no support cue at all. This is the same failure as the earlier background-sentence gate, one level up. A regen must keep the title excluded from the benefit-cue count and must NOT extend the exclusion to nullCues, directionDownCues, harmCues, or the strong/meta refutation overrides — those are decided elsewhere and a negative title claim is real evidence.",
+  "files": [
+    "internal/scengine/stance.go",
+    "internal/scengine/title_cue_gate_test.go",
+    "internal/scengine/support_pairing_test.go"
+  ],
+  "validated_outcome": "Across the 7 archived harm corpora (137 works) exactly one work changes stance: coffee's 'Coffee and tea on cardiovascular disease (CVD) prevention', refuting 0.90 -> inconclusive 0.20. The other three substantive title-cue works are unmoved because they are already decided elsewhere — 'Effective Messages in Vaccine Promotion' by the Option C refutation override, 'Cancer is a Preventable Disease' already inconclusive under the pairing gate, and 'Role of HPV vaccination for prevention of male infertility' by abstract cues. All three nullCues titles are unaffected."
+}
