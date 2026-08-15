@@ -99,14 +99,36 @@ func cmdSearch(args []string) int {
 		}
 	}
 
+	keywordHits := sources.KeywordHits(keyword, *agency)
+
 	if *asJSON {
-		return printJSON(map[string]any{"keyword": keyword, "totalHits": total, "shown": len(opps), "opportunities": opps})
+		out := map[string]any{"keyword": keyword, "totalHits": total, "shown": len(opps), "opportunities": opps}
+		if keywordHits != nil {
+			out["keyword_hits"] = keywordHits
+		}
+		return printJSON(out)
 	}
 	fmt.Printf("🔎 %q — %d open opportunities total, %d shown, newest posting first", keyword, total, len(opps))
 	if !cutoff.IsZero() {
 		fmt.Printf(" (deadline ≤ %s)", cutoff.Format("2006-01-02"))
 	}
 	fmt.Println()
+
+	// Grants.gov joins the query words with OR and never says so, so a word that
+	// matches nothing leaves the result set untouched: measured, "climate" and
+	// "climate zzzqqqxxx" both return 61 hits. Without this line a typo is
+	// indistinguishable from a search that worked.
+	var unmatched []string
+	for _, kh := range keywordHits {
+		if kh.Hits == 0 {
+			unmatched = append(unmatched, kh.Word)
+		}
+	}
+	if len(unmatched) > 0 {
+		fmt.Printf("  note: %s matched no opportunities at all; Grants.gov matches any query word rather than all of them, so these results come from the other word(s) only.\n",
+			strings.Join(unmatched, ", "))
+	}
+
 	for _, o := range opps {
 		deadline := o.CloseDate
 		if !o.HasDeadline() {

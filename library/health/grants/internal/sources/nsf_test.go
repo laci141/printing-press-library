@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestNSFStem(t *testing.T) {
+func TestStem(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"resilience", "resil"},
 		{"resilient", "resil"},
@@ -24,13 +24,33 @@ func TestNSFStem(t *testing.T) {
 		{"Climate", "climate"},
 	}
 	for _, c := range cases {
-		if got := nsfStem(c.in); got != c.want {
-			t.Errorf("nsfStem(%q) = %q, want %q", c.in, got, c.want)
+		if got := stem(c.in); got != c.want {
+			t.Errorf("stem(%q) = %q, want %q", c.in, got, c.want)
 		}
 	}
 }
 
-func TestNSFTerms(t *testing.T) {
+// queryWords keeps the words as typed: callers that show a word to the user or
+// send it back to an API cannot use a stem such as "resilienc".
+func TestQueryWords(t *testing.T) {
+	cases := []struct {
+		in   string
+		want []string
+	}{
+		{"climate resilience", []string{"climate", "resilience"}},
+		{"gene therapy", []string{"gene", "therapy"}},
+		{"the use of AI for imaging", []string{"imaging"}},
+		{"cancer", []string{"cancer"}},
+		{"", nil},
+	}
+	for _, c := range cases {
+		if got := queryWords(c.in); !reflect.DeepEqual(got, c.want) {
+			t.Errorf("queryWords(%q) = %v, want %v", c.in, got, c.want)
+		}
+	}
+}
+
+func TestNSFStems(t *testing.T) {
 	cases := []struct {
 		in   string
 		want []string
@@ -42,8 +62,8 @@ func TestNSFTerms(t *testing.T) {
 		{"", nil},
 	}
 	for _, c := range cases {
-		if got := nsfTerms(c.in); !reflect.DeepEqual(got, c.want) {
-			t.Errorf("nsfTerms(%q) = %v, want %v", c.in, got, c.want)
+		if got := nsfStems(c.in); !reflect.DeepEqual(got, c.want) {
+			t.Errorf("nsfStems(%q) = %v, want %v", c.in, got, c.want)
 		}
 	}
 }
@@ -55,7 +75,7 @@ func TestNSFScoreMatchesByStem(t *testing.T) {
 		NSFAward: NSFAward{Title: "Coastal Infrastructure Study"},
 		Abstract: "This project studies how climate change makes coastal towns more resilient.",
 	}
-	score, titleHit, ok := nsfScore(award, nsfTerms("climate resilience"))
+	score, titleHit, ok := nsfScore(award, nsfStems("climate resilience"))
 	if !ok {
 		t.Fatal("expected an abstract saying \"resilient\" to match the term \"resilience\"")
 	}
@@ -109,7 +129,7 @@ func TestNSFScore(t *testing.T) {
 		},
 	}
 	for _, c := range cases {
-		score, hit, ok := nsfScore(c.award, nsfTerms(c.query))
+		score, hit, ok := nsfScore(c.award, nsfStems(c.query))
 		if ok != c.wantOK || hit != c.wantHit || (ok && score != c.wantScrE) {
 			t.Errorf("%s: nsfScore = (%d, %v, %v), want (%d, %v, %v)",
 				c.name, score, hit, ok, c.wantScrE, c.wantHit, c.wantOK)
@@ -133,7 +153,7 @@ func TestNSFRank(t *testing.T) {
 			"artificial methods"},
 	}
 
-	awards, stats := nsfRank(pool, nsfTerms("artificial intelligence"), 5)
+	awards, stats := nsfRank(pool, nsfStems("artificial intelligence"), 5)
 
 	if stats.Examined != 5 {
 		t.Errorf("Examined = %d, want 5", stats.Examined)
@@ -160,7 +180,7 @@ func TestNSFRankLimitsRows(t *testing.T) {
 		{NSFAward{ID: "2", Title: "Cancer B"}, "cancer"},
 		{NSFAward{ID: "3", Title: "Cancer C"}, "cancer"},
 	}
-	awards, stats := nsfRank(pool, nsfTerms("cancer"), 2)
+	awards, stats := nsfRank(pool, nsfStems("cancer"), 2)
 	if len(awards) != 2 {
 		t.Errorf("len(awards) = %d, want 2", len(awards))
 	}

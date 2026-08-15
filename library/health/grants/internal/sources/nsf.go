@@ -90,9 +90,10 @@ func (s NSFStats) Partial() bool {
 	return s.PoolError != ""
 }
 
-// nsfStopWords are dropped from the query before matching; requiring them would
-// reject good awards for no reason.
-var nsfStopWords = map[string]bool{
+// stopWords are dropped from the query before matching; requiring them would
+// reject good awards for no reason. Shared by every source that has to reason
+// about the words of a query, not only NSF.
+var stopWords = map[string]bool{
 	"and": true, "the": true, "for": true, "with": true, "from": true,
 	"into": true, "onto": true, "over": true, "under": true, "about": true,
 	"that": true, "this": true, "these": true, "those": true, "are": true,
@@ -100,20 +101,20 @@ var nsfStopWords = map[string]bool{
 	"via": true, "per": true, "new": true, "using": true, "use": true,
 }
 
-// nsfSuffixes are trimmed to compare words by stem. Measured: "climate
+// suffixes are trimmed to compare words by stem. Measured: "climate
 // resilience" matches zero awards containing the literal "resilience" — the
 // abstracts say "resilient". A crude suffix trim covers that without pulling in
 // a stemming dependency. Longest suffixes first so "-ations" wins over "-s".
-var nsfSuffixes = []string{
+var suffixes = []string{
 	"ization", "ability", "ations", "ements", "iency", "ience", "ient",
 	"ence", "ies", "ing", "ed", "es", "y", "s",
 }
 
-// nsfStem trims one known suffix, but only while at least four characters
+// stem trims one known suffix, but only while at least four characters
 // remain, so short words are not destroyed ("gene" stays "gene").
-func nsfStem(word string) string {
+func stem(word string) string {
 	w := strings.ToLower(word)
-	for _, suf := range nsfSuffixes {
+	for _, suf := range suffixes {
 		if len(w) >= len(suf)+4 && strings.HasSuffix(w, suf) {
 			return strings.TrimSuffix(w, suf)
 		}
@@ -121,17 +122,33 @@ func nsfStem(word string) string {
 	return w
 }
 
-// nsfTerms splits a query into the stems every award must contain.
-func nsfTerms(keyword string) []string {
-	var terms []string
+// queryWords splits a query into the meaningful words it is really made of,
+// dropping punctuation, two-letter fragments and stop words.
+//
+// The words come back with their own spelling, unstemmed: a caller that matches
+// them against free text wants the stem, but a caller that shows a word to the
+// user or sends it back to an API must use the word the user actually typed —
+// "resilienc" is not a word and finds nothing.
+func queryWords(keyword string) []string {
+	var words []string
 	for _, word := range strings.FieldsFunc(keyword, func(r rune) bool {
 		return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9')
 	}) {
 		lower := strings.ToLower(word)
-		if len(lower) <= 2 || nsfStopWords[lower] {
+		if len(lower) <= 2 || stopWords[lower] {
 			continue
 		}
-		terms = append(terms, nsfStem(lower))
+		words = append(words, lower)
+	}
+	return words
+}
+
+// nsfStems is the query as NSF matching needs it: the meaningful words reduced
+// to stems, because the abstracts inflect them differently than the user typed.
+func nsfStems(keyword string) []string {
+	var terms []string
+	for _, w := range queryWords(keyword) {
+		terms = append(terms, stem(w))
 	}
 	return terms
 }
@@ -234,7 +251,7 @@ func nsfRank(pool []nsfAwardRaw, terms []string, rows int) ([]NSFAward, NSFStats
 // checked the error must not read that as a completed search. Callers can tell
 // "nothing came back" from "some pages came back" by the returned slice.
 func SearchNSF(keyword string, rows int) ([]NSFAward, NSFStats, error) {
-	terms := nsfTerms(keyword)
+	terms := nsfStems(keyword)
 
 	var pool []nsfAwardRaw
 	var poolErr error

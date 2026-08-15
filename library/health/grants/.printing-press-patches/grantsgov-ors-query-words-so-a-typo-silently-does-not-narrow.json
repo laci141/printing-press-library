@@ -1,0 +1,15 @@
+{
+  "schema_version": 2,
+  "id": "grantsgov-ors-query-words-so-a-typo-silently-does-not-narrow",
+  "applied_at": "2026-08-15",
+  "base_run_id": "20260705-183000",
+  "base_printing_press_version": "4.25.0",
+  "files": [
+    "internal/sources/grantsgov.go",
+    "internal/sources/nsf.go",
+    "internal/cli/search.go"
+  ],
+  "summary": "Grants.gov joins query words with OR and never says so, so report each word's own hit count instead of filtering.",
+  "reason": "A word that matches nothing leaves the result set unchanged, so a typo returns the other word's results with no signal that half the query was discarded. Filtering is not available as a remedy: the search response carries no description field, and descriptions require one extra request per record.",
+  "validated_outcome": "Live API: \"climate\" 61 hits, \"climate zzzqqqxxx\" also 61, \"zzzqqqxxx\" alone 0. Title-only AND filtering was measured and rejected — 1 of those 61 titles contains the stem \"climat\", and it is the stalest record in the set."
+}

@@ -4,16 +4,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
+	"sync"
 	"time"
 )
 
 // Grants.gov Search2 API — open federal funding opportunities.
 // Keyless. Dates in the results use MM/DD/YYYY.
 
-const (
-	grantsSearchURL = "https://api.grants.gov/v1/api/search2"
-	grantsFetchURL  = "https://api.grants.gov/v1/api/fetchOpportunity"
-)
+const grantsFetchURL = "https://api.grants.gov/v1/api/fetchOpportunity"
+
+// grantsSearchURL is a variable rather than a constant so the tests can point
+// the search at an httptest server. Nothing outside the tests reassigns it.
+var grantsSearchURL = "https://api.grants.gov/v1/api/search2"
 
 // grantsSortNewestFirst orders results by posting date, newest first.
 //
@@ -140,6 +142,57 @@ func SearchOpportunities(keyword, agencyCode string, rows int) ([]Opportunity, i
 		opps[i].Title = html.UnescapeString(opps[i].Title) // titles contain entities such as &ndash;
 	}
 	return opps, resp.Data.HitCount, nil
+}
+
+// KeywordHit is one query word and how many opportunities it matches on
+// its own. Grants.gov ORs the words together, so a word with zero hits of
+// its own contributed nothing to the result set — the user cannot see that
+// from the totals alone.
+type KeywordHit struct {
+	Word string `json:"word"`
+	Hits int    `json:"hits"`
+}
+
+// KeywordHits measures each meaningful word separately. Returns nil for
+// single-word queries (nothing to compare) and nil on any failure: the main
+// search already succeeded, and a partial breakdown would be worse than
+// none. Requests run concurrently.
+//
+// Measured against the live API: "climate" returns 61 hits, "zzzqqqxxx" returns
+// 0, and "climate zzzqqqxxx" returns 61 — a word that matches nothing does not
+// remove a single record, so a typo is indistinguishable from a real search
+// unless the per-word counts are reported.
+//
+// The words are searched and reported exactly as the user typed them, never
+// stemmed: the API is asked a real question, and the answer names a word the
+// user recognises. Each request asks for one row, which is ~1KB against the
+// ~800ms fixed cost of a call, so the whole breakdown costs one round trip.
+func KeywordHits(keyword, agencyCode string) []KeywordHit {
+	words := queryWords(keyword)
+	if len(words) < 2 {
+		return nil
+	}
+
+	hits := make([]KeywordHit, len(words))
+	errs := make([]error, len(words))
+	var wg sync.WaitGroup
+	for i, word := range words {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, total, err := SearchOpportunities(word, agencyCode, 1)
+			hits[i] = KeywordHit{Word: word, Hits: total}
+			errs[i] = err
+		}()
+	}
+	wg.Wait()
+
+	for _, err := range errs {
+		if err != nil {
+			return nil
+		}
+	}
+	return hits
 }
 
 // CountStale returns how many of these opportunities were posted long enough
