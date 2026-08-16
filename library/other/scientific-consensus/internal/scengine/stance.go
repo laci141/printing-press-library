@@ -282,8 +282,33 @@ func classifyAgainstHarmClaim(hay, claim string) (Stance, float64) {
 	}
 	// A reported benefit contradicts a harm claim. "increas*" support matches
 	// are direction-ambiguous here and already handled by directionUpCues.
-	for _, m := range supportCues.FindAllString(hay, -1) {
-		if strings.Contains(m, "increas") {
+	// Direction-ambiguous stems are excluded outright: in harm literature
+	// "positive association" and "enhanced" report the association's sign or
+	// magnitude, not a benefit, and "increas*" is already directionUpCues'.
+	// The rest must clear the SAME framing/negation/pairing gates the positive
+	// side clears. Measured on the smoking corpus (26 works, 2026-08-16): the
+	// ungated block produced 16 refuting against 3 supporting, and every one of
+	// those 16 carried nullCues=0 — the refutation came entirely from
+	// "prevention" (13 hits), "improv*" (11) and "benefit*" (6), which a causal
+	// corpus is saturated with precisely BECAUSE the association is real.
+	// Gated: 4 refuting, 6 supporting. Doll & Peto's 40-year cohort stops being
+	// read as a refutation of the claim it established.
+	for _, loc := range supportCues.FindAllStringIndex(hay, -1) {
+		m := hay[loc[0]:loc[1]]
+		if strings.Contains(m, "increas") ||
+			strings.Contains(m, "positive ") ||
+			strings.Contains(m, "enhanc") {
+			continue
+		}
+		sp := cueSpan{loc[0], loc[1]}
+		sentStart, sentEnd := sentenceBounds(hay, sp.start)
+		if framingCues.MatchString(hay[sentStart:sentEnd]) {
+			continue
+		}
+		if negationCues.MatchString(backWindow(hay, sp.start, sentStart)) {
+			continue
+		}
+		if paired && !pairInScope(hay, sp, sentStart, sentEnd, intervention, outcome) {
 			continue
 		}
 		neg++
