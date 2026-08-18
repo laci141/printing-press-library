@@ -10,10 +10,10 @@ package scengine
 // the heuristic — the LLM path never blocks, never retries indefinitely, and
 // never crashes the command.
 //
-// All five integrations use net/http directly: no external SDKs, no Python, no
+// All six integrations use net/http directly: no external SDKs, no Python, no
 // subprocess calls. Each provider's request/response handling lives in its own
-// small private function (callAnthropic, callOpenAI, callGemini, callGroq,
-// callMistral) so they can be reviewed independently.
+// small private function (callAnthropic, callOpenAI, callDeepSeek, callGemini,
+// callGroq, callMistral) so they can be reviewed independently.
 
 import (
 	"bytes"
@@ -43,9 +43,17 @@ type provider struct {
 
 // providers is the priority-ordered list. The FIRST one whose env var is set
 // (non-empty) wins.
+//
+// deepseek sits after the two incumbents and before the rest: it is the
+// cheapest per-call option here, which matters because stance classification
+// issues ONE call PER WORK, so a 25-work run is 25 calls. Placing it above
+// gemini/groq/mistral means a user who has configured several keys gets the
+// low-cost path by default, while anyone who deliberately set an Anthropic or
+// OpenAI key still gets what they asked for.
 var providers = []provider{
 	{name: "anthropic", envVar: "ANTHROPIC_API_KEY", call: callAnthropic},
 	{name: "openai", envVar: "OPENAI_API_KEY", call: callOpenAI},
+	{name: "deepseek", envVar: "DEEPSEEK_API_KEY", call: callDeepSeek},
 	{name: "gemini", envVar: "GEMINI_API_KEY", call: callGemini},
 	{name: "groq", envVar: "GROQ_API_KEY", call: callGroq},
 	{name: "mistral", envVar: "MISTRAL_API_KEY", call: callMistral},
@@ -88,7 +96,7 @@ func LLMProviderName() string {
 func ClassifyStanceWithLLM(ctx context.Context, title, abstract, claim string) (Stance, float64, error) {
 	p, key := activeProvider()
 	if p == nil {
-		return "", 0, errors.New("no LLM provider configured (set one of ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, GROQ_API_KEY, MISTRAL_API_KEY)")
+		return "", 0, errors.New("no LLM provider configured (set one of ANTHROPIC_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY, GEMINI_API_KEY, GROQ_API_KEY, MISTRAL_API_KEY)")
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, llmTimeout)
@@ -260,6 +268,19 @@ func callOpenAI(ctx context.Context, apiKey, prompt string) (string, error) {
 		"gpt-4o-mini", apiKey, prompt)
 }
 
+// ---- DeepSeek (OpenAI-compatible) ------------------------------------------
+
+// callDeepSeek uses DeepSeek's OpenAI-compatible endpoint. The model name is a
+// deliberate constant rather than an env var: a stance corpus measured under
+// one model is not comparable to one measured under another, and letting the
+// model drift silently between runs would make every future regression
+// unattributable.
+func callDeepSeek(ctx context.Context, apiKey, prompt string) (string, error) {
+	return openAICompatible(ctx,
+		"https://api.deepseek.com/v1/chat/completions",
+		"deepseek-chat", apiKey, prompt)
+}
+
 // ---- Groq (OpenAI-compatible) ----------------------------------------------
 
 func callGroq(ctx context.Context, apiKey, prompt string) (string, error) {
@@ -276,11 +297,12 @@ func callMistral(ctx context.Context, apiKey, prompt string) (string, error) {
 		"mistral-small-latest", apiKey, prompt)
 }
 
-// openAICompatible handles the three providers that share the OpenAI Chat
-// Completions request/response shape (OpenAI, Groq, Mistral).
+// openAICompatible handles the four providers that share the OpenAI Chat
+// Completions request/response shape (OpenAI, DeepSeek, Groq, Mistral).
 func openAICompatible(ctx context.Context, url, model, apiKey, prompt string) (string, error) {
 	body := map[string]any{
-		"model": model,
+		"model":       model,
+		"temperature": 0,
 		"messages": []map[string]string{
 			{"role": "user", "content": prompt},
 		},
