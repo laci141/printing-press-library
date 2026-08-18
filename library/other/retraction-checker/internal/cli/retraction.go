@@ -143,6 +143,7 @@ func resolvePMIDToDOI(ctx context.Context, pmid string, limiter *cliutil.Adaptiv
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("pubmed esummary returned status %d", resp.StatusCode)
 	}
+	limiter.OnSuccess()
 	var payload struct {
 		Result map[string]json.RawMessage `json:"result"`
 	}
