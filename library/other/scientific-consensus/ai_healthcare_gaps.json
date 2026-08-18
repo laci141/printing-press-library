@@ -1,0 +1,25 @@
+{
+  "query": "AI in healthcare",
+  "total_matches": 613592,
+  "analyzed": 60,
+  "latest_year": 2025,
+  "has_rct_or_stronger": true,
+  "findings": [
+    {
+      "kind": "understudied-population",
+      "detail": "little or no coverage of older adults"
+    },
+    {
+      "kind": "understudied-population",
+      "detail": "little or no coverage of pregnancy"
+    },
+    {
+      "kind": "understudied-population",
+      "detail": "little or no coverage of low-income settings"
+    },
+    {
+      "kind": "understudied-population",
+      "detail": "little or no coverage of pediatric/children"
+    }
+  ]
+}

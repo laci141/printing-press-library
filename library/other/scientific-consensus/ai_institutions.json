@@ -1,0 +1,106 @@
+{
+  "query": "machine learning medical diagnosis",
+  "unit": "institutions",
+  "rows": [
+    {
+      "key": "https://openalex.org/I136199984",
+      "name": "Harvard University",
+      "count": 5740
+    },
+    {
+      "key": "https://openalex.org/I45129253",
+      "name": "University College London",
+      "count": 4172
+    },
+    {
+      "key": "https://openalex.org/I154526488",
+      "name": "Inserm",
+      "count": 3315
+    },
+    {
+      "key": "https://openalex.org/I97018004",
+      "name": "Stanford University",
+      "count": 3160
+    },
+    {
+      "key": "https://openalex.org/I40120149",
+      "name": "University of Oxford",
+      "count": 2918
+    },
+    {
+      "key": "https://openalex.org/I185261750",
+      "name": "University of Toronto",
+      "count": 2763
+    },
+    {
+      "key": "https://openalex.org/I4210087915",
+      "name": "Massachusetts General Hospital",
+      "count": 2761
+    },
+    {
+      "key": "https://openalex.org/I47508984",
+      "name": "Imperial College London",
+      "count": 2743
+    },
+    {
+      "key": "https://openalex.org/I1294671590",
+      "name": "Centre National de la Recherche Scientifique",
+      "count": 2737
+    },
+    {
+      "key": "https://openalex.org/I183935753",
+      "name": "King's College London",
+      "count": 2679
+    },
+    {
+      "key": "https://openalex.org/I145311948",
+      "name": "Johns Hopkins University",
+      "count": 2585
+    },
+    {
+      "key": "https://openalex.org/I200296433",
+      "name": "Chinese Academy of Medical Sciences \u0026 Peking Union Medical College",
+      "count": 2411
+    },
+    {
+      "key": "https://openalex.org/I157773358",
+      "name": "Sun Yat-sen University",
+      "count": 2344
+    },
+    {
+      "key": "https://openalex.org/I79576946",
+      "name": "University of Pennsylvania",
+      "count": 2321
+    },
+    {
+      "key": "https://openalex.org/I183067930",
+      "name": "Shanghai Jiao Tong University",
+      "count": 2261
+    },
+    {
+      "key": "https://openalex.org/I180670191",
+      "name": "University of California, San Francisco",
+      "count": 2228
+    },
+    {
+      "key": "https://openalex.org/I1283280774",
+      "name": "Brigham and Women's Hospital",
+      "count": 2180
+    },
+    {
+      "key": "https://openalex.org/I241749",
+      "name": "University of Cambridge",
+      "count": 2105
+    },
+    {
+      "key": "https://openalex.org/I20231570",
+      "name": "Peking University",
+      "count": 2016
+    },
+    {
+      "key": "https://openalex.org/I27837315",
+      "name": "University of Michigan",
+      "count": 1989
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "apex_design": "systematic-review",
+  "classified_by_pubtype": 17,
+  "pyramid": [
+    {
+      "design": "umbrella-review"
+    },
+    {
+      "design": "meta-analysis"
+    },
+    {
+      "design": "systematic-review"
+    },
+    {
+      "design": "randomized-controlled-trial"
+    },
+    {
+      "design": "cohort-study"
+    },
+    {
+      "design": "case-control-study"
+    },
+    {
+      "design": "cross-sectional-study"
+    },
+    {
+      "design": "case-series"
+    },
+    {
+      "design": "case-report"
+    },
+    {
+      "design": "narrative-review"
+    },
+    {
+      "design": "unclassified"
+    }
+  ],
+  "query": "machine learning medical diagnosis",
+  "study_count": 50
+}

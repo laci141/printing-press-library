@@ -1,0 +1,66 @@
+{
+  "query": "machine learning medical diagnosis",
+  "study_count": 50,
+  "apex_design": "systematic-review",
+  "classified_by_pubtype": 17,
+  "pyramid": [
+    {
+      "design": "umbrella-review",
+      "count": 0,
+      "pct": 0
+    },
+    {
+      "design": "meta-analysis",
+      "count": 0,
+      "pct": 0
+    },
+    {
+      "design": "systematic-review",
+      "count": 2,
+      "pct": 4,
+      "example": "Medical Diagnosis Using Machine Learning: A Statistical Review"
+    },
+    {
+      "design": "randomized-controlled-trial",
+      "count": 0,
+      "pct": 0
+    },
+    {
+      "design": "cohort-study",
+      "count": 0,
+      "pct": 0
+    },
+    {
+      "design": "case-control-study",
+      "count": 0,
+      "pct": 0
+    },
+    {
+      "design": "cross-sectional-study",
+      "count": 0,
+      "pct": 0
+    },
+    {
+      "design": "case-series",
+      "count": 0,
+      "pct": 0
+    },
+    {
+      "design": "case-report",
+      "count": 0,
+      "pct": 0
+    },
+    {
+      "design": "narrative-review",
+      "count": 20,
+      "pct": 40,
+      "example": "Machine learning for medical diagnosis: history, state of the art and perspective"
+    },
+    {
+      "design": "unclassified",
+      "count": 28,
+      "pct": 56,
+      "example": "Improving the accuracy of medical diagnosis with causal machine learning"
+    }
+  ]
+}

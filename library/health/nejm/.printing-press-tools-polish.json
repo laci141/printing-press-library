@@ -1,0 +1,9 @@
+{
+  "timestamp": "2026-06-21T15:30:36.9296472Z",
+  "cli_dir": "\u003ccli-dir\u003e\\nejm",
+  "findings": null,
+  "scorecard_before": {
+    "mcp_description_quality": 10,
+    "captured": "2026-06-21T15:18:57.1272387Z"
+  }
+}

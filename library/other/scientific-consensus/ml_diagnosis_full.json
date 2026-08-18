@@ -1,0 +1,39 @@
+{
+  "apex_design": "narrative-review",
+  "claim": "machine learning medical diagnosis",
+  "confidence": 0.75,
+  "consensus_score": 1,
+  "evidence_strength": "very-low",
+  "inconclusive": 24,
+  "mixed": 0,
+  "refuting": 0,
+  "stance_method": "heuristic",
+  "study_count": 40,
+  "supporting": 16,
+  "top_refuting": [],
+  "top_supporting": [
+    {
+      "cited_by_count": 28903,
+      "design": "unclassified",
+      "doi": "10.1214/aos/1013203451",
+      "title": "Greedy function approximation: A gradient boosting machine.",
+      "year": 2001
+    },
+    {
+      "cited_by_count": 12397,
+      "design": "unclassified",
+      "doi": "10.1186/s40537-019-0197-0",
+      "title": "A survey on Image Data Augmentation for Deep Learning",
+      "year": 2019
+    },
+    {
+      "cited_by_count": 7542,
+      "design": "unclassified",
+      "doi": "10.1186/s40537-021-00444-8",
+      "title": "Review of deep learning: concepts, CNN architectures, challenges, applications, future directions",
+      "year": 2021
+    }
+  ],
+  "total_citations": 100380,
+  "verdict": "evidence-supports"
+}

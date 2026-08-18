@@ -1,0 +1,610 @@
+﻿[
+    {
+        "doi":  "10.1056/NEJMoa2506905",
+        "title":  "Cefazolin for Methicillin-Susceptible Staphylococcus aureus Bacteremia",
+        "date":  "2026-06-18",
+        "article_type":  "Original Article",
+        "specialties":  "Infectious Disease",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMoa2602167",
+        "title":  "Prehospital Resuscitation with Type O Whole Blood for Trauma and Hemorrhage",
+        "date":  "2026-06-18",
+        "article_type":  "Original Article",
+        "specialties":  "Hematology/Oncology|Pulmonary/Critical Care|Clinical Medicine|Emergency Medicine|Surgery",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMoa2516043",
+        "title":  "Prehospital Whole Blood in Traumatic Hemorrhage ΓÇö A Randomized Controlled Trial",
+        "date":  "2026-06-18",
+        "article_type":  "Original Article",
+        "specialties":  "Hematology/Oncology|Pulmonary/Critical Care|Clinical Medicine|Emergency Medicine|Surgery",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMoa2519001",
+        "title":  "Endovascular Therapy for Post-Thrombotic Syndrome ΓÇö A Randomized Trial",
+        "date":  "2026-06-18",
+        "article_type":  "Original Article",
+        "specialties":  "Hematology/Oncology|Cardiology|Pulmonary/Critical Care|Clinical Medicine|Geriatrics/Aging|Dermatology|Surgery",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMcibr2601002",
+        "title":  "Stemness as the Engine of Checkpoint Durability",
+        "date":  "2026-06-18",
+        "article_type":  "Clinical Implications of Basic Research",
+        "specialties":  "Allergy/Immunology|Hematology/Oncology|Genetics",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMra2416814",
+        "title":  "Management of Differentiated Thyroid Cancer",
+        "date":  "2026-06-18",
+        "article_type":  "Review Article",
+        "specialties":  "Hematology/Oncology|Endocrinology|Clinical Medicine|Pediatrics",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMc2605256",
+        "title":  "Zorevunersen in Children and Adolescents with Dravet Syndrome",
+        "date":  "2026-06-18",
+        "article_type":  "Correspondence",
+        "specialties":  "",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMc2605751",
+        "title":  "Perioperative Enfortumab Vedotin and Pembrolizumab in Bladder Cancer",
+        "date":  "2026-06-18",
+        "article_type":  "Correspondence",
+        "specialties":  "",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMc2508159",
+        "title":  "Sudan Virus Disease in Uganda, 2025",
+        "date":  "2026-06-18",
+        "article_type":  "Correspondence",
+        "specialties":  "Infectious Disease",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMc2517274",
+        "title":  "Intravenous Artesunate in Artemisinin-Resistant Severe Malaria in Uganda",
+        "date":  "2026-06-18",
+        "article_type":  "Correspondence",
+        "specialties":  "Hematology/Oncology|Clinical Medicine|Public Health|Infectious Disease|Pediatrics",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMx260016",
+        "title":  "Mavacamten in Nonobstructive Hypertrophic Cardiomyopathy",
+        "date":  "2026-06-18",
+        "article_type":  "Correction",
+        "specialties":  "",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMe2505379",
+        "title":  "NEJM Outbreaks Update ΓÇö Andes Hantavirus",
+        "date":  "2026-06-18",
+        "article_type":  "Editorial",
+        "specialties":  "Public Health|Infectious Disease",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMe2603048",
+        "title":  "Stenting for Post-Thrombotic Syndrome ΓÇö A Step Forward",
+        "date":  "2026-06-18",
+        "article_type":  "Editorial",
+        "specialties":  "Hematology/Oncology|Cardiology|Pulmonary/Critical Care|Clinical Medicine|Geriatrics/Aging|Dermatology|Surgery",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMe2605735",
+        "title":  "Prehospital Whole Blood for Traumatic Hemorrhage ΓÇö Consistent Evidence from Two Randomized Trials",
+        "date":  "2026-06-18",
+        "article_type":  "Editorial",
+        "specialties":  "Hematology/Oncology|Pulmonary/Critical Care|Clinical Medicine|Emergency Medicine|Surgery",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMicm2501877",
+        "title":  "Immunosuppression-Associated Peripheral T-Cell Lymphoma",
+        "date":  "2026-06-18",
+        "article_type":  "Images in Clinical Medicine",
+        "specialties":  "Hematology/Oncology|Orthopedics|Clinical Medicine|Rheumatology|Gastroenterology",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMicm2600078",
+        "title":  "Chromoblastomycosis",
+        "date":  "2026-06-18",
+        "article_type":  "Images in Clinical Medicine",
+        "specialties":  "Dermatology|Clinical Medicine|Infectious Disease",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMcpc2517867",
+        "title":  "Case 17-2026: A 74-Year-Old Man with Pancytopenia",
+        "date":  "2026-06-18",
+        "article_type":  "Case Records of the Massachusetts General Hospital",
+        "specialties":  "Hematology/Oncology|Cardiology|Clinical Medicine|Surgery|Infectious Disease",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMp2601981",
+        "title":  "Is Change Possible?",
+        "date":  "2026-06-18",
+        "article_type":  "Perspective",
+        "specialties":  "Clinical Medicine|Diversity, Equity, and Inclusion|Nephrology|Medical Practice, Training, and Education|Public Health",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMp2514748",
+        "title":  "ΓÇ£In One Year, I Want You AliveΓÇ¥",
+        "date":  "2026-06-18",
+        "article_type":  "Perspective",
+        "specialties":  "Psychiatry|Medical Ethics|Clinical Medicine|Neurology/Neurosurgery|Medical Practice, Training, and Education|Public Health|Health Policy",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMp2518374",
+        "title":  "Psychedelic Therapies in the United States ΓÇö Balancing State and Federal Oversight",
+        "date":  "2026-06-18",
+        "article_type":  "Perspective",
+        "specialties":  "Psychiatry|Health Policy",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMp2602106",
+        "title":  "The Convergence of Down Syndrome and AlzheimerΓÇÖs Disease ΓÇö Scientific and Ethical Imperatives",
+        "date":  "2026-06-18",
+        "article_type":  "Perspective",
+        "specialties":  "Medical Ethics|Neurology/Neurosurgery|Diversity, Equity, and Inclusion|Geriatrics/Aging|Genetics|Health Policy|Pediatrics",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMp2605585",
+        "title":  "Patient-Driven Care in Psychedelic Therapy",
+        "date":  "2026-06-18",
+        "article_type":  "Perspective",
+        "specialties":  "Psychiatry|Medical Ethics|Health Policy",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMoa2512911",
+        "title":  "Inhaled Treprostinil for Idiopathic Pulmonary Fibrosis",
+        "date":  "2026-03-11",
+        "article_type":  "Original Article",
+        "specialties":  "Pulmonary/Critical Care|Clinical Medicine",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMoa2600360",
+        "title":  "Sirolimus-Coated Balloon Angioplasty for Infrainguinal Artery Disease",
+        "date":  "2026-03-30",
+        "article_type":  "Original Article",
+        "specialties":  "Cardiology",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMoa2600743",
+        "title":  "Iptacopan in IgA Nephropathy ΓÇö Final 24-Month Data",
+        "date":  "2026-03-29",
+        "article_type":  "Original Article",
+        "specialties":  "Allergy/Immunology|Clinical Medicine|Nephrology|Gastroenterology|Pediatrics",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMoa2600949",
+        "title":  "Angiography-Derived Fractional Flow Reserve to Guide PCI",
+        "date":  "2026-03-29",
+        "article_type":  "Original Article",
+        "specialties":  "Cardiology",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMoa2601103",
+        "title":  "Mavacamten in Adolescents with Obstructive Hypertrophic Cardiomyopathy",
+        "date":  "2026-03-29",
+        "article_type":  "Original Article",
+        "specialties":  "Cardiology|Clinical Medicine|Pediatrics",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMoa2601841",
+        "title":  "Angiography-Based Physiology to Guide Coronary Revascularization",
+        "date":  "2026-03-29",
+        "article_type":  "Original Article",
+        "specialties":  "Cardiology",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMoa2601969",
+        "title":  "Balanced Fluid or 0.9% Saline in Children Treated for Septic Shock",
+        "date":  "2026-04-24",
+        "article_type":  "Original Article",
+        "specialties":  "Clinical Medicine|Emergency Medicine|Infectious Disease|Pediatrics",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMoa2600929",
+        "title":  "Pulsed Field Ablation as Initial Therapy for Persistent Atrial Fibrillation",
+        "date":  "2026-04-25",
+        "article_type":  "Original Article",
+        "specialties":  "Cardiology",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMoa2501488",
+        "title":  "Phase 3 Trials of Inhaled Treprostinil for Idiopathic Pulmonary Fibrosis",
+        "date":  "2026-05-18",
+        "article_type":  "Original Article",
+        "specialties":  "Pulmonary/Critical Care|Clinical Medicine",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMoa2516505",
+        "title":  "Azithromycin for Preschoolers with Wheezing in the Emergency Department",
+        "date":  "2026-05-18",
+        "article_type":  "Original Article",
+        "specialties":  "Allergy/Immunology|Pulmonary/Critical Care|Clinical Medicine|Emergency Medicine|Pediatrics",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMoa2603870",
+        "title":  "Teclistamab in Multiple Myeloma with One to Three Previous Lines of Therapy",
+        "date":  "2026-05-29",
+        "article_type":  "Original Article",
+        "specialties":  "Hematology/Oncology",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMoa2604126",
+        "title":  "PARP and Androgen-Signaling Inhibition plus ADT in Metastatic Prostate Cancer",
+        "date":  "2026-05-30",
+        "article_type":  "Original Article",
+        "specialties":  "Urology/Prostate Disease|Hematology/Oncology",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMoa2601283",
+        "title":  "In Vivo Base Editing of PCSK9 with VERVE-102 for Hypercholesterolemia",
+        "date":  "2026-05-25",
+        "article_type":  "Original Article",
+        "specialties":  "Cardiology|Genetics",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMoa2602628",
+        "title":  "Selpercatinib in Early-Stage RET FusionΓÇôPositive NonΓÇôSmall-Cell Lung Cancer",
+        "date":  "2026-05-31",
+        "article_type":  "Original Article",
+        "specialties":  "Hematology/Oncology",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMoa2603878",
+        "title":  "Perioperative Apalutamide in High-Risk Localized Prostate Cancer",
+        "date":  "2026-05-31",
+        "article_type":  "Original Article",
+        "specialties":  "Urology/Prostate Disease|Hematology/Oncology",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMoa2605555",
+        "title":  "Daraxonrasib or Chemotherapy in Previously Treated Metastatic Pancreatic Cancer",
+        "date":  "2026-05-31",
+        "article_type":  "Original Article",
+        "specialties":  "Hematology/Oncology|Gastroenterology",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMoa2601337",
+        "title":  "Obexelimab for the Treatment of IgG4-Related Disease",
+        "date":  "2026-06-02",
+        "article_type":  "Original Article",
+        "specialties":  "Allergy/Immunology|Hematology/Oncology|Otolaryngology|Clinical Medicine|Rheumatology|Endocrinology|Gastroenterology",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMoa2602567",
+        "title":  "Phase 3 Trial of Secukinumab in Polymyalgia Rheumatica",
+        "date":  "2026-06-03",
+        "article_type":  "Original Article",
+        "specialties":  "Allergy/Immunology|Clinical Medicine|Rheumatology",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMoa2604461",
+        "title":  "First-Line Sunvozertinib in NSCLC with EGFR Exon 20 Insertion Mutations",
+        "date":  "2026-05-29",
+        "article_type":  "Original Article",
+        "specialties":  "Hematology/Oncology",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMoa2604625",
+        "title":  "Finerenone in Persons with Chronic Kidney Disease without Diabetes",
+        "date":  "2026-06-04",
+        "article_type":  "Original Article",
+        "specialties":  "Nephrology|Cardiology|Clinical Medicine",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMoa2602678",
+        "title":  "Obinutuzumab or Tacrolimus in Primary Membranous Nephropathy",
+        "date":  "2026-06-05",
+        "article_type":  "Original Article",
+        "specialties":  "Nephrology|Allergy/Immunology|Clinical Medicine",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMoa2600751",
+        "title":  "Survodutide Once Weekly for the Treatment of Adults with Obesity",
+        "date":  "2026-06-07",
+        "article_type":  "Original Article",
+        "specialties":  "Nephrology|Endocrinology|Cardiology|Clinical Medicine",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMoa2600526",
+        "title":  "Sodium Bicarbonate for Critically Ill Adults with Metabolic Acidosis and Shock",
+        "date":  "2026-06-12",
+        "article_type":  "Original Article",
+        "specialties":  "Pulmonary/Critical Care|Clinical Medicine|Emergency Medicine|Nephrology",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMoa2513814",
+        "title":  "Conservative Oxygen for Unresponsive Patients after Cardiac Arrest",
+        "date":  "2026-06-10",
+        "article_type":  "Original Article",
+        "specialties":  "Cardiology|Pulmonary/Critical Care|Clinical Medicine|Neurology/Neurosurgery|Emergency Medicine",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMoa2515820",
+        "title":  "Hospital Policy of Tranexamic Acid to Reduce Transfusion in Major Noncardiac Surgery",
+        "date":  "2026-06-10",
+        "article_type":  "Original Article",
+        "specialties":  "Hematology/Oncology|Cardiology|Pulmonary/Critical Care|Clinical Medicine|Surgery|Health Policy",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMoa2516225",
+        "title":  "Vasopressors or Fluids in Early Septic Shock",
+        "date":  "2026-06-11",
+        "article_type":  "Original Article",
+        "specialties":  "Pulmonary/Critical Care|Clinical Medicine|Emergency Medicine",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMoa2603406",
+        "title":  "Carbocisteine or Hypertonic Saline for Acute Respiratory Failure",
+        "date":  "2026-06-10",
+        "article_type":  "Original Article",
+        "specialties":  "Pulmonary/Critical Care|Clinical Medicine",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMoa2603387",
+        "title":  "Exa-cel in Children with Transfusion-Dependent ╬▓-Thalassemia or Sickle Cell Disease",
+        "date":  "2026-06-11",
+        "article_type":  "Original Article",
+        "specialties":  "Hematology/Oncology|Genetics|Pediatrics",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMoa2604657",
+        "title":  "TalquetamabΓÇôDaratumumab in Relapsed or Refractory Myeloma",
+        "date":  "2026-06-13",
+        "article_type":  "Original Article",
+        "specialties":  "Hematology/Oncology",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMoa2600931",
+        "title":  "Lonvoguran Ziclumeran ΓÇö In Vivo CRISPR Gene Editing in Hereditary Angioedema",
+        "date":  "2026-06-13",
+        "article_type":  "Original Article",
+        "specialties":  "Allergy/Immunology|Hematology/Oncology|Genetics",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMoa2516150",
+        "title":  "Efficacy and Safety of Obinutuzumab in Active Systemic Lupus Erythematosus",
+        "date":  "2026-03-06",
+        "article_type":  "Original Article",
+        "specialties":  "Rheumatology|Allergy/Immunology|Clinical Medicine",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMoa2515131",
+        "title":  "Phase 3 Results of Bepirovirsen Treatment for Chronic Hepatitis B Virus Infection",
+        "date":  "2026-05-28",
+        "article_type":  "Original Article",
+        "specialties":  "Gastroenterology|Infectious Disease",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMc2604004",
+        "title":  "Clusters of Concern ΓÇö Spatial Link between Childhood Undervaccination and Measles Outbreaks in South Carolina",
+        "date":  "2026-05-20",
+        "article_type":  "Correspondence",
+        "specialties":  "Public Health|Infectious Disease",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMc2606496",
+        "title":  "Andes Hantavirus Outbreak on a Cruise Ship, 2026",
+        "date":  "2026-05-20",
+        "article_type":  "Correspondence",
+        "specialties":  "Infectious Disease",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMc2602512",
+        "title":  "Clinical Long-Read Genome Sequencing for Rare-Disease Diagnostics",
+        "date":  "2026-06-13",
+        "article_type":  "Correspondence",
+        "specialties":  "Genetics",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMe2608017",
+        "title":  "The OMB and the Politicization of Science",
+        "date":  "2026-06-15",
+        "article_type":  "Editorial",
+        "specialties":  "",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMe2602625",
+        "title":  "Sirolimus-Eluting Technology for the Treatment of Peripheral Artery Disease",
+        "date":  "2026-03-30",
+        "article_type":  "Editorial",
+        "specialties":  "Cardiology",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMe2603396",
+        "title":  "Toward Broader Adoption of Coronary Physiological Assessment",
+        "date":  "2026-03-29",
+        "article_type":  "Editorial",
+        "specialties":  "Cardiology",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMe2603714",
+        "title":  "Redefining Physiology in the Cardiac Catheterization Laboratory",
+        "date":  "2026-03-29",
+        "article_type":  "Editorial",
+        "specialties":  "Cardiology",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMe2605575",
+        "title":  "A Major Step toward a Cure for Hepatitis B Infection",
+        "date":  "2026-05-28",
+        "article_type":  "Editorial",
+        "specialties":  "Gastroenterology|Infectious Disease",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMe2605404",
+        "title":  "Redefining Early Relapse in Multiple Myeloma ΓÇö Time to Change the Rules",
+        "date":  "2026-05-29",
+        "article_type":  "Editorial",
+        "specialties":  "Hematology/Oncology",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMe2605582",
+        "title":  "Precision Intensification in Metastatic Prostate Cancer",
+        "date":  "2026-05-30",
+        "article_type":  "Editorial",
+        "specialties":  "Urology/Prostate Disease|Hematology/Oncology",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMe2606250",
+        "title":  "A Watershed Moment in the Perioperative Treatment of Prostate Cancer",
+        "date":  "2026-05-31",
+        "article_type":  "Editorial",
+        "specialties":  "Urology/Prostate Disease|Hematology/Oncology",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMe2605617",
+        "title":  "Obexelimab and the Promise of Nondepleting B-Cell Therapy in IgG4-Related Disease",
+        "date":  "2026-06-02",
+        "article_type":  "Editorial",
+        "specialties":  "Allergy/Immunology|Hematology/Oncology|Pulmonary/Critical Care|Otolaryngology|Clinical Medicine|Rheumatology|Endocrinology",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMe2605851",
+        "title":  "Emerging Era for Polymyalgia Rheumatica and GCA ΓÇö Interleukin-17A Targeting",
+        "date":  "2026-06-03",
+        "article_type":  "Editorial",
+        "specialties":  "Allergy/Immunology|Cardiology|Clinical Medicine|Neurology/Neurosurgery|Ophthalmology|Rheumatology|Geriatrics/Aging",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMe2603105",
+        "title":  "TRACTION for Greater Surgical Use of Tranexamic Acid",
+        "date":  "2026-06-10",
+        "article_type":  "Editorial",
+        "specialties":  "Hematology/Oncology|Cardiology|Pulmonary/Critical Care|Clinical Medicine|Surgery|Health Policy",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMp2602837",
+        "title":  "Supporting Access to Reliable Health Information with PublicΓÇôPrivate Collaboration",
+        "date":  "2026-06-10",
+        "article_type":  "Perspective",
+        "specialties":  "Public Health|Medical Ethics",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMp2604841",
+        "title":  "Products That Pose Health Risks ΓÇö Can Litigation Protect Us When Government Fails?",
+        "date":  "2026-06-17",
+        "article_type":  "Perspective",
+        "specialties":  "Medical Ethics|Public Health|Health Policy",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMp2607429",
+        "title":  "The Social Contract of Bundibugyo Ebola Isolation",
+        "date":  "2026-06-17",
+        "article_type":  "Perspective",
+        "specialties":  "Medical Ethics|Emergency Medicine|Public Health|Infectious Disease|Health Policy",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMicm2600597",
+        "title":  "Unheralded Syncope from Ventricular Arrhythmia",
+        "date":  "2026-06-20",
+        "article_type":  "Images in Clinical Medicine",
+        "specialties":  "Cardiology|Clinical Medicine|Emergency Medicine",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMp2515486",
+        "title":  "The Before and The After",
+        "date":  "2026-06-20",
+        "article_type":  "Perspective",
+        "specialties":  "Medical Ethics|Clinical Medicine|Medical Practice, Training, and Education|Public Health|Health Policy",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMp2601256",
+        "title":  "Improving Global Air-Quality Indices ΓÇö The WHOΓÇÖs New Roadmap",
+        "date":  "2026-06-20",
+        "article_type":  "Perspective",
+        "specialties":  "Allergy/Immunology|Cardiology|Pulmonary/Critical Care|Emergency Medicine|Climate Change|Obstetrics/Gynecology|Public Health|Infectious Disease|Pediatrics",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMp2601300",
+        "title":  "When Health Costs No Longer Count ΓÇö Air Pollution and EPA Rulemaking",
+        "date":  "2026-06-20",
+        "article_type":  "Perspective",
+        "specialties":  "Allergy/Immunology|Climate Change|Obstetrics/Gynecology|Public Health|Health Policy|Pediatrics|Hematology/Oncology|Cardiology|Pulmonary/Critical Care|Diversity, Equity, and Inclusion",
+        "is_free":  false
+    },
+    {
+        "doi":  "10.1056/NEJMp2605694",
+        "title":  "Access to GLP-1s for Medicare Beneficiaries ΓÇö A Bridge to Nowhere?",
+        "date":  "2026-06-20",
+        "article_type":  "Perspective",
+        "specialties":  "Medical Ethics|Clinical Medicine|Endocrinology|Health Policy",
+        "is_free":  false
+    }
+]

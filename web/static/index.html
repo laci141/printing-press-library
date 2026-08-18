@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Medical CLI Web</title>
+<style>
+body {
+    background: #0d1117;
+    color: #e6edf3;
+    font-family: 'Segoe UI', sans-serif;
+    padding: 20px;
+    max-width: 900px;
+    margin: 0 auto;
+}
+h1 { 
+    background: linear-gradient(135deg, #00d4ff, #3fb950);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+input, button {
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid #30363d;
+    background: #161b22;
+    color: #e6edf3;
+    font-size: 16px;
+}
+button {
+    background: linear-gradient(135deg, #00d4ff, #7c3aed);
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    padding: 10px 24px;
+}
+button:hover { transform: scale(1.02); }
+.result-card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 20px;
+    margin-top: 16px;
+    overflow-x: auto;
+}
+.loading { color: #8b949e; }
+.error { color: #f85149; }
+.tabs { display: flex; gap: 8px; margin: 20px 0; border-bottom: 1px solid #30363d; padding-bottom: 8px; flex-wrap: wrap; }
+.tab-btn {
+    background: transparent;
+    border: none;
+    color: #8b949e;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-size: 14px;
+}
+.tab-btn.active { color: #00d4ff; border-bottom: 2px solid #00d4ff; }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+pre { color: #8b949e; font-size: 12px; white-space: pre-wrap; word-wrap: break-word; }
+.reading-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid #30363d;
+}
+.reading-item .title { flex: 1; }
+.reading-item .doi { color: #8b949e; font-size: 12px; margin: 0 12px; }
+.reading-item .remove-btn {
+    background: none;
+    border: none;
+    color: #f85149;
+    cursor: pointer;
+    font-size: 16px;
+}
+</style>
+</head>
+<body>
+
+<h1>🏥 Medical CLI Web</h1>
+<p style="color:#8b949e;">4 CLI eszköz egy helyen</p>
+
+<div class="tabs">
+    <button class="tab-btn active" data-tab="consensus">📊 Konszenzus</button>
+    <button class="tab-btn" data-tab="trials">🔬 Vizsgálatok</button>
+    <button class="tab-btn" data-tab="lancet">📈 Lancet rangsor</button>
+    <button class="tab-btn" data-tab="nejm">📚 NEJM olvasási lista</button>
+</div>
+
+<!-- ─── KONSZENZUS TAB ─── -->
+<div class="tab-content active" id="tab-consensus">
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <input type="text" id="consensusInput" placeholder="Pl.: kávé egészséges" style="flex:1; min-width:200px;">
+        <button onclick="searchConsensus()">Konszenzus</button>
+    </div>
+    <div id="consensusResult"></div>
+</div>
+
+<!-- ─── VIZSGÁLATOK TAB ─── -->
+<div class="tab-content" id="tab-trials">
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <input type="text" id="trialsInput" placeholder="Pl.: diabetes" style="flex:1; min-width:200px;">
+        <button onclick="searchTrials()">Keresés</button>
+    </div>
+    <div id="trialsResult"></div>
+</div>
+
+<!-- ─── LANCET RANGSOR TAB ─── -->
+<div class="tab-content" id="tab-lancet">
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <input type="text" id="lancetInput" placeholder="Pl.: Harvard" style="flex:1; min-width:200px;">
+        <button onclick="searchLancet()">Rangsor</button>
+    </div>
+    <div id="lancetResult"></div>
+</div>
+
+<!-- ─── NEJM OLVASÁSI LISTA TAB ─── -->
+<div class="tab-content" id="tab-nejm">
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <input type="text" id="nejmInput" placeholder="DOI (pl.: 10.1056/NEJMoa1234567)" style="flex:1; min-width:200px;">
+        <button onclick="addToReadingList()">Hozzáadás</button>
+        <button onclick="loadReadingList()" style="background:#30363d;">🔄 Frissít</button>
+    </div>
+    <div id="nejmResult">
+        <h3 style="color:#8b949e;margin:12px 0;">📖 Olvasási lista</h3>
+        <div id="readingList"></div>
+    </div>
+</div>
+
+<script>
+// ── TAB VÁLTÁS ──
+document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        document.getElementById('tab-' + this.dataset.tab).classList.add('active');
+    });
+});
+
+// ── KONSZENZUS ──
+async function searchConsensus() {
+    const query = document.getElementById('consensusInput').value;
+    const div = document.getElementById('consensusResult');
+    if (!query) { div.innerHTML = '<p class="error">❌ Írj be egy állítást!</p>'; return; }
+    div.innerHTML = '<div class="loading">⏳ Keresés...</div>';
+    try {
+        const res = await fetch('/api/consensus', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query, limit: 10 })
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        div.innerHTML = `<div class="result-card"><pre>${JSON.stringify(data, null, 2)}</pre></div>`;
+    } catch(e) {
+        div.innerHTML = `<p class="error">❌ Hiba: ${e.message}</p>`;
+    }
+}
+
+// ── KLINIKAI VIZSGÁLATOK ──
+async function searchTrials() {
+    const query = document.getElementById('trialsInput').value;
+    const div = document.getElementById('trialsResult');
+    if (!query) { div.innerHTML = '<p class="error">❌ Írj be egy betegséget!</p>'; return; }
+    div.innerHTML = '<div class="loading">⏳ Keresés...</div>';
+    try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        div.innerHTML = `<div class="result-card"><pre>${JSON.stringify(data, null, 2)}</pre></div>`;
+    } catch(e) {
+        div.innerHTML = `<p class="error">❌ Hiba: ${e.message}</p>`;
+    }
+}
+
+// ── LANCET RANGSOR ──
+async function searchLancet() {
+    const query = document.getElementById('lancetInput').value;
+    const div = document.getElementById('lancetResult');
+    if (!query) { div.innerHTML = '<p class="error">❌ Írj be egy intézményt!</p>'; return; }
+    div.innerHTML = '<div class="loading">⏳ Keresés...</div>';
+    try {
+        const res = await fetch(`/api/rank-authors?institution=${encodeURIComponent(query)}`);
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        div.innerHTML = `<div class="result-card"><pre>${JSON.stringify(data, null, 2)}</pre></div>`;
+    } catch(e) {
+        div.innerHTML = `<p class="error">❌ Hiba: ${e.message}</p>`;
+    }
+}
+
+// ── NEJM OLVASÁSI LISTA ──
+async function loadReadingList() {
+    const div = document.getElementById('readingList');
+    div.innerHTML = '<div class="loading">⏳ Betöltés...</div>';
+    try {
+        const res = await fetch('/api/reading-list');
+        if (!res.ok) throw new Error(await res.text());
+        const items = await res.json();
+        if (items.length === 0) {
+            div.innerHTML = '<p style="color:#8b949e;">Még nincs elem az olvasási listában.</p>';
+            return;
+        }
+        let html = '';
+        items.forEach(item => {
+            html += `
+                <div class="reading-item">
+                    <span class="title">${item.title || 'N/A'}</span>
+                    <span class="doi">${item.doi || 'N/A'}</span>
+                    <button class="remove-btn" onclick="removeFromReadingList('${item.doi}')">✕</button>
+                </div>
+            `;
+        });
+        div.innerHTML = html;
+    } catch(e) {
+        div.innerHTML = `<p class="error">❌ Hiba: ${e.message}</p>`;
+    }
+}
+
+async function addToReadingList() {
+    const input = document.getElementById('nejmInput');
+    const doi = input.value.trim();
+    const div = document.getElementById('nejmResult');
+    if (!doi) { div.innerHTML = '<p class="error">❌ Írj be egy DOI-t!</p>'; return; }
+    try {
+        const res = await fetch('/api/reading-list', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ doi, title: `Teszt cikk: ${doi}` })
+        });
+        if (!res.ok) throw new Error(await res.text());
+        input.value = '';
+        loadReadingList();
+        div.innerHTML = '<p style="color:#3fb950;">✅ Hozzáadva az olvasási listához!</p>';
+        setTimeout(() => div.innerHTML = '', 2000);
+    } catch(e) {
+        div.innerHTML = `<p class="error">❌ Hiba: ${e.message}</p>`;
+    }
+}
+
+async function removeFromReadingList(doi) {
+    try {
+        const res = await fetch('/api/reading-list', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ doi })
+        });
+        if (!res.ok) throw new Error(await res.text());
+        loadReadingList();
+    } catch(e) {
+        alert('Hiba: ' + e.message);
+    }
+}
+
+// ── OLDAL BETÖLTÉSEKOR TÖLTSD BE AZ OLVASÁSI LISTÁT ──
+loadReadingList();
+</script>
+</body>
+</html>

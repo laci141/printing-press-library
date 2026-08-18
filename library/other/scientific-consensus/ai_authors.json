@@ -1,0 +1,106 @@
+{
+  "query": "machine learning medical diagnosis",
+  "unit": "authors",
+  "rows": [
+    {
+      "key": "https://openalex.org/A5000937401",
+      "name": "Dinggang Shen",
+      "count": 206
+    },
+    {
+      "key": "https://openalex.org/A5100606557",
+      "name": "Paul M. Thompson",
+      "count": 169
+    },
+    {
+      "key": "https://openalex.org/A5074179735",
+      "name": "U. Rajendra Acharya",
+      "count": 151
+    },
+    {
+      "key": "https://openalex.org/A5073483894",
+      "name": "Jakob Nikolas Kather",
+      "count": 141
+    },
+    {
+      "key": "https://openalex.org/A5031401755",
+      "name": "Leo Anthony Celi",
+      "count": 137
+    },
+    {
+      "key": "https://openalex.org/A5100434437",
+      "name": "Yudong Zhang",
+      "count": 135
+    },
+    {
+      "key": "https://openalex.org/A5034999945",
+      "name": "Christos Davatzikos",
+      "count": 131
+    },
+    {
+      "key": "https://openalex.org/A5006461848",
+      "name": "Daniel Rueckert",
+      "count": 130
+    },
+    {
+      "key": "https://openalex.org/A5032850756",
+      "name": "Vince D. Calhoun",
+      "count": 123
+    },
+    {
+      "key": "https://openalex.org/A5064378373",
+      "name": "Frederik Barkhof",
+      "count": 117
+    },
+    {
+      "key": "https://openalex.org/A5046896448",
+      "name": "Nassir Navab",
+      "count": 104
+    },
+    {
+      "key": "https://openalex.org/A5002855381",
+      "name": "Seifedine Kadry",
+      "count": 103
+    },
+    {
+      "key": "https://openalex.org/A5007891293",
+      "name": "Habib Zaidi",
+      "count": 103
+    },
+    {
+      "key": "https://openalex.org/A5027642699",
+      "name": "Anant Madabhushi",
+      "count": 99
+    },
+    {
+      "key": "https://openalex.org/A5003259452",
+      "name": "Pearse A. Keane",
+      "count": 98
+    },
+    {
+      "key": "https://openalex.org/A5007987858",
+      "name": "Shuihua Wang‎",
+      "count": 98
+    },
+    {
+      "key": "https://openalex.org/A5100648348",
+      "name": "Huiling Chen",
+      "count": 98
+    },
+    {
+      "key": "https://openalex.org/A5082106258",
+      "name": "Sébastien Ourselin",
+      "count": 96
+    },
+    {
+      "key": "https://openalex.org/A5001452511",
+      "name": "Hugo J.W.L. Aerts",
+      "count": 85
+    },
+    {
+      "key": "https://openalex.org/A5104151001",
+      "name": "Oleh Ivchenko",
+      "count": 85
+    }
+  ]
+}

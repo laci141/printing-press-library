@@ -1,0 +1,45 @@
+{
+  "claim": "AI healthcare applications",
+  "verdict": "evidence-supports",
+  "consensus_score": 0.97,
+  "confidence": 0.69,
+  "evidence_strength": "very-low",
+  "apex_design": "case-report",
+  "study_count": 20,
+  "supporting": 9,
+  "refuting": 0,
+  "mixed": 1,
+  "inconclusive": 10,
+  "total_citations": 51302,
+  "stance_method": "heuristic",
+  "top_supporting": [
+    {
+      "title": "Artificial intelligence in healthcare: past, present and future",
+      "year": 2017,
+      "doi": "10.1136/svn-2017-000101",
+      "cited_by_count": 4601,
+      "design": "narrative-review",
+      "stance": "supporting",
+      "stance_confidence": 0.8999999999999999
+    },
+    {
+      "title": "The potential for artificial intelligence in healthcare",
+      "year": 2019,
+      "doi": "10.7861/futurehosp.6-2-94",
+      "cited_by_count": 3631,
+      "design": "case-report",
+      "stance": "supporting",
+      "stance_confidence": 0.8999999999999999
+    },
+    {
+      "title": "Revolutionizing healthcare: the role of artificial intelligence in clinical practice",
+      "year": 2023,
+      "doi": "10.1186/s12909-023-04698-z",
+      "cited_by_count": 2802,
+      "design": "narrative-review",
+      "stance": "supporting",
+      "stance_confidence": 0.95
+    }
+  ],
+  "top_refuting": []
+}

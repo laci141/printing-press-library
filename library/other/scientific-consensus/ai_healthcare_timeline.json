@@ -1,0 +1,398 @@
+{
+  "query": "AI in healthcare",
+  "milestone_year": 2025,
+  "points": [
+    {
+      "year": 1819,
+      "works": 1
+    },
+    {
+      "year": 1843,
+      "works": 1
+    },
+    {
+      "year": 1890,
+      "works": 1
+    },
+    {
+      "year": 1900,
+      "works": 3
+    },
+    {
+      "year": 1904,
+      "works": 1
+    },
+    {
+      "year": 1906,
+      "works": 1
+    },
+    {
+      "year": 1910,
+      "works": 1
+    },
+    {
+      "year": 1914,
+      "works": 1
+    },
+    {
+      "year": 1926,
+      "works": 1
+    },
+    {
+      "year": 1931,
+      "works": 1
+    },
+    {
+      "year": 1934,
+      "works": 2
+    },
+    {
+      "year": 1935,
+      "works": 1
+    },
+    {
+      "year": 1937,
+      "works": 1
+    },
+    {
+      "year": 1939,
+      "works": 4
+    },
+    {
+      "year": 1941,
+      "works": 1
+    },
+    {
+      "year": 1944,
+      "works": 1
+    },
+    {
+      "year": 1945,
+      "works": 1
+    },
+    {
+      "year": 1946,
+      "works": 2
+    },
+    {
+      "year": 1947,
+      "works": 1
+    },
+    {
+      "year": 1949,
+      "works": 1
+    },
+    {
+      "year": 1950,
+      "works": 1
+    },
+    {
+      "year": 1951,
+      "works": 2
+    },
+    {
+      "year": 1952,
+      "works": 2
+    },
+    {
+      "year": 1953,
+      "works": 2
+    },
+    {
+      "year": 1954,
+      "works": 1
+    },
+    {
+      "year": 1955,
+      "works": 3
+    },
+    {
+      "year": 1956,
+      "works": 6
+    },
+    {
+      "year": 1957,
+      "works": 2
+    },
+    {
+      "year": 1958,
+      "works": 3
+    },
+    {
+      "year": 1959,
+      "works": 4
+    },
+    {
+      "year": 1960,
+      "works": 5
+    },
+    {
+      "year": 1961,
+      "works": 7
+    },
+    {
+      "year": 1962,
+      "works": 1
+    },
+    {
+      "year": 1963,
+      "works": 4
+    },
+    {
+      "year": 1964,
+      "works": 5
+    },
+    {
+      "year": 1965,
+      "works": 7
+    },
+    {
+      "year": 1966,
+      "works": 3
+    },
+    {
+      "year": 1967,
+      "works": 8
+    },
+    {
+      "year": 1968,
+      "works": 6
+    },
+    {
+      "year": 1969,
+      "works": 13
+    },
+    {
+      "year": 1970,
+      "works": 34
+    },
+    {
+      "year": 1971,
+      "works": 10
+    },
+    {
+      "year": 1972,
+      "works": 14
+    },
+    {
+      "year": 1973,
+      "works": 13
+    },
+    {
+      "year": 1974,
+      "works": 11
+    },
+    {
+      "year": 1975,
+      "works": 11
+    },
+    {
+      "year": 1976,
+      "works": 12
+    },
+    {
+      "year": 1977,
+      "works": 13
+    },
+    {
+      "year": 1978,
+      "works": 14
+    },
+    {
+      "year": 1979,
+      "works": 16
+    },
+    {
+      "year": 1980,
+      "works": 18
+    },
+    {
+      "year": 1981,
+      "works": 24
+    },
+    {
+      "year": 1982,
+      "works": 17
+    },
+    {
+      "year": 1983,
+      "works": 12
+    },
+    {
+      "year": 1984,
+      "works": 19
+    },
+    {
+      "year": 1985,
+      "works": 23
+    },
+    {
+      "year": 1986,
+      "works": 29
+    },
+    {
+      "year": 1987,
+      "works": 23
+    },
+    {
+      "year": 1988,
+      "works": 28
+    },
+    {
+      "year": 1989,
+      "works": 38
+    },
+    {
+      "year": 1990,
+      "works": 37
+    },
+    {
+      "year": 1991,
+      "works": 43
+    },
+    {
+      "year": 1992,
+      "works": 56
+    },
+    {
+      "year": 1993,
+      "works": 67
+    },
+    {
+      "year": 1994,
+      "works": 95
+    },
+    {
+      "year": 1995,
+      "works": 98
+    },
+    {
+      "year": 1996,
+      "works": 131
+    },
+    {
+      "year": 1997,
+      "works": 162
+    },
+    {
+      "year": 1998,
+      "works": 150
+    },
+    {
+      "year": 1999,
+      "works": 184
+    },
+    {
+      "year": 2000,
+      "works": 620
+    },
+    {
+      "year": 2001,
+      "works": 255
+    },
+    {
+      "year": 2002,
+      "works": 428
+    },
+    {
+      "year": 2003,
+      "works": 598
+    },
+    {
+      "year": 2004,
+      "works": 588
+    },
+    {
+      "year": 2005,
+      "works": 1255
+    },
+    {
+      "year": 2006,
+      "works": 890
+    },
+    {
+      "year": 2007,
+      "works": 1128
+    },
+    {
+      "year": 2008,
+      "works": 2021
+    },
+    {
+      "year": 2009,
+      "works": 1913
+    },
+    {
+      "year": 2010,
+      "works": 2311
+    },
+    {
+      "year": 2011,
+      "works": 2954
+    },
+    {
+      "year": 2012,
+      "works": 3689
+    },
+    {
+      "year": 2013,
+      "works": 4362
+    },
+    {
+      "year": 2014,
+      "works": 4909
+    },
+    {
+      "year": 2015,
+      "works": 5367
+    },
+    {
+      "year": 2016,
+      "works": 6208
+    },
+    {
+      "year": 2017,
+      "works": 7415
+    },
+    {
+      "year": 2018,
+      "works": 9559
+    },
+    {
+      "year": 2019,
+      "works": 12781
+    },
+    {
+      "year": 2020,
+      "works": 22030
+    },
+    {
+      "year": 2021,
+      "works": 28847
+    },
+    {
+      "year": 2022,
+      "works": 38543
+    },
+    {
+      "year": 2023,
+      "works": 73812
+    },
+    {
+      "year": 2024,
+      "works": 110904
+    },
+    {
+      "year": 2025,
+      "works": 176448
+    },
+    {
+      "year": 2026,
+      "works": 91375
+    },
+    {
+      "year": 2027,
+      "works": 6
+    }
+  ]
+}

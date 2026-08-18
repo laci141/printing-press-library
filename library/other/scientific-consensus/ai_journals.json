@@ -1,0 +1,106 @@
+{
+  "query": "machine learning medical diagnosis",
+  "unit": "journals",
+  "rows": [
+    {
+      "key": "https://openalex.org/S4306400194",
+      "name": "arXiv (Cornell University)",
+      "count": 15168
+    },
+    {
+      "key": "https://openalex.org/S4306525896",
+      "name": "Research Square",
+      "count": 11603
+    },
+    {
+      "key": "https://openalex.org/S196734849",
+      "name": "Scientific Reports",
+      "count": 9560
+    },
+    {
+      "key": "https://openalex.org/S3005729997",
+      "name": "medRxiv",
+      "count": 6515
+    },
+    {
+      "key": "https://openalex.org/S2485537415",
+      "name": "IEEE Access",
+      "count": 5085
+    },
+    {
+      "key": "https://openalex.org/S4393918464",
+      "name": "ArXiv.org",
+      "count": 4220
+    },
+    {
+      "key": "https://openalex.org/S202381698",
+      "name": "PLoS ONE",
+      "count": 3859
+    },
+    {
+      "key": "https://openalex.org/S101949793",
+      "name": "Sensors",
+      "count": 3838
+    },
+    {
+      "key": "https://openalex.org/S4306402567",
+      "name": "bioRxiv (Cold Spring Harbor Laboratory)",
+      "count": 3781
+    },
+    {
+      "key": "https://openalex.org/S6309402219",
+      "name": "Preprints.org",
+      "count": 3384
+    },
+    {
+      "key": "https://openalex.org/S4210172076",
+      "name": "Diagnostics",
+      "count": 3092
+    },
+    {
+      "key": "https://openalex.org/S4210205812",
+      "name": "Applied Sciences",
+      "count": 2527
+    },
+    {
+      "key": "https://openalex.org/S4306400562",
+      "name": "Zenodo (CERN European Organization for Nuclear Research)",
+      "count": 2212
+    },
+    {
+      "key": "https://openalex.org/S2596394214",
+      "name": "Frontiers in Oncology",
+      "count": 2162
+    },
+    {
+      "key": "https://openalex.org/S2737969411",
+      "name": "Journal of Clinical Medicine",
+      "count": 1951
+    },
+    {
+      "key": "https://openalex.org/S2597052008",
+      "name": "Frontiers in Medicine",
+      "count": 1807
+    },
+    {
+      "key": "https://openalex.org/S168415115",
+      "name": "Cancers",
+      "count": 1758
+    },
+    {
+      "key": "https://openalex.org/S2738950867",
+      "name": "Cureus",
+      "count": 1679
+    },
+    {
+      "key": "https://openalex.org/S2764566388",
+      "name": "International Journal for Research in Applied Science and Engineering Technology",
+      "count": 1666
+    },
+    {
+      "key": "https://openalex.org/S191417626",
+      "name": "Critical Care",
+      "count": 1620
+    }
+  ]
+}
