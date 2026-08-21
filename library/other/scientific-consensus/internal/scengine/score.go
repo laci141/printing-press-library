@@ -1,9 +1,6 @@
 package scengine
 
-import (
-	"math"
-	"strings"
-)
+import "math"
 
 // ScoredWork is the per-work input to the consensus engine.
 type ScoredWork struct {
@@ -32,10 +29,6 @@ const (
 	StrengthModerate EvidenceStrength = "moderate"
 	StrengthLow      EvidenceStrength = "low"
 	StrengthVeryLow  EvidenceStrength = "very-low"
-	// StrengthInsufficient is a safety label, not a measurement: it means the
-	// evidence base is too thin for the strength ladder to say anything at all.
-	// It is applied by ApplyLowEvidenceGuard, never by strength().
-	StrengthInsufficient EvidenceStrength = "insufficient"
 )
 
 // ConsensusResult is the consensus engine's output.
@@ -223,37 +216,6 @@ func nearUnanimous(r ConsensusResult) bool {
 		return false
 	}
 	return math.Abs(r.ConsensusScore) >= nearUnanimousScore
-}
-
-// LowEvidenceThreshold is the minimum number of studies that must survive the
-// relevance gate before a keyless (heuristic) run is allowed to report a real
-// EvidenceStrength label.
-const LowEvidenceThreshold = 5
-
-// ApplyLowEvidenceGuard downgrades EvidenceStrength to StrengthInsufficient
-// when stance classification ran WITHOUT an LLM and too few relevant studies
-// survived the relevance gate.
-//
-// Rationale (the vaccines/autism run): with no LLM the only relevance filter is
-// lexical, so a handful of off-topic papers can carry a false claim to a
-// confident-looking "supports" verdict with a "moderate" strength badge. The
-// strength ladder measures study DESIGN, which stays high even when the corpus
-// is wrong — so design quality must not be allowed to certify a corpus this
-// thin. Correctness must not depend on the LLM being reachable.
-//
-// method is the stance_method string ("heuristic" or "llm:<provider>");
-// relevantCount is the number of works remaining after filterRelevant. Verdict,
-// ConsensusScore, and Confidence are deliberately left untouched — this guard
-// is a labelling safeguard, not a change to the scoring math.
-func ApplyLowEvidenceGuard(r ConsensusResult, method string, relevantCount int) ConsensusResult {
-	if strings.HasPrefix(method, "llm:") {
-		return r // an LLM vetted relevance; the ladder is trustworthy
-	}
-	if relevantCount >= LowEvidenceThreshold {
-		return r
-	}
-	r.EvidenceStrength = StrengthInsufficient
-	return r
 }
 
 func clamp01(v, floor float64) float64 {
