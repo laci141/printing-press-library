@@ -299,7 +299,7 @@ Returns `nodes` (id, title, year, cited\_by\_count) and `edges` (from → to) bo
 
 ## Auth Setup
 
-No API key required for any command. Optional env vars raise limits or enable AI summarization: NCBI_API_KEY (PubMed, higher rate limit), SEMANTIC_SCHOLAR_API_KEY (Semantic Scholar enrichment), and OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY (enhanced summarization). Everything works without them.
+No API key required for any command. Optional env vars raise limits or enable AI summarization: NCBI_API_KEY (PubMed, higher rate limit), SEMANTIC_SCHOLAR_API_KEY (Semantic Scholar enrichment), and ANTHROPIC_API_KEY / OPENAI_API_KEY / DEEPSEEK_API_KEY / GEMINI_API_KEY (enhanced summarization; first configured key wins — DeepSeek sits after Anthropic/OpenAI and before Gemini/Groq/Mistral; OpenAI-compatible providers sample at temperature 0). Everything works without them.
 
 Run `scientific-consensus-pp-cli doctor` to verify setup.
 

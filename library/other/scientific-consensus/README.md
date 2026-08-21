@@ -120,7 +120,7 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
 
 ## Authentication
 
-No API key required for any command. Optional env vars raise limits or enable AI summarization: NCBI_API_KEY (PubMed, higher rate limit), SEMANTIC_SCHOLAR_API_KEY (Semantic Scholar enrichment), and OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY (enhanced summarization). Everything works without them.
+No API key required for any command. Optional env vars raise limits or enable AI summarization: NCBI_API_KEY (PubMed, higher rate limit), SEMANTIC_SCHOLAR_API_KEY (Semantic Scholar enrichment), and ANTHROPIC_API_KEY / OPENAI_API_KEY / DEEPSEEK_API_KEY / GEMINI_API_KEY (enhanced summarization; first configured key wins — DeepSeek sits after Anthropic/OpenAI and before Gemini/Groq/Mistral; OpenAI-compatible providers sample at temperature 0). Everything works without them.
 
 ## Quick Start
 
@@ -481,7 +481,7 @@ Static request headers can be configured under `headers`; per-command header ove
 ### API-specific
 - **Semantic Scholar results missing or sparse** — Semantic Scholar rate-limits keyless requests (HTTP 429). Set SEMANTIC_SCHOLAR_API_KEY or rely on OpenAlex/PubMed/Europe PMC; commands degrade gracefully.
 - **PubMed throttling on large syncs** — Set NCBI_API_KEY to raise the rate limit from 3 to 10 requests/second.
-- **consensus reports method=heuristic** — Stance classification is lexical without an AI key. Set OPENAI_API_KEY, ANTHROPIC_API_KEY, or GEMINI_API_KEY for AI-assisted stance detection.
+- **consensus reports method=heuristic** — Stance classification is lexical without an AI key. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY, or GEMINI_API_KEY for AI-assisted stance detection (priority: Anthropic, OpenAI, DeepSeek, then Gemini/Groq/Mistral; sampling is temperature 0).
 - **Empty results offline** — Run 'scientific-consensus sync "<topic>"' first to populate the local store, or use --data-source live.
 
 ## Sources & Inspiration
