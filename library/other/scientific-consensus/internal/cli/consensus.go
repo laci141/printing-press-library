@@ -31,6 +31,7 @@ type consensusOutput struct {
 	ConsensusScore   float64                   `json:"consensus_score"`
 	Confidence       float64                   `json:"confidence"`
 	EvidenceStrength scengine.EvidenceStrength `json:"evidence_strength"`
+	NearUnanimous    bool                      `json:"near_unanimous,omitempty"`
 	ApexDesign       scengine.Design           `json:"apex_design"`
 	StudyCount       int                       `json:"study_count"`
 	Supporting       int                       `json:"supporting"`
@@ -143,7 +144,8 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 				ApexDesign: result.ApexDesign, StudyCount: result.StudyCount,
 				Supporting: result.Supporting, Refuting: result.Refuting, Mixed: result.Mixed,
 				Inconclusive: result.Inconclusive, TotalCitations: result.TotalCitations,
-				Method: stanceMethodLabel(stances),
+				NearUnanimous: result.NearUnanimous,
+				Method:        stanceMethodLabel(stances),
 			}
 			out.TopSupporting = topByStance(stances, scengine.StanceSupporting, 3)
 			out.TopRefuting = topByStance(stances, scengine.StanceRefuting, 3)
@@ -232,6 +234,9 @@ func renderConsensus(w io.Writer, o consensusOutput) {
 	fmt.Fprintf(w, "  Consensus score:   %+.2f  (-1 refute … +1 support)\n", o.ConsensusScore)
 	fmt.Fprintf(w, "  Confidence:        %.0f%%\n", o.Confidence*100)
 	fmt.Fprintf(w, "  Evidence strength: %s (apex: %s)\n", o.EvidenceStrength, o.ApexDesign)
+	if o.NearUnanimous {
+		fmt.Fprintf(w, "  Near-unanimous:    yes  (zero dissent; check whether contrary work was filtered out)\n")
+	}
 	fmt.Fprintf(w, "  Studies analyzed:  %d  (support %d / refute %d / mixed %d / inconclusive %d)\n",
 		o.StudyCount, o.Supporting, o.Refuting, o.Mixed, o.Inconclusive)
 	fmt.Fprintf(w, "  Total citations:   %d\n", o.TotalCitations)
