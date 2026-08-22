@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
+
+	"github.com/mvanhorn/printing-press-library/library/developer-tools/thelancet/internal/cliutil"
 )
 
 // CurateLive answers a curate query directly from OpenAlex when the local store
@@ -59,16 +61,16 @@ func CurateLive(ctx context.Context, c Fetcher, topic, issn, sort string, openAc
 	out := make([]WorkRow, 0, len(page.Results))
 	for _, r := range page.Results {
 		w := WorkRow{
-			Title: r.Title,
+			Title: cliutil.CleanText(r.Title),
 			DOI:   strings.TrimPrefix(r.DOI, "https://doi.org/"),
 			Year:  r.PublicationYear,
 			Cited: r.CitedByCount,
 		}
 		if r.PrimaryTopic != nil {
-			w.Topic = r.PrimaryTopic.DisplayName
+			w.Topic = cliutil.CleanText(r.PrimaryTopic.DisplayName)
 		}
 		if r.PrimaryLocation != nil && r.PrimaryLocation.Source != nil {
-			w.Journal = r.PrimaryLocation.Source.DisplayName
+			w.Journal = cliutil.CleanText(r.PrimaryLocation.Source.DisplayName)
 		}
 		out = append(out, w)
 	}
