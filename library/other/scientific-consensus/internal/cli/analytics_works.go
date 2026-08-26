@@ -163,18 +163,81 @@ func renderCurateMarkdown(w io.Writer, query string, items []curateItem) {
 	}
 }
 
-func renderCurateBibtex(w io.Writer, items []curateItem) {
-	for _, it := range items {
-		key := fmt.Sprintf("ref%d", it.Rank)
-		if it.DOI != "" {
-			key = strings.NewReplacer("/", "_", ".", "_").Replace(it.DOI)
+// bibtexEscapeValue makes a raw OpenAlex string safe to interpolate into a
+// braced BibTeX field value. Braces and backslashes are dropped rather than
+// escaped: there is no reliable way to emit a literal brace inside a field
+// value, and an unbalanced one terminates the field early and corrupts every
+// entry after it. Typographic quotes are deliberately left alone — they are
+// the source data.
+func bibtexEscapeValue(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch r {
+		case '{', '}', '\\':
+			// Dropped: not representable in a braced field value.
+		case '\n', '\r', '\t':
+			b.WriteByte(' ')
+		case '&', '%', '$', '#', '_':
+			b.WriteByte('\\')
+			b.WriteRune(r)
+		default:
+			b.WriteRune(r)
 		}
-		fmt.Fprintf(w, "@article{%s,\n  title = {%s},\n  year = {%d},\n", key, it.Title, it.Year)
+	}
+	// Collapse runs of whitespace to one space and trim.
+	return strings.Join(strings.Fields(b.String()), " ")
+}
+
+// bibtexCiteKey reduces a DOI to a legal BibTeX citation key: ASCII letters,
+// digits, "-" and "_" only. Real DOIs carry characters BibTeX and Zotero
+// reject — 10.1016/s2213-8587(21)00051-6 is a production example whose
+// parentheses break import. Returns "" when nothing legal survives.
+func bibtexCiteKey(doi string) string {
+	var b strings.Builder
+	b.Grow(len(doi))
+	for _, r := range doi {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+		}
+	}
+	out := b.String()
+	for strings.Contains(out, "__") {
+		out = strings.ReplaceAll(out, "__", "_")
+	}
+	return strings.Trim(out, "_")
+}
+
+func renderCurateBibtex(w io.Writer, items []curateItem) {
+	used := map[string]bool{}
+	for _, it := range items {
+		key := bibtexCiteKey(it.DOI)
+		if key == "" {
+			key = fmt.Sprintf("ref%d", it.Rank)
+		}
+		// Distinct DOIs can normalize onto the same key; disambiguate in the
+		// order the entries appear so the output stays deterministic.
+		if used[key] {
+			base := key
+			for n := 2; used[key]; n++ {
+				key = fmt.Sprintf("%s_%d", base, n)
+			}
+		}
+		used[key] = true
+
+		fmt.Fprintf(w, "@article{%s,\n  title = {%s},\n  year = {%d},\n", key, bibtexEscapeValue(it.Title), it.Year)
 		if len(it.Authors) > 0 {
-			fmt.Fprintf(w, "  author = {%s},\n", strings.Join(it.Authors, " and "))
+			names := make([]string, 0, len(it.Authors))
+			for _, a := range it.Authors {
+				names = append(names, bibtexEscapeValue(a))
+			}
+			fmt.Fprintf(w, "  author = {%s},\n", strings.Join(names, " and "))
 		}
 		if it.Venue != "" {
-			fmt.Fprintf(w, "  journal = {%s},\n", it.Venue)
+			fmt.Fprintf(w, "  journal = {%s},\n", bibtexEscapeValue(it.Venue))
 		}
 		if it.DOI != "" {
 			fmt.Fprintf(w, "  doi = {%s},\n", it.DOI)
