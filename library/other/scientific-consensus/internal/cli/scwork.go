@@ -30,7 +30,10 @@ type scWork struct {
 	IsOA        bool     `json:"is_oa,omitempty"`
 	PubTypes    []string `json:"-"`
 	FirstAuthor string   `json:"first_author,omitempty"`
-	Country     string   `json:"-"`
+	// Authors is every authorship display name in the order OpenAlex
+	// returned them. Empty when the work has no authorships.
+	Authors []string `json:"authors,omitempty"`
+	Country string   `json:"-"`
 }
 
 // openAlexWorksResponse mirrors the slice of the OpenAlex /works payload the
@@ -136,6 +139,11 @@ func fetchWorks(ctx context.Context, c apiGetter, search, filter, sortBy string,
 		}
 		if len(w.Authorships) > 0 {
 			sw.FirstAuthor = w.Authorships[0].Author.DisplayName
+			for _, a := range w.Authorships {
+				if a.Author.DisplayName != "" {
+					sw.Authors = append(sw.Authors, a.Author.DisplayName)
+				}
+			}
 			for _, inst := range w.Authorships[0].Institutions {
 				if inst.CountryCode != "" {
 					sw.Country = inst.CountryCode

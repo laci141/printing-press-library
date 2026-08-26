@@ -64,12 +64,15 @@ func newLandmarkCmd(flags *rootFlags) *cobra.Command {
 }
 
 type curateItem struct {
-	Rank    int    `json:"rank"`
-	Title   string `json:"title"`
-	Year    int    `json:"year,omitempty"`
-	DOI     string `json:"doi,omitempty"`
-	CitedBy int    `json:"cited_by_count"`
-	Venue   string `json:"venue,omitempty"`
+	Rank  int    `json:"rank"`
+	Title string `json:"title"`
+	// Authors is the verbatim OpenAlex author list, in OpenAlex order.
+	// BibTeX joins these with " and "; omitted when the work has none.
+	Authors []string `json:"authors,omitempty"`
+	Year    int      `json:"year,omitempty"`
+	DOI     string   `json:"doi,omitempty"`
+	CitedBy int      `json:"cited_by_count"`
+	Venue   string   `json:"venue,omitempty"`
 }
 
 func newCurateCmd(flags *rootFlags) *cobra.Command {
@@ -124,7 +127,7 @@ func newCurateCmd(flags *rootFlags) *cobra.Command {
 				}
 				seen[key] = true
 				items = append(items, curateItem{
-					Rank: len(items) + 1, Title: wk.Title, Year: wk.Year, DOI: wk.DOI, CitedBy: wk.CitedBy, Venue: wk.Venue,
+					Rank: len(items) + 1, Title: wk.Title, Authors: wk.Authors, Year: wk.Year, DOI: wk.DOI, CitedBy: wk.CitedBy, Venue: wk.Venue,
 				})
 			}
 			switch format {
@@ -167,6 +170,9 @@ func renderCurateBibtex(w io.Writer, items []curateItem) {
 			key = strings.NewReplacer("/", "_", ".", "_").Replace(it.DOI)
 		}
 		fmt.Fprintf(w, "@article{%s,\n  title = {%s},\n  year = {%d},\n", key, it.Title, it.Year)
+		if len(it.Authors) > 0 {
+			fmt.Fprintf(w, "  author = {%s},\n", strings.Join(it.Authors, " and "))
+		}
 		if it.Venue != "" {
 			fmt.Fprintf(w, "  journal = {%s},\n", it.Venue)
 		}
@@ -216,9 +222,9 @@ func newCitedByCmd(flags *rootFlags) *cobra.Command {
 				briefs = append(briefs, workBrief{Title: wk.Title, Year: wk.Year, DOI: wk.DOI, CitedBy: wk.CitedBy})
 			}
 			return emit(cmd, flags, struct {
-				WorkID   string      `json:"work_id"`
-				Total    int         `json:"total_citing"`
-				CitedBy  []workBrief `json:"cited_by"`
+				WorkID  string      `json:"work_id"`
+				Total   int         `json:"total_citing"`
+				CitedBy []workBrief `json:"cited_by"`
 			}{id, total, briefs}, func(w io.Writer) {
 				fmt.Fprintf(w, "Works citing %s (%d total):\n\n", id, total)
 				for i, b := range briefs {

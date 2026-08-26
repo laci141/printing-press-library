@@ -12,7 +12,15 @@ import (
 )
 
 type workBrief struct {
-	Title      string          `json:"title"`
+	Title string `json:"title"`
+	// Authors carries the full OpenAlex author list, in OpenAlex order and
+	// verbatim (no "et al.", no initials conversion), so downstream
+	// consumers cite real authors instead of inventing them. Omitted when
+	// the work has no authorships.
+	Authors []string `json:"authors,omitempty"`
+	// Journal is the primary location's source display name. Omitted when
+	// the work has no primary_location.source — normal, not an error.
+	Journal    string          `json:"journal,omitempty"`
 	Year       int             `json:"year,omitempty"`
 	DOI        string          `json:"doi,omitempty"`
 	CitedBy    int             `json:"cited_by_count"`
@@ -205,7 +213,8 @@ func topByStance(stances []workStance, stance scengine.Stance, n int) []workBrie
 	out := make([]workBrief, 0, len(matches))
 	for _, m := range matches {
 		out = append(out, workBrief{
-			Title: m.Work.Title, Year: m.Work.Year, DOI: m.Work.DOI, CitedBy: m.Work.CitedBy,
+			Title: m.Work.Title, Authors: m.Work.Authors, Journal: m.Work.Venue,
+			Year: m.Work.Year, DOI: m.Work.DOI, CitedBy: m.Work.CitedBy,
 			Design: m.Design, Stance: m.Stance, StanceConf: m.Confidence,
 			Abstract: clipAbstract(m.Work.Abstract),
 		})
@@ -220,7 +229,8 @@ func allStudyBriefs(stances []workStance) []workBrief {
 	out := make([]workBrief, 0, len(stances))
 	for _, s := range stances {
 		out = append(out, workBrief{
-			Title: s.Work.Title, Year: s.Work.Year, DOI: s.Work.DOI, CitedBy: s.Work.CitedBy,
+			Title: s.Work.Title, Authors: s.Work.Authors, Journal: s.Work.Venue,
+			Year: s.Work.Year, DOI: s.Work.DOI, CitedBy: s.Work.CitedBy,
 			Design: s.Design, Stance: s.Stance, StanceConf: s.Confidence,
 			Abstract: clipAbstract(s.Work.Abstract),
 		})
