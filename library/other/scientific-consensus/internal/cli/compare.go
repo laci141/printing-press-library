@@ -28,6 +28,11 @@ func computeConsensus(ctx context.Context, c apiGetter, claim string, limit, yea
 	if err != nil {
 		return consensusOutput{}, err
 	}
+	// Same retraction gate the consensus command applies. computeConsensus is
+	// the scoring path for BOTH compare and batch, so leaving it out here
+	// would let a retracted work set the evidence tier of one side of a
+	// comparison while the standalone command excluded it.
+	works, retracted := filterRetracted(works)
 	if enrich {
 		enrichPubTypes(ctx, works, 50)
 	}
@@ -38,10 +43,11 @@ func computeConsensus(ctx context.Context, c apiGetter, claim string, limit, yea
 		EvidenceStrength: r.EvidenceStrength, ApexDesign: r.ApexDesign, StudyCount: r.StudyCount,
 		Supporting: r.Supporting, Refuting: r.Refuting, Mixed: r.Mixed, Inconclusive: r.Inconclusive,
 		TotalCitations: r.TotalCitations, NearUnanimous: r.NearUnanimous,
-		Method:        stanceMethodLabel(stances),
-		TopSupporting: topByStance(stances, scengine.StanceSupporting, 2),
-		TopRefuting:   topByStance(stances, scengine.StanceRefuting, 2),
-		AllStudies:    allStudyBriefs(stances),
+		RetractedExcluded: len(retracted),
+		Method:            stanceMethodLabel(stances),
+		TopSupporting:     topByStance(stances, scengine.StanceSupporting, 2),
+		TopRefuting:       topByStance(stances, scengine.StanceRefuting, 2),
+		AllStudies:        append(allStudyBriefs(stances), retractedBriefs(retracted)...),
 	}
 	return out, nil
 }
