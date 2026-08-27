@@ -103,15 +103,48 @@ func newNovelCompareCmd(flags *rootFlags) *cobra.Command {
 			default:
 				out.Stronger = "comparable"
 			}
-			if a.StudyCount == 0 || b.StudyCount == 0 {
-				out.Note = "one or both claims returned no works; comparison may be unreliable"
-			}
+			out.Note = compareNote(a, b)
 			return emit(cmd, flags, out, func(w io.Writer) { renderCompare(w, out) })
 		},
 	}
 	cmd.Flags().IntVar(&limit, "limit", 40, "number of works to analyze per claim (max 200)")
 	cmd.Flags().BoolVar(&enrich, "enrich", true, "enrich classification with PubMed publication types")
 	return cmd
+}
+
+// compareNote is the advisory note for a two-claim comparison. An empty
+// StudyCount is not the same as "returned no works": a retracted-empty side
+// still has RetractedExcluded and AllStudies populated, and those works
+// already passed the relevance gate. The wording matches consensusNote —
+// retracted works are "relevant work(s) ... excluded as retracted" — so the
+// note cannot contradict the retracted studies in the same result.
+func compareNote(a, b consensusOutput) string {
+	if a.StudyCount > 0 && b.StudyCount > 0 {
+		return ""
+	}
+	aRetracted := emptyDueToRetraction(a)
+	bRetracted := emptyDueToRetraction(b)
+	aMissing := a.StudyCount == 0 && !aRetracted
+	bMissing := b.StudyCount == 0 && !bRetracted
+	switch {
+	case (aRetracted || bRetracted) && (aMissing || bMissing):
+		return "one claim returned no works and the other had all relevant work(s) excluded as retracted; comparison may be unreliable"
+	case aRetracted || bRetracted:
+		return "one or both claims had all relevant work(s) excluded as retracted; comparison may be unreliable"
+	default:
+		return "one or both claims returned no works; comparison may be unreliable"
+	}
+}
+
+// emptyDueToRetraction reports that a side has no scorable studies because
+// every relevant work was excluded as retracted. RetractedExcluded is the
+// primary signal; AllStudies is the fallback when the count was not set but
+// the retracted works are still listed.
+func emptyDueToRetraction(o consensusOutput) bool {
+	if o.StudyCount != 0 {
+		return false
+	}
+	return o.RetractedExcluded > 0 || len(o.AllStudies) > 0
 }
 
 func renderCompare(w io.Writer, o compareOutput) {

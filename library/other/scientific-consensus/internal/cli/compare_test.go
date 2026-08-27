@@ -93,3 +93,83 @@ func TestComputeConsensusPropagatesNearUnanimous(t *testing.T) {
 		t.Errorf("both compare sides reported NearUnanimous=%v; want them to differ", a.NearUnanimous)
 	}
 }
+
+func TestCompareNote(t *testing.T) {
+	scored := consensusOutput{StudyCount: 5}
+	retractedEmpty := consensusOutput{
+		StudyCount:        0,
+		RetractedExcluded: 3,
+		AllStudies:        []workBrief{{Title: "RETRACTED: a withdrawn trial"}},
+	}
+	retractedEmptyViaStudies := consensusOutput{
+		StudyCount: 0,
+		AllStudies: []workBrief{{Title: "RETRACTED: a withdrawn trial"}},
+	}
+	missing := consensusOutput{StudyCount: 0}
+
+	cases := []struct {
+		name string
+		a, b consensusOutput
+		want string
+	}{
+		{
+			name: "both sides scored",
+			a:    scored, b: scored,
+			want: "",
+		},
+		{
+			name: "one side retracted-empty",
+			a:    scored, b: retractedEmpty,
+			want: "one or both claims had all relevant work(s) excluded as retracted; comparison may be unreliable",
+		},
+		{
+			name: "retracted-empty via AllStudies only",
+			a:    retractedEmptyViaStudies, b: scored,
+			want: "one or both claims had all relevant work(s) excluded as retracted; comparison may be unreliable",
+		},
+		{
+			name: "both sides retracted-empty",
+			a:    retractedEmpty, b: retractedEmpty,
+			want: "one or both claims had all relevant work(s) excluded as retracted; comparison may be unreliable",
+		},
+		{
+			name: "one side returned no works",
+			a:    scored, b: missing,
+			want: "one or both claims returned no works; comparison may be unreliable",
+		},
+		{
+			name: "both sides returned no works",
+			a:    missing, b: missing,
+			want: "one or both claims returned no works; comparison may be unreliable",
+		},
+		{
+			name: "one missing and one retracted-empty",
+			a:    missing, b: retractedEmpty,
+			want: "one claim returned no works and the other had all relevant work(s) excluded as retracted; comparison may be unreliable",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := compareNote(tc.a, tc.b)
+			if got != tc.want {
+				t.Fatalf("compareNote() =\n  %q\nwant\n  %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// A retracted-empty compare side must never be described as "returned no
+// works": RetractedExcluded / AllStudies still list those relevant works.
+func TestCompareNoteRetractedEmptyDoesNotSayReturnedNoWorks(t *testing.T) {
+	got := compareNote(
+		consensusOutput{StudyCount: 4},
+		consensusOutput{StudyCount: 0, RetractedExcluded: 2, AllStudies: []workBrief{{Title: "RETRACTED: x"}}},
+	)
+	if strings.Contains(got, "returned no works") {
+		t.Fatalf("note contradicts RetractedExcluded / AllStudies: %q", got)
+	}
+	if !strings.Contains(got, "excluded as retracted") {
+		t.Fatalf("note does not distinguish retraction exclusion: %q", got)
+	}
+}
