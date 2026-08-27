@@ -7,6 +7,7 @@
   "summary": "A retracted work is not evidence and must never reach the consensus scoring loop: retraction is detected on the live fetch path from two independent signals — a publisher marker anchored at the start of the title and the source index's retraction flag — and the affected works are gated out before enrichment and scoring, on every path that calls scengine.Consensus. Retraction is an axis of its own, never a stance: a stance value would still be tallied as inconclusive while the work's design set the apex evidence tier and its citations joined the total. Excluded works stay in the reported study list with their reason attached, and the count is reported separately so the reader sees that works were dropped rather than inferring it from a gap.",
   "reason": "scengine's retraction detector existed but nothing on the live path called it, so retracted works were scored as ordinary evidence; independently, the OpenAlex select list did not request is_retracted, which left the index-only tier dead even once the detector was wired — and that is the tier covering the worst measured case, a retracted meta-analysis carrying no title marker that would otherwise supply supporting evidence at the highest evidence tier. Any regeneration that rebuilds the select list or the normalization struct must keep the index flag, or the gate silently degrades to the title rule alone.",
   "files": [
+    "internal/scengine/retracted.go",
     "internal/cli/scwork.go",
     "internal/cli/consensus.go",
     "internal/cli/compare.go",

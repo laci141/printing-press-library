@@ -176,23 +176,7 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 			out.TopSupporting = topByStance(stances, scengine.StanceSupporting, 3)
 			out.TopRefuting = topByStance(stances, scengine.StanceRefuting, 3)
 			out.AllStudies = append(allStudyBriefs(stances), retractedBriefs(retracted)...)
-			if result.StudyCount == 0 {
-				out.Note = "no works found; try a broader claim or --data-source live"
-			} else if result.Verdict == scengine.VerdictInsufficient {
-				out.Note = "fewer than 3 directional studies; treat as preliminary"
-			}
-			if dropped > 0 {
-				if out.Note != "" {
-					out.Note += "; "
-				}
-				out.Note += fmt.Sprintf("%d off-topic work(s) excluded by relevance gate", dropped)
-			}
-			if len(retracted) > 0 {
-				if out.Note != "" {
-					out.Note += "; "
-				}
-				out.Note += fmt.Sprintf("%d retracted work(s) excluded from the score", len(retracted))
-			}
+			out.Note = consensusNote(result.StudyCount, len(retracted), dropped, result.Verdict)
 
 			return emit(cmd, flags, out, func(w io.Writer) { renderConsensus(w, out) })
 		},
@@ -201,6 +185,41 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 	cmd.Flags().IntVar(&yearFrom, "year-from", 0, "only include works published from this year onward")
 	cmd.Flags().BoolVar(&enrich, "enrich", true, "enrich study-design classification with PubMed publication types")
 	return cmd
+}
+
+// consensusNote is the single home for the advisory note on a consensus
+// result. Two distinct populations feed it and they are not interchangeable:
+// dropped counts works the relevance gate removed from everything fetched,
+// while retracted counts works that already passed that gate and were then
+// excluded as retracted. So retracted works are described as "relevant" and
+// dropped works as "fetched" or "off-topic" — and an empty score with
+// retractions is never reported as "no works found", because works were
+// found. Every branch lives here so the wording cannot drift between stages.
+func consensusNote(studyCount, retracted, dropped int, verdict scengine.Verdict) string {
+	if studyCount == 0 {
+		switch {
+		case retracted > 0 && dropped > 0:
+			return fmt.Sprintf("no scorable works remained; %d relevant work(s) were excluded as retracted and %d off-topic work(s) were excluded by the relevance gate", retracted, dropped)
+		case retracted > 0:
+			return fmt.Sprintf("all %d relevant work(s) were excluded as retracted; try a broader claim, different sources, or review the retraction labels", retracted)
+		case dropped > 0:
+			return fmt.Sprintf("no relevant works remained; %d fetched work(s) were excluded by the relevance gate", dropped)
+		default:
+			return "no works found; try a broader claim or --data-source live"
+		}
+	}
+
+	var frags []string
+	if verdict == scengine.VerdictInsufficient {
+		frags = append(frags, "fewer than 3 directional studies; treat as preliminary")
+	}
+	if dropped > 0 {
+		frags = append(frags, fmt.Sprintf("%d off-topic work(s) excluded by relevance gate", dropped))
+	}
+	if retracted > 0 {
+		frags = append(frags, fmt.Sprintf("%d retracted work(s) excluded from the score", retracted))
+	}
+	return strings.Join(frags, "; ")
 }
 
 // stanceMethodLabel summarizes how stance was classified across the analyzed
