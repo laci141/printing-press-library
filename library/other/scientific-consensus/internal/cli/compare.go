@@ -128,9 +128,9 @@ func compareNote(a, b consensusOutput) string {
 	bMissing := b.StudyCount == 0 && !bRetracted
 	switch {
 	case (aRetracted || bRetracted) && (aMissing || bMissing):
-		return "one claim returned no works and the other had all relevant work(s) excluded as retracted; comparison may be unreliable"
+		return "one claim returned no works and the other had all fetched work(s) excluded as retracted; comparison may be unreliable"
 	case aRetracted || bRetracted:
-		return "one or both claims had all relevant work(s) excluded as retracted; comparison may be unreliable"
+		return "one or both claims had all fetched work(s) excluded as retracted; comparison may be unreliable"
 	default:
 		return "one or both claims returned no works; comparison may be unreliable"
 	}
