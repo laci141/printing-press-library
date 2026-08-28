@@ -120,17 +120,17 @@ func TestCompareNote(t *testing.T) {
 		{
 			name: "one side retracted-empty",
 			a:    scored, b: retractedEmpty,
-			want: "one or both claims had all relevant work(s) excluded as retracted; comparison may be unreliable",
+			want: "one or both claims had all fetched work(s) excluded as retracted; comparison may be unreliable",
 		},
 		{
 			name: "retracted-empty via AllStudies only",
 			a:    retractedEmptyViaStudies, b: scored,
-			want: "one or both claims had all relevant work(s) excluded as retracted; comparison may be unreliable",
+			want: "one or both claims had all fetched work(s) excluded as retracted; comparison may be unreliable",
 		},
 		{
 			name: "both sides retracted-empty",
 			a:    retractedEmpty, b: retractedEmpty,
-			want: "one or both claims had all relevant work(s) excluded as retracted; comparison may be unreliable",
+			want: "one or both claims had all fetched work(s) excluded as retracted; comparison may be unreliable",
 		},
 		{
 			name: "one side returned no works",
@@ -145,7 +145,7 @@ func TestCompareNote(t *testing.T) {
 		{
 			name: "one missing and one retracted-empty",
 			a:    missing, b: retractedEmpty,
-			want: "one claim returned no works and the other had all relevant work(s) excluded as retracted; comparison may be unreliable",
+			want: "one claim returned no works and the other had all fetched work(s) excluded as retracted; comparison may be unreliable",
 		},
 	}
 
