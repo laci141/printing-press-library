@@ -51,6 +51,7 @@ The headline commands hit consumer fare sources directly and need no credentials
 - `flight-goat-pp-cli explore <airport>` / `flight-goat-pp-cli longhaul <airport>` — Kayak nonstop and long-haul route discovery.
 - `flight-goat-pp-cli soar <origin> <destination> <date>` — FlySoar (Duffel NDC/GDS) second price opinion with booking handoff.
 - `flight-goat-pp-cli award <origin> <destination>` — Seats.aero award (mileage) availability: miles + taxes redemption options across cabins. **Requires** `SEATS_AERO_API_KEY` (a Seats.aero Partner API key; cached search is Pro-eligible). Read-only.
+- `flight-goat-pp-cli wifi flight <flightNumber>` / `wifi airline <IATA>` / `wifi airlines` / `wifi rollouts [IATA]` / `wifi speed <flight>` / `wifi airline-speed <IATA>` / `wifi search <query>` — SeatWifi in-flight WiFi predictions, Starlink rollout status, and crowdsourced speed reports. **No API key.** Public JSON at https://seatwifi.com. Read-only.
 - `flight-goat-pp-cli assess` — delayed-flight/rebooking decision support.
 
 Booking deeplinks in each result's `booking_urls` quote the same `--currency` the search ran in. `award` is the exception: it quotes mileage/points, not cash, and does not produce booking deeplinks.

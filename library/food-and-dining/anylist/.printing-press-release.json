@@ -2,17 +2,17 @@
   "schema_version": 1,
   "slug": "anylist",
   "cli_name": "anylist-pp-cli",
-  "version": "2026.8.2",
-  "released_at": "2026-08-26T09:27:00Z",
-  "source_commit": "6b5c232364f49478675581bcd5d5a7202fc6e36d",
+  "version": "2026.8.3",
+  "released_at": "2026-08-27T09:13:04Z",
+  "source_commit": "10cba8f2e78a102fa67d7c34af1793e2c964fd90",
   "printing_press_version": "4.6.1",
   "run_id": "20260514-120439",
   "changes": [
     {
-      "title": "feat(anylist): expand meal planning and safe metadata workflows",
-      "pr": 1818,
-      "url": "https://github.com/mvanhorn/printing-press-library/pull/1818",
-      "commit": "6b5c232364f49478675581bcd5d5a7202fc6e36d"
+      "title": "fix(anylist): fail closed for unverified collection writes",
+      "pr": 1838,
+      "url": "https://github.com/mvanhorn/printing-press-library/pull/1838",
+      "commit": "10cba8f2e78a102fa67d7c34af1793e2c964fd90"
     }
   ]
 }
