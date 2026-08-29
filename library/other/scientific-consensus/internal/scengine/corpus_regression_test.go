@@ -38,6 +38,7 @@ var allCorpora = []string{
 	"saffron",
 	"sweeteners",
 	"vaccines",
+	"vitaminc",
 	"vitamind",
 }
 
@@ -250,6 +251,10 @@ func TestVerbGateCorrelation(t *testing.T) {
 		// cleanly under polarityVerbCues, but every work it drops sits on a
 		// truncated abstract, so no PICO exclusion reaches the note.
 		"fasting": false,
+		// vitaminc ("vitamin C prevents the common cold") splits into the glued
+		// phrase [vitamin c], which claimStemLen never truncates, so this corpus
+		// is the control: its leakage figure is stem-length independent.
+		"vitaminc": false,
 	}
 
 	for _, name := range allCorpora {
@@ -395,6 +400,7 @@ func TestTokenLeakage(t *testing.T) {
 		"saffron":      2,
 		"sweeteners":   3,
 		"vaccines":     1,
+		"vitaminc":     0,
 		"vitamind":     0,
 	}
 
