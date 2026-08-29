@@ -1,0 +1,14 @@
+{
+  "schema_version": 2,
+  "id": "pyramid-exemplar-carries-identifiers",
+  "applied_at": "2026-08-29",
+  "base_run_id": "20260620-165352-e55cec69",
+  "base_printing_press_version": "4.24.0",
+  "summary": "The evidence pyramid's exemplar carries example_doi and example_year alongside example, and all three are read from one scWork in a single assignment. The classification pass lives in classifyForPyramid rather than inline in RunE, so that guarantee has something to hold it.",
+  "reason": "A title on its own cannot be looked up. A client that renders the exemplar as a citation produces one that resolves to nothing, and the work is already in hand where the exemplar is chosen — the loop held the whole struct and kept one field of it. The fields must stay in one assignment rather than being collected in separate passes: they are rendered together as a single reference, so a title paired with another work's DOI is not a cosmetic defect but a pointer to the wrong paper. classifyForPyramid is deliberately separate from classifyWorks in scwork.go, which classifies and nothing else; gaps is its only caller and would have to discard two return values to share this one. The text renderer is left alone — it shows counts and a bar, and widening it is a separate decision from what the JSON carries.",
+  "files": [
+    "internal/cli/evidence.go",
+    "internal/cli/evidence_example_test.go"
+  ],
+  "validated_outcome": "Three tests assert the pairing, the selection rule (first work seen at each design) and the pubtype count, each verified by mutation: sourcing the DOI or the year from a different work fails the pairing test, and keeping the last work at a design instead of the first fails the selection test. An earlier version of the test rebuilt the loop rather than calling it, and passed all three mutations; it was replaced. Both new fields are omitempty, since a zero-count level has no exemplar and a work may legitimately have no DOI."
+}
