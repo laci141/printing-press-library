@@ -1,0 +1,16 @@
+{
+  "schema_version": 2,
+  "id": "claim-stem-length-avoids-common-prefixes",
+  "applied_at": "2026-08-29",
+  "base_run_id": "20260620-165352-e55cec69",
+  "base_printing_press_version": "4.24.0",
+  "summary": "claimStemLen is 6, not 5. Content tokens from a claim are truncated so inflected forms still match, but the truncation must not be short enough to land on a prefix the literature uses for unrelated words. Five collapses 'intermittent' to 'inter' and 'alertness' to 'alert'; six keeps both distinct while every inflection group the corpora depend on survives. The corpus suite that guards this now fails on drift instead of logging it, and testdata/corpora carries a case where the collapse is visible plus a control where it cannot occur.",
+  "reason": "The twelve corpora archived before this change shared a property nobody chose: every claim's intervention side stemmed to something that occurs almost nowhere else ('melat', 'saffr', 'vacci', 'coffe'). The suite therefore could not see what a five-character stem does to a claim whose own word starts with a common English prefix. Two measured cases: 'intermittent fasting improves insulin sensitivity' stems to 'inter', present in 52 of 57 archived works as intervention, interaction, interval, interquartile, interplay, internal, interpret and interested — never as intermittent; and 'coffee improves alertness' stems its outcome to 'alert', which matches the 'Safety Alert' of a review about Candida species in fermented foods, scoring that review as supporting evidence at confidence 0.90. Six was chosen over seven because six is the shortest value that separates both pairs: improves/improved/improvement still share 'improv', caffeine/caffeinated share 'caffei', attention/attentive share 'attent'. A longer stem would start splitting those groups without separating anything further. The constant is shared with the stance classifier's cue matching, so it was changed only after replaying both binaries against live OpenAlex on eight claims rather than trusting the suite, which could not have caught it: setting the constant to 3 left the whole package green.",
+  "files": [
+    "internal/scengine/stance.go",
+    "internal/scengine/corpus_regression_test.go",
+    "internal/scengine/testdata/corpora/fasting.json",
+    "internal/scengine/testdata/corpora/vitaminc.json"
+  ],
+  "validated_outcome": "Across all fourteen corpora only fasting moves: leakage 5/57 to 25/57, and the gate's drop count 3 to 20 — nine of those decided on a full abstract rather than a truncated stump, where at five none of the three drops were trustworthy. No verdict changes on any corpus and no stance changes on any surviving work. vitaminc is the control: its intervention side is the glued phrase [vitamin c], which picoSideTokens leaves unstemmed, and it holds at 0/3 under both values. TestTokenLeakage now reports drift through t.Errorf; verified by mutation, since the previous t.Logf let claimStemLen=3 pass silently. Live replay at --limit 100 on eight claims: coffee 21 works to 17, fasting 57 to 39, and vitamin D, screen time, omega 3, meditation and probiotics unchanged in both count and verdict. The four works that leave the coffee run were already being discarded by the downstream LLM relevance filter; the gate now discards them deterministically."
+}
