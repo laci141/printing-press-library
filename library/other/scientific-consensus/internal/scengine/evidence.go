@@ -127,6 +127,27 @@ var heuristicTiers = []struct {
 	{regexp.MustCompile(`(?i)\bnarrative review\b|\bliterature review\b|\bscoping review\b`), DesignNarrativeReview},
 }
 
+// hostTrialMention matches a phrase that credits a DIFFERENT study for the
+// randomisation: a work carried out inside, or drawn from, someone else's
+// trial. The abstract of a nested study routinely names its host, and the
+// design heuristics cannot tell whose design they just read.
+//
+// Measured on 10.1371/journal.pone.0045231, whose title ends "A Case Control
+// Study": its abstract says the participants were "within a phase IV
+// cluster-randomised trial of HPV vaccination", and that one phrase promoted
+// an eight-tier jump, from case-control to RCT. The work then entered the
+// evidence pyramid at its apex and carried a 0.90-confidence stance.
+//
+// The bound of 60 characters keeps the two halves in one clause. Without it
+// the pattern would join a "within" early in a long abstract to a genuine
+// randomisation sentence much later.
+var hostTrialMention = regexp.MustCompile(`(?i)\b(within|nested (in|within)|participants (in|of)|recruited (from|within)|enrolled (in|within)|sub-?study of|secondary analysis of|ancillary to)\b[^.]{0,60}?(randomi[sz]ed|\brct\b|placebo-?controlled|double-?blind)`)
+
+// titleClaimsRCT reports whether the TITLE itself calls the work randomised.
+// A work that says so in its own title is stating its own design, so a host
+// trial mentioned in the abstract must not overrule it.
+var titleClaimsRCT = regexp.MustCompile(`(?i)\brandomi[sz]ed (controlled |clinical )?trial\b|\bdouble-?blind\b|\bplacebo-?controlled\b|\brct\b`)
+
 // ClassifyDesign determines a study design using the cascade documented in the
 // research brief: authoritative publication types first (PubMed MeSH / Semantic
 // Scholar), then title+abstract heuristics, then the coarse OpenAlex type, and
@@ -155,7 +176,14 @@ func ClassifyDesign(title, abstract, openalexType string, pubTypes []string) Cla
 
 	// 2. Title + abstract heuristics.
 	hay := strings.ToLower(title + ". " + abstract)
+	// A randomisation phrase that belongs to a host trial is not this work's
+	// design. Skipping the RCT tier lets the cascade fall through to the label
+	// the work gives itself, which for a nested study is usually in the title.
+	skipRCT := !titleClaimsRCT.MatchString(title) && hostTrialMention.MatchString(hay)
 	for _, t := range heuristicTiers {
+		if t.design == DesignRCT && skipRCT {
+			continue
+		}
 		if t.re.MatchString(hay) {
 			if TierRank(t.design) < bestRank {
 				return Classification{Design: t.design, Tier: TierWeight(t.design), Method: MethodHeuristic}
