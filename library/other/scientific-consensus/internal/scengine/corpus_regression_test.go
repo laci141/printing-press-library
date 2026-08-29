@@ -28,6 +28,7 @@ const corpusDir = "testdata/corpora"
 var allCorpora = []string{
 	"cellphones",
 	"coffee",
+	"fasting",
 	"meditation",
 	"melatonin",
 	"omega3",
@@ -245,6 +246,10 @@ func TestVerbGateCorrelation(t *testing.T) {
 		// like the five above and belongs with them; it is listed separately
 		// only to flag that the earlier hand-count got this one wrong.
 		"probiotics": false,
+		// fasting ("intermittent fasting improves insulin sensitivity") splits
+		// cleanly under polarityVerbCues, but every work it drops sits on a
+		// truncated abstract, so no PICO exclusion reaches the note.
+		"fasting": false,
 	}
 
 	for _, name := range allCorpora {
@@ -380,6 +385,7 @@ func TestTokenLeakage(t *testing.T) {
 	recorded := map[string]int{
 		"cellphones":   8,
 		"coffee":       0,
+		"fasting":      5,
 		"meditation":   0,
 		"melatonin":    10,
 		"omega3":       26,
