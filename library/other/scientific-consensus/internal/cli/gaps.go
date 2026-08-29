@@ -107,13 +107,13 @@ func newNovelGapsCmd(flags *rootFlags) *cobra.Command {
 			// Finding: no strong designs.
 			if !out.HasRCT {
 				out.Findings = append(out.Findings, gapFinding{Kind: "missing-strong-designs",
-					Detail: "no randomized trials, systematic reviews, or meta-analyses among the analyzed works — evidence rests on weaker designs"})
+					Detail: fmt.Sprintf("none of the %d most relevant works is a randomized trial, systematic review, or meta-analysis; works outside that sample were not examined", len(works))})
 			}
 			// Finding: stale evidence.
 			thisYear := time.Now().Year()
 			if out.LatestYear > 0 && thisYear-out.LatestYear >= 4 {
 				out.Findings = append(out.Findings, gapFinding{Kind: "stale-evidence",
-					Detail: fmt.Sprintf("most recent analyzed study is from %d (%d+ years old) — replication / updates may be missing", out.LatestYear, thisYear-out.LatestYear)})
+					Detail: fmt.Sprintf("none of the %d most relevant works is newer than %d (%d+ years); that is a property of this sample, not of the literature — a newer study ranking lower on relevance would not appear here", len(works), out.LatestYear, thisYear-out.LatestYear)})
 			}
 			// Finding: thin volume.
 			if total < 50 {
@@ -124,12 +124,12 @@ func newNovelGapsCmd(flags *rootFlags) *cobra.Command {
 			for _, label := range sortedProbeLabels() {
 				if !reMatch(populationProbes[label], hay) {
 					out.Findings = append(out.Findings, gapFinding{Kind: "understudied-population",
-						Detail: "little or no coverage of " + label})
+						Detail: fmt.Sprintf("%s is not mentioned in any of the %d most relevant works; that is where the probe looked, and nowhere else", label, len(works))})
 				}
 			}
 			if len(out.Findings) == 0 {
 				out.Findings = append(out.Findings, gapFinding{Kind: "well-covered",
-					Detail: "no obvious gaps detected: strong designs present, recent, and reasonably broad"})
+					Detail: fmt.Sprintf("no gaps found in the %d most relevant works: strong designs present, recent, and reasonably broad. Absence of a gap here is not evidence there is none", len(works))})
 			}
 			return emit(cmd, flags, out, func(w io.Writer) { renderGaps(w, out) })
 		},

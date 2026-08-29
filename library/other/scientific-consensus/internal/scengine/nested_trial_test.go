@@ -63,3 +63,33 @@ func TestClassifyDesignHostTrialGuardDoesNotOverridePubType(t *testing.T) {
 		t.Errorf("Method = %s, want %s", got.Method, MethodPubMedPubType)
 	}
 }
+
+// An abstract can name the trial its participants came from AND describe this
+// work's own randomisation. Suppressing the RCT tier work-wide would discard
+// the second along with the first, demoting a genuine RCT for having said
+// where its participants came from.
+func TestClassifyDesignKeepsRCTWhenOwnRandomisationIsSeparate(t *testing.T) {
+	title := "Vitamin D supplementation and fracture risk in older adults"
+	abstract := "Participants were drawn from within a larger placebo-controlled trial of calcium. " +
+		"We then randomised 200 of them to vitamin D or placebo in a double-blind design."
+
+	got := ClassifyDesign(title, abstract, "article", nil)
+	if got.Design != DesignRCT {
+		t.Errorf("Design = %s, want %s — the second sentence is this work's own randomisation",
+			got.Design, DesignRCT)
+	}
+}
+
+// The determiner separates a host trial from the work describing itself.
+// "enrolled in THIS randomised trial" is an RCT stating its own design; an
+// earlier version of the pattern demoted one for saying so.
+func TestClassifyDesignKeepsRCTWhenPhraseSaysThis(t *testing.T) {
+	title := "The ocular hypotensive effect of saffron extract in primary open angle glaucoma"
+	abstract := "Thirty-four patients were enrolled in this prospective, comparative, randomized clinical trial."
+
+	got := ClassifyDesign(title, abstract, "article", nil)
+	if got.Design != DesignRCT {
+		t.Errorf("Design = %s, want %s — \"this\" marks the work's own trial, not a host",
+			got.Design, DesignRCT)
+	}
+}

@@ -138,15 +138,55 @@ var heuristicTiers = []struct {
 // an eight-tier jump, from case-control to RCT. The work then entered the
 // evidence pyramid at its apex and carried a 0.90-confidence stance.
 //
-// The bound of 60 characters keeps the two halves in one clause. Without it
-// the pattern would join a "within" early in a long abstract to a genuine
+// The determiner is what makes it someone else's trial. "enrolled in A
+// randomised trial" names a study this work is reporting from; "enrolled in
+// THIS randomised trial" is the work describing itself, and an earlier
+// version of this pattern demoted a genuine RCT for saying so — measured on
+// the saffron corpus, where it was the only match the pattern had. Requiring
+// a/an/the immediately after the phrase excludes this, our, the present and
+// the current without listing them.
+//
+// The 60-character bound keeps the two halves in one clause, and counts
+// characters rather than words because the randomisation word is often
+// hyphenated into another: "cluster-randomised" is one token, and a
+// word-stepping pattern never reaches inside it. Unbounded, the
+// pattern would join a "within" early in a long abstract to a genuine
 // randomisation sentence much later.
-var hostTrialMention = regexp.MustCompile(`(?i)\b(within|nested (in|within)|participants (in|of)|recruited (from|within)|enrolled (in|within)|sub-?study of|secondary analysis of|ancillary to)\b[^.]{0,60}?(randomi[sz]ed|\brct\b|placebo-?controlled|double-?blind)`)
+var hostTrialMention = regexp.MustCompile(`(?i)\b(within|nested (in|within)|participants (in|of)|recruited (from|within)|enrolled (in|within)|sub-?study of|secondary analysis of|ancillary to)\s+(?:an?|the)\s[^.]{0,60}?(randomi[sz]ed|\brct\b|placebo-?controlled|double-?blind)`)
 
 // titleClaimsRCT reports whether the TITLE itself calls the work randomised.
 // A work that says so in its own title is stating its own design, so a host
 // trial mentioned in the abstract must not overrule it.
 var titleClaimsRCT = regexp.MustCompile(`(?i)\brandomi[sz]ed (controlled |clinical )?trial\b|\bdouble-?blind\b|\bplacebo-?controlled\b|\brct\b`)
+
+// hostTrialOnly reports whether every randomisation signal in the text sits in
+// a sentence that credits another study. It splits on sentence boundaries,
+// drops the sentences hostTrialMention matches, and asks whether an RCT signal
+// survives in what is left.
+//
+// Splitting on "." is crude and will cut an abbreviation in half. That is
+// tolerable here: an over-split produces smaller fragments, and a fragment is
+// still either inside a host clause or outside it. It never merges two
+// sentences, which is the direction that would cause a wrong answer.
+func hostTrialOnly(hay string) bool {
+	if !hostTrialMention.MatchString(hay) {
+		return false
+	}
+	for _, sent := range strings.Split(hay, ".") {
+		if strings.TrimSpace(sent) == "" || hostTrialMention.MatchString(sent) {
+			continue
+		}
+		if rctSignal.MatchString(sent) {
+			return false
+		}
+	}
+	return true
+}
+
+// rctSignal is the RCT tier's own pattern, named so hostTrialOnly can ask the
+// same question the cascade asks rather than keeping a second copy that could
+// drift away from it.
+var rctSignal = regexp.MustCompile(`(?i)\brandomi[sz]ed (controlled |clinical )?trial\b|\bdouble-?blind\b|\bplacebo-?controlled\b|\b\brct\b`)
 
 // ClassifyDesign determines a study design using the cascade documented in the
 // research brief: authoritative publication types first (PubMed MeSH / Semantic
@@ -179,7 +219,14 @@ func ClassifyDesign(title, abstract, openalexType string, pubTypes []string) Cla
 	// A randomisation phrase that belongs to a host trial is not this work's
 	// design. Skipping the RCT tier lets the cascade fall through to the label
 	// the work gives itself, which for a nested study is usually in the title.
-	skipRCT := !titleClaimsRCT.MatchString(title) && hostTrialMention.MatchString(hay)
+	//
+	// The suppression is scoped to the sentences that name a host. An abstract
+	// can do both — report the trial it was drawn from AND describe its own
+	// randomisation — and a work-wide flag would discard the second along with
+	// the first, demoting a genuine RCT for having said where its participants
+	// came from. Only when nothing outside the host sentences carries an RCT
+	// signal is the tier skipped.
+	skipRCT := !titleClaimsRCT.MatchString(title) && hostTrialOnly(hay)
 	for _, t := range heuristicTiers {
 		if t.design == DesignRCT && skipRCT {
 			continue
