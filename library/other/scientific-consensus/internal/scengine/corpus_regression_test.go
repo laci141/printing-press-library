@@ -414,11 +414,17 @@ func TestTokenLeakage(t *testing.T) {
 			}
 		}
 
-		line := ""
+		t.Logf("%-13s token=%-7q missing %d/%d", name, tok, missing, len(res.AllStudies))
+		// The recorded numbers are a baseline, not a target: a drift means the
+		// tokenizer now reaches a different share of each corpus, which is
+		// exactly the change this file exists to surface. It is reported as a
+		// failure rather than logged because a t.Logf line is invisible without
+		// -v, and the drift went unseen for that reason.
 		if want, ok := recorded[name]; ok && want != missing {
-			line = "  <-- DRIFT from recorded " + itoa(want)
+			t.Errorf("%s: leakage moved from %d to %d of %d works (token %q) — "+
+				"update the recorded figure in the same commit as the change that moved it",
+				name, want, missing, len(res.AllStudies), tok)
 		}
-		t.Logf("%-13s token=%-7q missing %d/%d%s", name, tok, missing, len(res.AllStudies), line)
 	}
 }
 
