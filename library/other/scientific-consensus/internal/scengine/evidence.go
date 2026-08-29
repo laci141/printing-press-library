@@ -159,28 +159,25 @@ var hostTrialMention = regexp.MustCompile(`(?i)\b(within|nested (in|within)|part
 // trial mentioned in the abstract must not overrule it.
 var titleClaimsRCT = regexp.MustCompile(`(?i)\brandomi[sz]ed (controlled |clinical )?trial\b|\bdouble-?blind\b|\bplacebo-?controlled\b|\brct\b`)
 
-// hostTrialOnly reports whether every randomisation signal in the text sits in
-// a sentence that credits another study. It splits on sentence boundaries,
-// drops the sentences hostTrialMention matches, and asks whether an RCT signal
-// survives in what is left.
+// hostTrialOnly reports whether the ONLY randomisation signal in the text is
+// the one credited to another study. It removes the host-trial phrases and
+// asks whether an RCT signal survives in what is left.
 //
-// Splitting on "." is crude and will cut an abbreviation in half. That is
-// tolerable here: an over-split produces smaller fragments, and a fragment is
-// still either inside a host clause or outside it. It never merges two
-// sentences, which is the direction that would cause a wrong answer.
+// Removing the phrase rather than the sentence it sits in is the point. A
+// single sentence can do both jobs — "participants were drawn from within a
+// larger placebo-controlled trial and we then randomised 200 of them in a
+// double-blind design" names a host AND reports this work's own allocation.
+// Dropping the whole sentence would take the second with the first and demote
+// a genuine RCT; dropping just the matched span leaves "and we then randomised
+// 200 of them in a double-blind design" standing, and the RCT tier holds.
+//
+// The replacement is a space rather than an empty string so the text on either
+// side cannot fuse into a word that was never written.
 func hostTrialOnly(hay string) bool {
 	if !hostTrialMention.MatchString(hay) {
 		return false
 	}
-	for _, sent := range strings.Split(hay, ".") {
-		if strings.TrimSpace(sent) == "" || hostTrialMention.MatchString(sent) {
-			continue
-		}
-		if rctSignal.MatchString(sent) {
-			return false
-		}
-	}
-	return true
+	return !rctSignal.MatchString(hostTrialMention.ReplaceAllString(hay, " "))
 }
 
 // rctSignal is the RCT tier's own pattern, named so hostTrialOnly can ask the

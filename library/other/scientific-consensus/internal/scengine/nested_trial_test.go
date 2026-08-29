@@ -93,3 +93,17 @@ func TestClassifyDesignKeepsRCTWhenPhraseSaysThis(t *testing.T) {
 			got.Design, DesignRCT)
 	}
 }
+
+// The host mention and this work's own randomisation can share one sentence.
+// An earlier version dropped the whole sentence it found a host phrase in, so
+// the second signal went with the first and a genuine RCT was demoted.
+func TestClassifyDesignKeepsRCTWhenBothSignalsShareASentence(t *testing.T) {
+	title := "Vitamin D supplementation and fracture risk in older adults"
+	abstract := "Participants were drawn from within a larger placebo-controlled trial and we then randomised 200 of them in a double-blind design."
+
+	got := ClassifyDesign(title, abstract, "article", nil)
+	if got.Design != DesignRCT {
+		t.Errorf("Design = %s, want %s — the same sentence reports this work's own allocation",
+			got.Design, DesignRCT)
+	}
+}
