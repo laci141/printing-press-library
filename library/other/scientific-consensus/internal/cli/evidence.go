@@ -10,11 +10,30 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// exemplarWork is the one work the pyramid names for a design level. The three
+// fields are filled from a single scWork in one assignment, never assembled
+// from separate lookups: a client renders a citation from all three at once,
+// so a title paired with another work's DOI would resolve to the wrong paper
+// while looking complete.
+type exemplarWork struct {
+	title string
+	doi   string
+	year  int
+}
+
 type evidenceLevel struct {
-	Design  scengine.Design `json:"design"`
-	Count   int             `json:"count"`
-	Pct     float64         `json:"pct"`
-	Example string          `json:"example,omitempty"`
+	Design scengine.Design `json:"design"`
+	Count  int             `json:"count"`
+	Pct    float64         `json:"pct"`
+	// Example names one work at this level so a reader can check the
+	// classification instead of taking the count on trust. ExampleDOI and
+	// ExampleYear come with it because a title alone cannot be looked up:
+	// a client rendering a citation from this response would produce one
+	// that resolves to nothing. All three are omitempty — a level with a
+	// zero count has no exemplar, and a work can legitimately have no DOI.
+	Example     string `json:"example,omitempty"`
+	ExampleDOI  string `json:"example_doi,omitempty"`
+	ExampleYear int    `json:"example_year,omitempty"`
 }
 
 type evidenceOutput struct {
@@ -71,21 +90,8 @@ func newNovelEvidenceCmd(flags *rootFlags) *cobra.Command {
 				enrichPubTypes(ctx, works, 50)
 			}
 
-			cs := make([]scengine.Classification, len(works))
-			byPub := 0
-			exemplar := map[scengine.Design]string{}
 			prog := newProgress(flags, "classifying", len(works))
-			for i, wk := range works {
-				cls := scengine.ClassifyDesign(wk.Title, wk.Abstract, wk.Type, wk.PubTypes)
-				cs[i] = cls
-				if cls.Method == scengine.MethodPubMedPubType {
-					byPub++
-				}
-				if _, ok := exemplar[cls.Design]; !ok {
-					exemplar[cls.Design] = wk.Title
-				}
-				prog.update(i + 1)
-			}
+			cs, byPub, exemplar := classifyForPyramid(works, func(done int) { prog.update(done) })
 			prog.done()
 			levels := scengine.Pyramid(cs)
 			out := evidenceOutput{
@@ -98,7 +104,10 @@ func newNovelEvidenceCmd(flags *rootFlags) *cobra.Command {
 					pct = float64(lvl.Count) * 100 / float64(len(works))
 				}
 				out.Pyramid = append(out.Pyramid, evidenceLevel{
-					Design: lvl.Design, Count: lvl.Count, Pct: round1(pct), Example: exemplar[lvl.Design],
+					Design: lvl.Design, Count: lvl.Count, Pct: round1(pct),
+					Example:     exemplar[lvl.Design].title,
+					ExampleDOI:  exemplar[lvl.Design].doi,
+					ExampleYear: exemplar[lvl.Design].year,
 				})
 			}
 			if len(works) == 0 {
@@ -131,6 +140,42 @@ func renderEvidence(w io.Writer, o evidenceOutput) {
 	if o.Note != "" {
 		fmt.Fprintf(w, "\n  Note: %s\n", o.Note)
 	}
+}
+
+// classifyForPyramid runs the design classifier over every work and returns
+// three results of one pass: the per-work classifications, how many of them
+// came from a publisher-supplied publication type rather than a title
+// heuristic, and one exemplar per design. It is separate from classifyWorks
+// in scwork.go, which classifies and nothing else: gaps needs only the
+// classifications, and would have to discard two return values to use this.
+//
+// The exemplar is the FIRST work seen at each design, and it is copied out of
+// that one scWork in a single assignment. Splitting the pass — collecting
+// titles here and looking DOIs up afterwards — is what this function exists to
+// prevent: the three fields travel together to a client that renders them as
+// one citation, so a mismatch is not a cosmetic defect but a reference to the
+// wrong paper.
+//
+// onProgress is called with the number of works finished; it is a callback
+// rather than a *progress so a test can drive this without a terminal.
+func classifyForPyramid(works []scWork, onProgress func(done int)) ([]scengine.Classification, int, map[scengine.Design]exemplarWork) {
+	cs := make([]scengine.Classification, len(works))
+	byPub := 0
+	exemplar := map[scengine.Design]exemplarWork{}
+	for i, wk := range works {
+		cls := scengine.ClassifyDesign(wk.Title, wk.Abstract, wk.Type, wk.PubTypes)
+		cs[i] = cls
+		if cls.Method == scengine.MethodPubMedPubType {
+			byPub++
+		}
+		if _, ok := exemplar[cls.Design]; !ok {
+			exemplar[cls.Design] = exemplarWork{title: wk.Title, doi: wk.DOI, year: wk.Year}
+		}
+		if onProgress != nil {
+			onProgress(i + 1)
+		}
+	}
+	return cs, byPub, exemplar
 }
 
 func round1(v float64) float64 {
