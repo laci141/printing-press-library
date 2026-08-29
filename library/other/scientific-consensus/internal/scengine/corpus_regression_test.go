@@ -390,7 +390,7 @@ func TestTokenLeakage(t *testing.T) {
 	recorded := map[string]int{
 		"cellphones":   8,
 		"coffee":       0,
-		"fasting":      5,
+		"fasting":      25,
 		"meditation":   0,
 		"melatonin":    10,
 		"omega3":       26,

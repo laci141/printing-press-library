@@ -127,8 +127,23 @@ const (
 	negationLookback = 25
 
 	// claimStemLen truncates content tokens so inflected forms still match
-	// ("sweeteners" -> "sweet" matches "sweetener").
-	claimStemLen = 5
+	// ("sweeteners" -> "sweete" matches "sweetener" and "sweetened").
+	//
+	// Six, not five. Five is short enough to land on a prefix the literature
+	// uses for unrelated words: "intermittent" becomes "inter", which matches
+	// intervention, interaction, interval, interquartile, interplay, internal,
+	// interpret and interested; "alertness" becomes "alert", which matches the
+	// "Safety Alert" of a review about food fermentation. Six splits both pairs
+	// while leaving every inflection group in the corpora intact: improves,
+	// improved and improvement still share "improv"; caffeine and caffeinated
+	// share "caffei"; attention and attentive share "attent".
+	//
+	// Measured on testdata/corpora: only fasting moves (leakage 5/57 -> 25/57,
+	// and the gate drops 3 works -> 20, nine of them decided on a full abstract
+	// rather than a truncated stump). No verdict changes on any corpus, and no
+	// stance changes on any work that survives the gate. vitaminc is the
+	// control: its glued phrase [vitamin c] is never truncated, and it holds.
+	claimStemLen = 6
 
 	// metaRefutRadius is how far either side of a meta refutation cue the
 	// claim's two sides are searched for. Wider than posPairWindow's sentence
