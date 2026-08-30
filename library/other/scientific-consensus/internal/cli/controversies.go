@@ -15,6 +15,7 @@ type controversyOutput struct {
 	Supporting       int         `json:"supporting"`
 	Refuting         int         `json:"refuting"`
 	Mixed            int         `json:"mixed"`
+	Inconclusive     int         `json:"inconclusive"`
 	ControversyScore float64     `json:"controversy_score"` // 0 (settled) .. 1 (highly contested)
 	Contested        bool        `json:"contested"`
 	SupportingSide   []workBrief `json:"supporting_side"`
@@ -69,40 +70,54 @@ func newNovelControversiesCmd(flags *rootFlags) *cobra.Command {
 			_, stances := scoreWorks(ctx, works, query)
 			prog.done()
 
-			out := controversyOutput{Query: query, StudyCount: len(works)}
-			for _, s := range stances {
-				switch s.Stance {
-				case scengine.StanceSupporting:
-					out.Supporting++
-				case scengine.StanceRefuting:
-					out.Refuting++
-				case scengine.StanceMixed:
-					out.Mixed++
-				}
-			}
-			directional := out.Supporting + out.Refuting
-			if directional > 0 {
-				minor := out.Supporting
-				if out.Refuting < minor {
-					minor = out.Refuting
-				}
-				// 2*minority/total => 1.0 when evenly split, 0 when one-sided.
-				out.ControversyScore = round2f(2 * float64(minor) / float64(directional))
-			}
-			out.Contested = out.ControversyScore >= 0.5 && directional >= 4
-			out.SupportingSide = topByStance(stances, scengine.StanceSupporting, 3)
-			out.RefutingSide = topByStance(stances, scengine.StanceRefuting, 3)
-			if len(works) == 0 {
-				out.Note = "no works found; try a broader query"
-			} else if directional < 4 {
-				out.Note = "too few directional studies to assess controversy reliably"
-			}
+			out := tallyControversy(query, len(works), stances)
 			return emit(cmd, flags, out, func(w io.Writer) { renderControversy(w, out) })
 		},
 	}
 	cmd.Flags().IntVar(&limit, "limit", 50, "number of works to analyze (max 200)")
 	cmd.Flags().BoolVar(&enrich, "enrich", true, "enrich classification with PubMed publication types")
 	return cmd
+}
+
+// tallyControversy turns the per-work stances into the command's output
+// shape: the four stance counters, the controversy score, and the top works
+// on each side. Split out of RunE so the tally and the score can be exercised
+// from tests without a network client. studyCount is passed separately
+// because it is the size of the retrieved corpus, which the caller owns.
+func tallyControversy(query string, studyCount int, stances []workStance) controversyOutput {
+	out := controversyOutput{Query: query, StudyCount: studyCount}
+	for _, s := range stances {
+		switch s.Stance {
+		case scengine.StanceSupporting:
+			out.Supporting++
+		case scengine.StanceRefuting:
+			out.Refuting++
+		case scengine.StanceMixed:
+			out.Mixed++
+		case scengine.StanceInconclusive:
+			out.Inconclusive++
+		}
+	}
+	// Inconclusive works carry no directional signal, so they are reported
+	// but deliberately excluded from the score's denominator.
+	directional := out.Supporting + out.Refuting
+	if directional > 0 {
+		minor := out.Supporting
+		if out.Refuting < minor {
+			minor = out.Refuting
+		}
+		// 2*minority/total => 1.0 when evenly split, 0 when one-sided.
+		out.ControversyScore = round2f(2 * float64(minor) / float64(directional))
+	}
+	out.Contested = out.ControversyScore >= 0.5 && directional >= 4
+	out.SupportingSide = topByStance(stances, scengine.StanceSupporting, 3)
+	out.RefutingSide = topByStance(stances, scengine.StanceRefuting, 3)
+	if studyCount == 0 {
+		out.Note = "no works found; try a broader query"
+	} else if directional < 4 {
+		out.Note = "too few directional studies to assess controversy reliably"
+	}
+	return out
 }
 
 func renderControversy(w io.Writer, o controversyOutput) {
@@ -112,7 +127,8 @@ func renderControversy(w io.Writer, o controversyOutput) {
 		verdict = "CONTESTED"
 	}
 	fmt.Fprintf(w, "  Controversy score: %.2f  (%s)\n", o.ControversyScore, verdict)
-	fmt.Fprintf(w, "  Studies: %d  (support %d / refute %d / mixed %d)\n\n", o.StudyCount, o.Supporting, o.Refuting, o.Mixed)
+	fmt.Fprintf(w, "  Studies: %d  (support %d / refute %d / mixed %d / inconclusive %d)\n\n",
+		o.StudyCount, o.Supporting, o.Refuting, o.Mixed, o.Inconclusive)
 	if len(o.SupportingSide) > 0 {
 		fmt.Fprintln(w, "  Supporting side:")
 		for _, b := range o.SupportingSide {
