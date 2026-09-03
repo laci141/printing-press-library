@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
+	"strings"
 	"time"
 )
 
@@ -46,6 +47,27 @@ const grantsStaleAfter = 2 * 365 * 24 * time.Hour
 
 // grantsDateLayout is the MM/DD/YYYY format the API returns.
 const grantsDateLayout = "01/02/2006"
+
+// normalizeText collapses interior whitespace runs to a single space and trims
+// the ends.
+//
+// Grants.gov ships raw agency-entered text. Measured on 2026-09-03 for the
+// keyword "climate" (48 results): three titles carried doubled interior
+// spaces — "Egypt  Annual Program Statement" (DFOP0018819), "Science &
+// Technology  Broad Agency Announcement" (HM047623BAA0001) and "Notice of
+// Intent:  Program to End Modern Slavery" (SFOP0008547) — and two agency
+// names carried a trailing space: "National Geospatial-Intelligence Agency "
+// (HM047623BAA0001) and "DOT Federal Highway Administration "
+// (693JJ323NF00014).
+//
+// strings.Fields rather than a regexp, for two reasons. This module has no
+// external dependencies and stdlib keeps it that way; and Fields splits on
+// unicode.IsSpace, so it also folds the non-breaking space that
+// html.UnescapeString produces from &nbsp;. Go's regexp \s class is ASCII-only
+// and would leave U+00A0 in place.
+func normalizeText(s string) string {
+	return strings.Join(strings.Fields(s), " ")
+}
 
 type Opportunity struct {
 	ID         json.Number `json:"id"`
@@ -137,7 +159,11 @@ func SearchOpportunities(keyword, agencyCode string, rows int) ([]Opportunity, i
 	}
 	opps := resp.Data.OppHits
 	for i := range opps {
-		opps[i].Title = html.UnescapeString(opps[i].Title) // titles contain entities such as &ndash;
+		// Unescape first, normalize second. The order matters: unescaping can
+		// itself produce whitespace (&nbsp; becomes U+00A0, &#32; a plain
+		// space), so normalizing first would leave that behind.
+		opps[i].Title = normalizeText(html.UnescapeString(opps[i].Title)) // titles contain entities such as &ndash;
+		opps[i].Agency = normalizeText(html.UnescapeString(opps[i].Agency))
 	}
 	return opps, resp.Data.HitCount, nil
 }

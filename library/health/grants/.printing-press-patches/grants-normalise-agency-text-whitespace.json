@@ -1,0 +1,11 @@
+{
+  "schema_version": 2,
+  "id": "grants-normalise-agency-text-whitespace",
+  "applied_at": "2026-09-03",
+  "base_run_id": "20260705-183000",
+  "base_printing_press_version": "4.25.0",
+  "summary": "Grants.gov titles and agency names carry doubled interior spaces and trailing spaces; normalizeText collapses them, and must run AFTER html.UnescapeString rather than before.",
+  "reason": "Order is load-bearing: unescaping itself produces whitespace (&nbsp; becomes U+00A0, &#32; a plain space), so normalising first leaves it behind. strings.Fields rather than a regexp for two reasons that must survive a regen: this module has no external dependencies and stdlib keeps it that way, and Fields splits on unicode.IsSpace so it folds U+00A0, whereas Go's regexp \\s class is ASCII-only and would not. Agency also gains html.UnescapeString, which it never had.",
+  "files": ["internal/sources/grantsgov.go", "internal/sources/grantsgov_test.go"],
+  "validated_outcome": "48-row live search for 'climate' measured 2026-09-03: three titles with doubled interior spaces and two agency names with trailing spaces before, zero after. TestNormalizeText fails on a mutation that joins with \"\" instead of \" \"."
+}
