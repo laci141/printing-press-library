@@ -48,6 +48,16 @@ type NSFAward struct {
 	Awardee        string `json:"awardeeName"`
 	StartDate      string `json:"startDate"`
 	ExpDate        string `json:"expDate"`
+
+	// PI is the principal investigator, formatted "SURNAME, FIRSTNAME" to match
+	// the NIH path's contact_pi_name so both sources look alike downstream.
+	// It is built from the API's split piLastName/piFirstName rather than its
+	// combined pdPIName: measured 2026-09-04 over 236 unique awards, all three
+	// fields are populated in 236 of 236 records, but in 9 of them the last
+	// word of pdPIName is not the surname ("Emma A Elliott Smith" has surname
+	// "Elliott Smith"), so any consumer applying the usual "last word is the
+	// surname" rule — BibTeX among them — misfiles those nine.
+	PI string `json:"contact_pi_name"`
 }
 
 // nsfAwardRaw carries the abstract used for matching. It is decode-only: the
@@ -56,6 +66,28 @@ type NSFAward struct {
 type nsfAwardRaw struct {
 	NSFAward
 	Abstract string `json:"abstractText"`
+
+	// The API returns the PI name split as well as combined; only the split
+	// pair is requested and decoded. See NSFAward.PI for why.
+	PIFirstName string `json:"piFirstName"`
+	PILastName  string `json:"piLastName"`
+}
+
+// nsfPIName renders the split PI name in the NIH path's "SURNAME, FIRSTNAME"
+// shape, degrading to whichever half is present rather than emitting a stray
+// comma.
+func nsfPIName(first, last string) string {
+	first = strings.TrimSpace(first)
+	last = strings.TrimSpace(last)
+	switch {
+	case first == "" && last == "":
+		return ""
+	case first == "":
+		return last
+	case last == "":
+		return first
+	}
+	return last + ", " + first
 }
 
 type nsfResp struct {
@@ -217,7 +249,9 @@ func nsfRank(pool []nsfAwardRaw, terms []string, rows int) ([]NSFAward, NSFStats
 	}
 	out := make([]NSFAward, 0, len(ranked))
 	for _, s := range ranked {
-		out = append(out, s.award.NSFAward)
+		award := s.award.NSFAward
+		award.PI = nsfPIName(s.award.PIFirstName, s.award.PILastName)
+		out = append(out, award)
 	}
 	return out, stats
 }
@@ -247,7 +281,7 @@ func SearchNSF(keyword string, rows int) ([]NSFAward, NSFStats, error) {
 		q.Set("keyword", keyword)
 		q.Set("rpp", fmt.Sprint(nsfPageSize))
 		q.Set("offset", fmt.Sprint(page*nsfPageSize+1)) // 1-based: page two starts at 26
-		q.Set("printFields", "id,title,fundsObligatedAmt,awardeeName,startDate,expDate,abstractText")
+		q.Set("printFields", "id,title,fundsObligatedAmt,awardeeName,startDate,expDate,abstractText,piFirstName,piLastName")
 		var resp nsfResp
 		if err := getJSON(nsfAwardsURL+"?"+q.Encode(), &resp); err != nil {
 			if page == 0 {

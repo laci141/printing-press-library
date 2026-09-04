@@ -78,7 +78,7 @@ func TestNSFScore(t *testing.T) {
 	}{
 		{
 			name:     "both terms in title",
-			award:    nsfAwardRaw{NSFAward{Title: "A Novel Gene Therapy Platform", ID: "1"}, "delivery vectors"},
+			award:    nsfAwardRaw{NSFAward: NSFAward{Title: "A Novel Gene Therapy Platform", ID: "1"}, Abstract: "delivery vectors"},
 			query:    "gene therapy",
 			wantOK:   true,
 			wantHit:  true,
@@ -86,7 +86,7 @@ func TestNSFScore(t *testing.T) {
 		},
 		{
 			name:     "one term in title, one in abstract",
-			award:    nsfAwardRaw{NSFAward{Title: "Gene Editing in Zebrafish", ID: "2"}, "a therapeutic approach"},
+			award:    nsfAwardRaw{NSFAward: NSFAward{Title: "Gene Editing in Zebrafish", ID: "2"}, Abstract: "a therapeutic approach"},
 			query:    "gene therapy",
 			wantOK:   true,
 			wantHit:  true,
@@ -94,14 +94,14 @@ func TestNSFScore(t *testing.T) {
 		},
 		{
 			name:    "missing a term is rejected",
-			award:   nsfAwardRaw{NSFAward{Title: "Squid Hydrodynamics", ID: "3"}, "artificial neural networks are used"},
+			award:   nsfAwardRaw{NSFAward: NSFAward{Title: "Squid Hydrodynamics", ID: "3"}, Abstract: "artificial neural networks are used"},
 			query:   "artificial intelligence",
 			wantOK:  false,
 			wantHit: false,
 		},
 		{
 			name:     "empty query keeps everything",
-			award:    nsfAwardRaw{NSFAward{Title: "Anything", ID: "4"}, ""},
+			award:    nsfAwardRaw{NSFAward: NSFAward{Title: "Anything", ID: "4"}, Abstract: ""},
 			query:    "",
 			wantOK:   true,
 			wantHit:  false,
@@ -119,18 +119,18 @@ func TestNSFScore(t *testing.T) {
 
 func TestNSFRank(t *testing.T) {
 	pool := []nsfAwardRaw{
-		{NSFAward{ID: "1", Title: "Squid Hydrodynamics", FundsObligated: "900000"},
-			"artificial neural sampling, no second term here"},
-		{NSFAward{ID: "2", Title: "Graduate Fellowship", FundsObligated: "100000"},
-			"supports the artificial intelligence priority area"},
-		{NSFAward{ID: "3", Title: "Artificial Intelligence for Robotics", FundsObligated: "500000"},
-			"an artificial intelligence system"},
+		{NSFAward: NSFAward{ID: "1", Title: "Squid Hydrodynamics", FundsObligated: "900000"},
+			Abstract: "artificial neural sampling, no second term here"},
+		{NSFAward: NSFAward{ID: "2", Title: "Graduate Fellowship", FundsObligated: "100000"},
+			Abstract: "supports the artificial intelligence priority area"},
+		{NSFAward: NSFAward{ID: "3", Title: "Artificial Intelligence for Robotics", FundsObligated: "500000"},
+			Abstract: "an artificial intelligence system"},
 		// Same collaborative award, registered per institution: different IDs,
 		// identical titles. The larger fundsObligatedAmt must win.
-		{NSFAward{ID: "4a", Title: "Collaborative Research: AI and Intelligence Testing", FundsObligated: "200000"},
-			"artificial methods"},
-		{NSFAward{ID: "4b", Title: "collaborative research:  AI and Intelligence Testing ", FundsObligated: "800000"},
-			"artificial methods"},
+		{NSFAward: NSFAward{ID: "4a", Title: "Collaborative Research: AI and Intelligence Testing", FundsObligated: "200000"},
+			Abstract: "artificial methods"},
+		{NSFAward: NSFAward{ID: "4b", Title: "collaborative research:  AI and Intelligence Testing ", FundsObligated: "800000"},
+			Abstract: "artificial methods"},
 	}
 
 	awards, stats := nsfRank(pool, nsfTerms("artificial intelligence"), 5)
@@ -156,9 +156,9 @@ func TestNSFRank(t *testing.T) {
 
 func TestNSFRankLimitsRows(t *testing.T) {
 	pool := []nsfAwardRaw{
-		{NSFAward{ID: "1", Title: "Cancer A"}, "cancer"},
-		{NSFAward{ID: "2", Title: "Cancer B"}, "cancer"},
-		{NSFAward{ID: "3", Title: "Cancer C"}, "cancer"},
+		{NSFAward: NSFAward{ID: "1", Title: "Cancer A"}, Abstract: "cancer"},
+		{NSFAward: NSFAward{ID: "2", Title: "Cancer B"}, Abstract: "cancer"},
+		{NSFAward: NSFAward{ID: "3", Title: "Cancer C"}, Abstract: "cancer"},
 	}
 	awards, stats := nsfRank(pool, nsfTerms("cancer"), 2)
 	if len(awards) != 2 {
@@ -166,5 +166,40 @@ func TestNSFRankLimitsRows(t *testing.T) {
 	}
 	if stats.Matched != 3 {
 		t.Errorf("Matched = %d, want 3 (stats count matches, not shown rows)", stats.Matched)
+	}
+}
+
+// The PI must reach the normalised output in the NIH path's
+// "SURNAME, FIRSTNAME" shape, built from the split pair. The measured hazard is
+// a multi-word surname: reading the combined pdPIName instead and taking its
+// last word as the surname misfiles "Emma A Elliott Smith" (9 of 236 awards
+// measured 2026-09-04).
+func TestNSFRankEmitsPI(t *testing.T) {
+	pool := []nsfAwardRaw{
+		{NSFAward: NSFAward{ID: "1", Title: "Isotope Ecology"}, Abstract: "ecology",
+			PIFirstName: "Emma", PILastName: "Elliott Smith"},
+	}
+	awards, _ := nsfRank(pool, nsfTerms("ecology"), 5)
+	if len(awards) != 1 {
+		t.Fatalf("len(awards) = %d, want 1", len(awards))
+	}
+	if got, want := awards[0].PI, "Elliott Smith, Emma"; got != want {
+		t.Errorf("PI = %q, want %q", got, want)
+	}
+}
+
+func TestNSFPIName(t *testing.T) {
+	cases := []struct{ first, last, want string }{
+		{"Jenny", "Ouyang", "Ouyang, Jenny"},
+		{"Emma", "Elliott Smith", "Elliott Smith, Emma"},
+		{" Emma ", " Elliott Smith ", "Elliott Smith, Emma"},
+		{"", "Ouyang", "Ouyang"}, // no stray leading comma
+		{"Jenny", "", "Jenny"},   // no stray trailing comma
+		{"", "", ""},
+	}
+	for _, c := range cases {
+		if got := nsfPIName(c.first, c.last); got != c.want {
+			t.Errorf("nsfPIName(%q, %q) = %q, want %q", c.first, c.last, got, c.want)
+		}
 	}
 }

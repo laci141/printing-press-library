@@ -1,0 +1,11 @@
+{
+  "schema_version": 2,
+  "id": "nsf-pi-must-come-from-the-split-name-fields",
+  "applied_at": "2026-09-04",
+  "base_run_id": "20260705-183000",
+  "base_printing_press_version": "4.25.0",
+  "summary": "The NSF principal investigator must be built from the API's split piLastName/piFirstName pair and emitted as contact_pi_name in the NIH path's \"SURNAME, FIRSTNAME\" shape; the combined pdPIName must not be used.",
+  "reason": "All three fields are populated in every record, so the split pair costs nothing, but pdPIName carries no surname boundary and consumers that apply the conventional \"last word is the surname\" rule — BibTeX among them — misfile every multi-word surname. Sharing contact_pi_name with the NIH path is deliberate: downstream consumers read one field name across both sources. A regen that requests pdPIName instead, or that emits piFirstName/piLastName as separate output keys, silently reintroduces both problems.",
+  "files": ["internal/sources/nsf.go", "internal/sources/nsf_test.go"],
+  "validated_outcome": "Measured 2026-09-04 across 236 unique awards over five unrelated keywords: pdPIName, piFirstName and piLastName each populated 236/236, and in 9 of 236 the last word of pdPIName is not the surname (\"Emma A Elliott Smith\" -> \"Elliott Smith\"). Live run of `nsf --json \"isotope ecology\"` emits \"Fonoll Almansa, Xavier\", one of those nine, correctly split."
+}
