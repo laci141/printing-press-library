@@ -23,7 +23,7 @@ Note: on `search`, `--min-award` / `--eligibility` automatically trigger a detai
 ## Data model
 - **Opportunity** (Grants.gov): id, number, title, agency, openDate, closeDate (MM/DD/YYYY), status; from the details: awardCeiling, awardFloor, applicantTypes[]
 - **NIHProject**: projectNum, title, org, pi, awardAmount, fiscalYear
-- **NSFAward**: id, title, awardee, fundsObligated, startDate, expDate
+- **NSFAward**: id, title, awardee, fundsObligated, startDate, expDate, pi
 
 ## Acceptance criteria
 1. ☐ All three commands return real rows from LIVE APIs (evidence: run output)

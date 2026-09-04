@@ -1,6 +1,7 @@
 package sources
 
 import (
+	"encoding/json"
 	"reflect"
 	"testing"
 )
@@ -200,6 +201,98 @@ func TestNSFPIName(t *testing.T) {
 	for _, c := range cases {
 		if got := nsfPIName(c.first, c.last); got != c.want {
 			t.Errorf("nsfPIName(%q, %q) = %q, want %q", c.first, c.last, got, c.want)
+		}
+	}
+}
+
+// nsfLiveBody is a verbatim trimmed response from the NSF Awards API, measured
+// 2026-09-04 for the keyword "isotope ecology" with the printFields this
+// package requests. It exists because TestNSFRankEmitsPI sets PIFirstName and
+// PILastName by hand and therefore proves only the formatting: a wrong JSON tag
+// would leave that test green while the app emitted an empty contact_pi_name.
+// Decoding this body through the real nsfResp/nsfAwardRaw structs is what pins
+// the tags. The second award carries a multi-word surname on purpose.
+//
+// What this fixture cannot cover: the request is never made, so a printFields
+// typo that stops the API returning piFirstName/piLastName at all is invisible
+// here. That gap is real and is not claimed to be covered.
+const nsfLiveBody = `{
+  "response": {
+    "award": [
+      {
+        "id": "2628024",
+        "title": "RAPID: Reproductive Ecology of Antarctic Krill",
+        "fundsObligatedAmt": "168531",
+        "awardeeName": "Oregon State University",
+        "startDate": "09/01/2026",
+        "expDate": "08/31/2027",
+        "abstractText": "Stable isotope work on krill ecology.",
+        "piFirstName": "Kim",
+        "piLastName": "Bernard"
+      },
+      {
+        "id": "2606140",
+        "title": "Anaerobic Fungi in Digestion",
+        "fundsObligatedAmt": "419981",
+        "awardeeName": "University of Texas at Austin",
+        "startDate": "09/01/2026",
+        "expDate": "08/31/2029",
+        "abstractText": "Isotope tracing informs the ecology of the digester community.",
+        "piFirstName": "Xavier",
+        "piLastName": "Fonoll Almansa"
+      }
+    ]
+  }
+}`
+
+// TestNSFDecodeEmitsPI runs a real API response body through the actual decode
+// path and out to JSON, so the input tags (piFirstName, piLastName), the
+// struct wiring and the output key (contact_pi_name) are all pinned by one
+// test. Asserting on the marshalled output rather than the Go field is
+// deliberate: the field name is ours, but contact_pi_name is the contract the
+// NIH path already publishes and the web app reads.
+func TestNSFDecodeEmitsPI(t *testing.T) {
+	var resp nsfResp
+	if err := json.Unmarshal([]byte(nsfLiveBody), &resp); err != nil {
+		t.Fatalf("decoding the measured NSF body: %v", err)
+	}
+	if len(resp.Response.Award) != 2 {
+		t.Fatalf("decoded %d awards, want 2", len(resp.Response.Award))
+	}
+	if got := resp.Response.Award[0].PIFirstName; got != "Kim" {
+		t.Errorf("PIFirstName = %q, want %q — check the json tag", got, "Kim")
+	}
+	if got := resp.Response.Award[1].PILastName; got != "Fonoll Almansa" {
+		t.Errorf("PILastName = %q, want %q — check the json tag", got, "Fonoll Almansa")
+	}
+
+	awards, _ := nsfRank(resp.Response.Award, nsfTerms("isotope ecology"), 5)
+	if len(awards) != 2 {
+		t.Fatalf("ranked %d awards, want 2", len(awards))
+	}
+
+	out, err := json.Marshal(awards)
+	if err != nil {
+		t.Fatalf("marshalling awards: %v", err)
+	}
+	var decoded []map[string]any
+	if err := json.Unmarshal(out, &decoded); err != nil {
+		t.Fatalf("re-decoding awards: %v", err)
+	}
+	byID := map[string]string{}
+	for _, a := range decoded {
+		pi, ok := a["contact_pi_name"].(string)
+		if !ok {
+			t.Fatalf("award %v has no string contact_pi_name — check the output json tag", a["id"])
+		}
+		byID[a["id"].(string)] = pi
+	}
+	for id, want := range map[string]string{
+		"2628024": "Bernard, Kim",
+		"2606140": "Fonoll Almansa, Xavier",
+	} {
+		if got := byID[id]; got != want {
+			t.Errorf("award %s contact_pi_name = %q, want %q", id, got, want)
 		}
 	}
 }
