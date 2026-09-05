@@ -331,6 +331,7 @@ func dash(s string) string {
 // clip truncates s to at most n runes, appending an ellipsis when it cuts.
 // Counting and slicing by rune (not byte) keeps a multi-byte character from
 // being split in half, which real records carrying ® and ° signs would hit.
+// Note this counts runes, not terminal display columns.
 func clip(s string, n int) string {
 	s = strings.TrimSpace(s)
 	if utf8.RuneCountInString(s) <= n {
@@ -342,6 +343,15 @@ func clip(s string, n int) string {
 // recallLabelWidth is the width of the label column in the human-readable record
 // block ("  Lots/Expiry:  " and its siblings are all 16 chars wide);
 // recallLineWidth is the total line budget, sized for an 80-column terminal.
+//
+// The budget is a target, not a guarantee. It holds for whitespace-delimited
+// content in single-width characters. Two cases exceed it by design: a token
+// longer than the usable column (a long chemical name, identifier or URL)
+// overflows its line rather than being split, and East Asian or other
+// double-width glyphs occupy two terminal cells while counting as one rune, so
+// a line can be within budget by rune count and past it on screen. Enforcing
+// either would mean display-width measurement and breaking unbreakable tokens —
+// both worse trade-offs than an occasional over-wide line.
 const (
 	recallLabelWidth = 16
 	recallLineWidth  = 80

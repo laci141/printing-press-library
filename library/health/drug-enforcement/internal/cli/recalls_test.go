@@ -134,7 +134,8 @@ func TestClip(t *testing.T) {
 
 // TestRenderRecordWrapsProse is the wiring check: Product and Reason must go
 // through clip-then-wrap at the shipped geometry, and no line in the rendered
-// block may exceed the 80-column budget.
+// block may exceed the 80-rune budget. Rune count is the measure here, not
+// terminal display width — see the note on recallLineWidth.
 func TestRenderRecordWrapsProse(t *testing.T) {
 	long := strings.TrimSpace(strings.Repeat("alpha bravo charlie delta echo ", 30)) // ~890 chars
 	var buf bytes.Buffer
@@ -173,7 +174,7 @@ func TestRenderRecordWrapsProse(t *testing.T) {
 	}
 	for _, line := range strings.Split(out, "\n") {
 		if n := utf8.RuneCountInString(line); n > recallLineWidth {
-			t.Errorf("line exceeds the %d-column budget at %d runes: %q", recallLineWidth, n, line)
+			t.Errorf("line exceeds the %d-rune budget at %d runes: %q", recallLineWidth, n, line)
 		}
 	}
 }
