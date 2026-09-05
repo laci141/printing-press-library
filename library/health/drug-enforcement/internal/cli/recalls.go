@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/mvanhorn/printing-press-library/library/health/drug-enforcement/internal/client"
 
@@ -45,6 +46,7 @@ type recallRecord struct {
 	ReasonForRecall      string `json:"reason_for_recall"`
 	DistributionPattern  string `json:"distribution_pattern"`
 	ProductDescription   string `json:"product_description"`
+	CodeInfo             string `json:"code_info"`
 	RecallInitiationDate string `json:"recall_initiation_date"`
 	ReportDate           string `json:"report_date"`
 	State                string `json:"state"`
@@ -258,6 +260,7 @@ func runRecallSearch(cmd *cobra.Command, flags *rootFlags, search string, limit 
 		fmt.Fprintf(w, "  Initiated:    %s\n", dash(normalizeRecallDate(r.RecallInitiationDate)))
 		fmt.Fprintf(w, "  Status:       %s\n", dash(r.Status))
 		fmt.Fprintf(w, "  Product:      %s\n", dash(clip(r.ProductDescription, 100)))
+		fmt.Fprintf(w, "  Lots/Expiry:  %s\n", dash(wrapField(r.CodeInfo, recallLineWidth, recallLabelWidth)))
 		fmt.Fprintf(w, "  Reason:       %s\n", dash(clip(r.ReasonForRecall, 100)))
 		fmt.Fprintln(w)
 	}
@@ -320,4 +323,49 @@ func clip(s string, n int) string {
 		return s
 	}
 	return s[:n] + "…"
+}
+
+// recallLabelWidth is the width of the label column in the human-readable record
+// block ("  Lots/Expiry:  " and its siblings are all 16 chars wide);
+// recallLineWidth is the total line budget, sized for an 80-column terminal.
+const (
+	recallLabelWidth = 16
+	recallLineWidth  = 80
+)
+
+// wrapField word-wraps s to fit a total line of width columns when the value
+// starts indent columns in, padding continuation lines by indent so they line up
+// under the first line's value. Unlike clip it never drops characters: code_info
+// carries lot numbers and expiry dates, where a truncated value is not partially
+// useful, it is wrong. Breaks are on whitespace only, so a lot number is never
+// split across lines; a lone token wider than the available column overflows its
+// line for that same reason (and so an unbreakable token can never loop).
+// Counts runes, not bytes, so a multi-byte character is never cut in half.
+func wrapField(s string, width, indent int) string {
+	s = strings.TrimSpace(s)
+	avail := width - indent
+	if s == "" || avail < 1 {
+		return s
+	}
+	pad := strings.Repeat(" ", indent)
+	var b strings.Builder
+	lineLen := 0
+	for i, word := range strings.Fields(s) {
+		n := utf8.RuneCountInString(word)
+		switch {
+		case i == 0:
+			b.WriteString(word)
+			lineLen = n
+		case lineLen+1+n <= avail:
+			b.WriteByte(' ')
+			b.WriteString(word)
+			lineLen += 1 + n
+		default:
+			b.WriteByte('\n')
+			b.WriteString(pad)
+			b.WriteString(word)
+			lineLen = n
+		}
+	}
+	return b.String()
 }

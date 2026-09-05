@@ -43,3 +43,49 @@ func TestClassToLabel(t *testing.T) {
 		t.Error("class 4 should not be valid")
 	}
 }
+
+func TestWrapField(t *testing.T) {
+	tests := []struct {
+		in            string
+		width, indent int
+		want          string
+	}{
+		{"", 80, 16, ""},               // empty stays empty; dash() supplies the placeholder
+		{" \t ", 80, 16, ""},           // whitespace-only trimmed away, as clip does
+		{"abc def", 10, 10, "abc def"}, // no room for a value at all: emit, never loop
+		{
+			"Lot: A1, expires: 04/30/2027", 80, 16,
+			"Lot: A1, expires: 04/30/2027", // fits the column, returned untouched
+		},
+		{
+			"  Lot:  A1   B2  ", 40, 10,
+			"Lot: A1 B2", // trimmed, and internal whitespace runs collapse to one space
+		},
+		{
+			"aaaa bbbb cccc dddd eeee ffff gggg hhhh iiii jjjj kkkk", 30, 10,
+			"aaaa bbbb cccc dddd\n          eeee ffff gggg hhhh\n          iiii jjjj kkkk",
+		},
+		{
+			"supercalifragilisticexpialidocious", 20, 10,
+			"supercalifragilisticexpialidocious", // lone oversized token overflows, never split
+		},
+		{
+			"aaaaaaaaaaaaaaa bb cc", 20, 10,
+			"aaaaaaaaaaaaaaa\n          bb cc", // an overflowing token still ends its line
+		},
+		{
+			"\u03b1\u03b1\u03b1\u03b1 \u03b2\u03b2\u03b2\u03b2", 20, 10,
+			"\u03b1\u03b1\u03b1\u03b1 \u03b2\u03b2\u03b2\u03b2", // 9 runes fits; 17 bytes would not — runes win
+		},
+		{ // real openFDA code_info at the shipped 80/16 geometry
+			"Lot: a) 09JA2530, 31JA2507, expires: 04/30/2027; b) Lot: 09DE2412, 09JA2528, 29JA2511, expires: 04/30/2027",
+			recallLineWidth, recallLabelWidth,
+			"Lot: a) 09JA2530, 31JA2507, expires: 04/30/2027; b) Lot:\n                09DE2412, 09JA2528, 29JA2511, expires: 04/30/2027",
+		},
+	}
+	for _, tc := range tests {
+		if got := wrapField(tc.in, tc.width, tc.indent); got != tc.want {
+			t.Errorf("wrapField(%q,%d,%d)=%q want %q", tc.in, tc.width, tc.indent, got, tc.want)
+		}
+	}
+}
