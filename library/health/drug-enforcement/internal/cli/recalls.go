@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -254,20 +255,30 @@ func runRecallSearch(cmd *cobra.Command, flags *rootFlags, search string, limit 
 	w := cmd.OutOrStdout()
 	fmt.Fprintf(w, "Total matches: %d (showing %d)\n\n", env.Meta.Results.Total, len(env.Results))
 	for _, r := range env.Results {
-		// Lead with the recall number — the FDA source record ID.
-		fmt.Fprintf(w, "[%s] %s\n", dash(r.RecallNumber), dash(r.Classification))
-		fmt.Fprintf(w, "  Firm:         %s\n", dash(r.RecallingFirm))
-		fmt.Fprintf(w, "  Initiated:    %s\n", dash(normalizeRecallDate(r.RecallInitiationDate)))
-		fmt.Fprintf(w, "  Status:       %s\n", dash(r.Status))
-		fmt.Fprintf(w, "  Product:      %s\n", dash(clip(r.ProductDescription, 100)))
-		fmt.Fprintf(w, "  Lots/Expiry:  %s\n", dash(wrapField(r.CodeInfo, recallLineWidth, recallLabelWidth)))
-		fmt.Fprintf(w, "  Reason:       %s\n", dash(clip(r.ReasonForRecall, 100)))
-		fmt.Fprintln(w)
+		printRecallRecord(w, r)
 	}
 	fmt.Fprintln(w, recallClassLegend)
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, recallDisclaimer)
 	return nil
+}
+
+// printRecallRecord prints one recall record block. Product and Reason are clipped
+// to recallProseCap and then wrapped to the same 80/16 geometry as Lots/Expiry,
+// so every line in the block shares one width budget. The clip-then-wrap order
+// matters: wrapping the clipped value keeps the ellipsis on the last line.
+// Lots/Expiry is deliberately NOT clipped — a lot number is identifying data,
+// where a truncated value is wrong rather than merely short.
+func printRecallRecord(w io.Writer, r recallRecord) {
+	// Lead with the recall number — the FDA source record ID.
+	fmt.Fprintf(w, "[%s] %s\n", dash(r.RecallNumber), dash(r.Classification))
+	fmt.Fprintf(w, "  Firm:         %s\n", dash(r.RecallingFirm))
+	fmt.Fprintf(w, "  Initiated:    %s\n", dash(normalizeRecallDate(r.RecallInitiationDate)))
+	fmt.Fprintf(w, "  Status:       %s\n", dash(r.Status))
+	fmt.Fprintf(w, "  Product:      %s\n", dash(wrapField(clip(r.ProductDescription, recallProseCap), recallLineWidth, recallLabelWidth)))
+	fmt.Fprintf(w, "  Lots/Expiry:  %s\n", dash(wrapField(r.CodeInfo, recallLineWidth, recallLabelWidth)))
+	fmt.Fprintf(w, "  Reason:       %s\n", dash(wrapField(clip(r.ReasonForRecall, recallProseCap), recallLineWidth, recallLabelWidth)))
+	fmt.Fprintln(w)
 }
 
 // emitNoRecords prints the guardrail "no recall records found" result. It never
@@ -317,12 +328,15 @@ func dash(s string) string {
 	return s
 }
 
+// clip truncates s to at most n runes, appending an ellipsis when it cuts.
+// Counting and slicing by rune (not byte) keeps a multi-byte character from
+// being split in half, which real records carrying ® and ° signs would hit.
 func clip(s string, n int) string {
 	s = strings.TrimSpace(s)
-	if len(s) <= n {
+	if utf8.RuneCountInString(s) <= n {
 		return s
 	}
-	return s[:n] + "…"
+	return string([]rune(s)[:n]) + "…"
 }
 
 // recallLabelWidth is the width of the label column in the human-readable record
@@ -332,6 +346,12 @@ const (
 	recallLabelWidth = 16
 	recallLineWidth  = 80
 )
+
+// recallProseCap bounds the prose fields (product description, reason for
+// recall) before wrapping. 300 runes admits the p90 record whole while keeping
+// the long tail (up to ~660 runes) from dominating a --limit listing. Unlike
+// code_info, prose is still useful truncated.
+const recallProseCap = 300
 
 // wrapField word-wraps s to fit a total line of width columns when the value
 // starts indent columns in, padding continuation lines by indent so they line up

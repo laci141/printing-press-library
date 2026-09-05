@@ -1,0 +1,14 @@
+{
+  "schema_version": 2,
+  "id": "wrap-prose-fields-to-block-width",
+  "applied_at": "2026-09-05",
+  "base_run_id": "20260707-200719-bf61d987",
+  "base_printing_press_version": "4.25.0",
+  "summary": "Every line of a rendered recall record shares one width budget: the prose fields (product description, reason for recall) are bounded then wrapped to the same geometry as the lot/expiry line, and truncation is measured in runes, not bytes.",
+  "reason": "The prose fields were emitted as single unwrapped lines while the lot/expiry line was wrapped to the block width, so the block only appeared width-bounded until two lines ran well past it. A bound is still right for prose — these fields have a long tail that would otherwise triple the height of a multi-record listing — but the bound belongs before the wrap, not instead of it, and it must be generous enough that a typical record survives whole rather than being cut mid-sentence. The lot/expiry line stays deliberately unbounded: a lot number is identifying data, where a truncated value is wrong rather than merely short. Byte-based truncation could also split a multi-byte character and emit an invalid rune, which real records carrying registered-trademark and degree signs reach.",
+  "files": [
+    "internal/cli/recalls.go",
+    "internal/cli/recalls_test.go"
+  ],
+  "validated_outcome": "Live `reference D-0617-2026` and `reference D-1284-2014` (410-char product description, exercising the truncate-then-wrap path) both render a record block whose widest line is exactly 80 columns, down from 117+. go test ./internal/cli passes."
+}

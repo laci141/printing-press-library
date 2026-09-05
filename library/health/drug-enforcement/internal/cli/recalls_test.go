@@ -1,6 +1,11 @@
 package cli
 
-import "testing"
+import (
+	"bytes"
+	"strings"
+	"testing"
+	"unicode/utf8"
+)
 
 func TestPhrase(t *testing.T) {
 	tests := []struct {
@@ -86,6 +91,89 @@ func TestWrapField(t *testing.T) {
 	for _, tc := range tests {
 		if got := wrapField(tc.in, tc.width, tc.indent); got != tc.want {
 			t.Errorf("wrapField(%q,%d,%d)=%q want %q", tc.in, tc.width, tc.indent, got, tc.want)
+		}
+	}
+}
+
+func TestClip(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		n    int
+		want string
+	}{
+		{"under the cap", "short value", 20, "short value"},
+		{"trims before measuring", "  short value  ", 20, "short value"},
+		{"over the cap", "abcdefghij", 4, "abcd…"},
+		{
+			// A byte-based slice at n=3 would cut the 2-byte "®" in half and
+			// emit an invalid rune; a rune-based one keeps it whole.
+			"multi-byte value is never split",
+			"a®bc",
+			3,
+			"a®b…",
+		},
+		{
+			// Every rune is 3 bytes here, so len(s) would over-count by 3x and
+			// clip a value that actually fits.
+			"multi-byte value under the cap survives whole",
+			"°°中中中",
+			5,
+			"°°中中中",
+		},
+	}
+	for _, tc := range tests {
+		if got := clip(tc.in, tc.n); got != tc.want {
+			t.Errorf("%s: clip(%q,%d)=%q want %q", tc.name, tc.in, tc.n, got, tc.want)
+		}
+		if !utf8.ValidString(clip(tc.in, tc.n)) {
+			t.Errorf("%s: clip(%q,%d) produced an invalid rune", tc.name, tc.in, tc.n)
+		}
+	}
+}
+
+// TestRenderRecordWrapsProse is the wiring check: Product and Reason must go
+// through clip-then-wrap at the shipped geometry, and no line in the rendered
+// block may exceed the 80-column budget.
+func TestRenderRecordWrapsProse(t *testing.T) {
+	long := strings.TrimSpace(strings.Repeat("alpha bravo charlie delta echo ", 30)) // ~890 chars
+	var buf bytes.Buffer
+	printRecallRecord(&buf, recallRecord{
+		RecallNumber:         "D-0000-2026",
+		Classification:       "Class II",
+		RecallingFirm:        "Example Pharma Inc.",
+		RecallInitiationDate: "20260101",
+		Status:               "Ongoing",
+		ProductDescription:   long,
+		CodeInfo:             "Lot: A1, expires: 04/30/2027",
+		ReasonForRecall:      long,
+	})
+	out := buf.String()
+
+	lines := strings.Split(out, "\n")
+	for _, label := range []string{"  Product:", "  Reason:"} {
+		i := -1
+		for k, line := range lines {
+			if strings.HasPrefix(line, label) {
+				i = k
+				break
+			}
+		}
+		if i < 0 {
+			t.Fatalf("missing %q in output:\n%s", label, out)
+		}
+		// The value must have wrapped: the label line is followed by at least
+		// one continuation line indented to the label width.
+		if i+1 >= len(lines) || !strings.HasPrefix(lines[i+1], strings.Repeat(" ", recallLabelWidth)) {
+			t.Errorf("%q did not wrap", strings.TrimSpace(label))
+		}
+	}
+	if !strings.Contains(out, "…") {
+		t.Error("a value past recallProseCap should have been clipped with an ellipsis")
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if n := utf8.RuneCountInString(line); n > recallLineWidth {
+			t.Errorf("line exceeds the %d-column budget at %d runes: %q", recallLineWidth, n, line)
 		}
 	}
 }
