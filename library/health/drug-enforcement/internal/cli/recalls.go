@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -254,20 +255,27 @@ func runRecallSearch(cmd *cobra.Command, flags *rootFlags, search string, limit 
 	w := cmd.OutOrStdout()
 	fmt.Fprintf(w, "Total matches: %d (showing %d)\n\n", env.Meta.Results.Total, len(env.Results))
 	for _, r := range env.Results {
-		// Lead with the recall number — the FDA source record ID.
-		fmt.Fprintf(w, "[%s] %s\n", dash(r.RecallNumber), dash(r.Classification))
-		fmt.Fprintf(w, "  Firm:         %s\n", dash(r.RecallingFirm))
-		fmt.Fprintf(w, "  Initiated:    %s\n", dash(normalizeRecallDate(r.RecallInitiationDate)))
-		fmt.Fprintf(w, "  Status:       %s\n", dash(r.Status))
-		fmt.Fprintf(w, "  Product:      %s\n", dash(clip(r.ProductDescription, 100)))
-		fmt.Fprintf(w, "  Lots/Expiry:  %s\n", dash(wrapField(r.CodeInfo, recallLineWidth, recallLabelWidth)))
-		fmt.Fprintf(w, "  Reason:       %s\n", dash(clip(r.ReasonForRecall, 100)))
-		fmt.Fprintln(w)
+		printRecallRecord(w, r)
 	}
 	fmt.Fprintln(w, recallClassLegend)
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, recallDisclaimer)
 	return nil
+}
+
+// printRecallRecord writes one enforcement record as the human-readable block.
+// Extracted from runRecallSearch so the rendering is exercisable from a test
+// without a live openFDA call: all it needs is the decoded record.
+func printRecallRecord(w io.Writer, r recallRecord) {
+	// Lead with the recall number — the FDA source record ID.
+	fmt.Fprintf(w, "[%s] %s\n", dash(r.RecallNumber), dash(r.Classification))
+	fmt.Fprintf(w, "  Firm:         %s\n", dash(r.RecallingFirm))
+	fmt.Fprintf(w, "  Initiated:    %s\n", dash(normalizeRecallDate(r.RecallInitiationDate)))
+	fmt.Fprintf(w, "  Status:       %s\n", dash(r.Status))
+	fmt.Fprintf(w, "  Product:      %s\n", dash(clip(r.ProductDescription, 100)))
+	fmt.Fprintf(w, "  Lots/Expiry:  %s\n", dash(wrapField(r.CodeInfo, recallLineWidth, recallLabelWidth)))
+	fmt.Fprintf(w, "  Reason:       %s\n", dash(clip(r.ReasonForRecall, 100)))
+	fmt.Fprintln(w)
 }
 
 // emitNoRecords prints the guardrail "no recall records found" result. It never

@@ -1,0 +1,14 @@
+{
+  "schema_version": 2,
+  "id": "emit-code-info-lots-expiry",
+  "applied_at": "2026-09-05",
+  "base_run_id": "20260707-200719-bf61d987",
+  "base_printing_press_version": "4.25.0",
+  "summary": "The human-readable recall block must emit code_info in full as a wrapped Lots/Expiry line; a regen must not drop the field or clip it to a fixed width.",
+  "reason": "openFDA enforcement records carry the recalled lot numbers and expiry dates in code_info, and the generated recallRecord struct omitted the field entirely, so it never reached human-readable output. Measured over 100 live records the value runs median 50 / p90 261 / max 829 characters, so the clip(_, 100) treatment the prose fields use would lose data in roughly 22% of records. Unlike Product and Reason, code_info is identifying data rather than description: a partial lot number is not partially useful, and a fragment still reads as a valid lot. The value is therefore word-wrapped to the block's existing label column and never split mid-token. Rendering was extracted from runRecallSearch into printRecallRecord so the decode-to-output path is testable without a live API call; the fmt.Fprintf calls moved verbatim.",
+  "files": [
+    "internal/cli/recalls.go",
+    "internal/cli/recalls_test.go"
+  ],
+  "validated_outcome": "go test ./internal/cli passes, including a round-trip test that decodes a raw openFDA payload through enforcementEnvelope and asserts every token of code_info survives into the rendered Lots/Expiry line at the block's indent."
+}

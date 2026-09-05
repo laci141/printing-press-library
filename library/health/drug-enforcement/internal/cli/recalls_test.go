@@ -1,6 +1,11 @@
 package cli
 
-import "testing"
+import (
+	"bytes"
+	"encoding/json"
+	"strings"
+	"testing"
+)
 
 func TestPhrase(t *testing.T) {
 	tests := []struct {
@@ -87,5 +92,94 @@ func TestWrapField(t *testing.T) {
 		if got := wrapField(tc.in, tc.width, tc.indent); got != tc.want {
 			t.Errorf("wrapField(%q,%d,%d)=%q want %q", tc.in, tc.width, tc.indent, got, tc.want)
 		}
+	}
+}
+
+// TestRecallRecordCodeInfoRoundTrip covers the whole path the Lots/Expiry line
+// travels: raw openFDA JSON -> enforcementEnvelope/recallRecord decode -> the
+// rendered record block. Constructing recallRecord literally would skip the
+// json tag, which is exactly the wiring most likely to break silently, so the
+// fixture is decoded rather than built.
+func TestRecallRecordCodeInfoRoundTrip(t *testing.T) {
+	// Long enough to force wrapping at the shipped 80/16 geometry.
+	const codeInfo = "Lot: a) 09JA2530, 31JA2507, expires: 04/30/2027; b) Lot: 09DE2412, " +
+		"09JA2528, 29JA2511, expires: 04/30/2027; c) Lot: 17FE2533, expires: 05/31/2027"
+
+	payload := `{
+	  "meta": {"results": {"total": 1}},
+	  "results": [
+	    {
+	      "recall_number": "D-1234-2026",
+	      "classification": "Class II",
+	      "status": "Ongoing",
+	      "recalling_firm": "Example Pharma Inc.",
+	      "reason_for_recall": "Subpotent drug product.",
+	      "product_description": "Ibuprofen tablets, 200 mg, 100-count bottle.",
+	      "code_info": "` + codeInfo + `",
+	      "recall_initiation_date": "20260115"
+	    }
+	  ]
+	}`
+
+	var env enforcementEnvelope
+	if err := json.Unmarshal([]byte(payload), &env); err != nil {
+		t.Fatalf("decode enforcement payload: %v", err)
+	}
+	if len(env.Results) != 1 {
+		t.Fatalf("got %d results, want 1", len(env.Results))
+	}
+	// Guards the struct tag itself: a wrong or missing `json:"code_info"` leaves
+	// this empty and every assertion below would pass against a dash.
+	if env.Results[0].CodeInfo != codeInfo {
+		t.Fatalf("CodeInfo did not decode from code_info: got %q", env.Results[0].CodeInfo)
+	}
+
+	var buf bytes.Buffer
+	printRecallRecord(&buf, env.Results[0])
+	out := buf.String()
+
+	lines := strings.Split(out, "\n")
+	first := -1
+	for i, l := range lines {
+		if strings.HasPrefix(l, "  Lots/Expiry:") {
+			first = i
+			break
+		}
+	}
+	if first == -1 {
+		t.Fatalf("no Lots/Expiry: line in output:\n%s", out)
+	}
+	if strings.Contains(lines[first], "-") && strings.TrimSpace(lines[first]) == "Lots/Expiry:  -" {
+		t.Fatalf("Lots/Expiry rendered the empty placeholder:\n%s", out)
+	}
+
+	// Every token of the source value must survive: a truncated lot number is
+	// not partially useful, so nothing may be dropped or split.
+	for _, tok := range strings.Fields(codeInfo) {
+		if !strings.Contains(out, tok) {
+			t.Errorf("token %q from code_info missing from output:\n%s", tok, out)
+		}
+	}
+
+	// Continuation lines belong under the value column, not at the left margin,
+	// and must not be mistaken for a new label row.
+	cont := 0
+	for _, l := range lines[first+1:] {
+		if strings.HasPrefix(l, "  Reason:") {
+			break
+		}
+		if strings.TrimSpace(l) == "" {
+			continue
+		}
+		cont++
+		if !strings.HasPrefix(l, strings.Repeat(" ", recallLabelWidth)) {
+			t.Errorf("continuation line not indented to column %d: %q", recallLabelWidth, l)
+		}
+		if len(l) > recallLabelWidth && l[recallLabelWidth] == ' ' {
+			t.Errorf("continuation line over-indented past the value column: %q", l)
+		}
+	}
+	if cont == 0 {
+		t.Errorf("fixture did not wrap; test would not prove indentation:\n%s", out)
 	}
 }
