@@ -748,13 +748,13 @@ func handleContext(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToo
 		// Command-mirror capabilities are exposed through MCP by shelling out
 		// to the companion CLI binary.
 		"command_mirror_capabilities": []map[string]string{
-			{"name": "Retraction check", "command": "check", "description": "Tell whether a paper (by DOI or PMID) has been retracted, when, why, and where the notice is.", "rationale": "Crossref embeds Retraction Watch update records; we parse update-to/update-by plus the RETRACTED title signal into one structured verdict no raw API call returns.", "via": "mcp-command-mirror"},
+			{"name": "Retraction check", "command": "check", "description": "Tell whether a paper (by DOI or PMID) has been retracted, when, why, and where the notice is.", "rationale": "Crossref embeds Retraction Watch update records; we parse update-to/updated-by plus the RETRACTED title signal into one structured verdict no raw API call returns.", "via": "mcp-command-mirror"},
 			{"name": "Bibliography scan", "command": "scan", "description": "Batch-check a reading list or .bib file and flag every retracted entry.", "rationale": "Reuses the batch-file line pattern (skip blank/# lines) and fans out DOI/PMID lookups against Crossref with a single command.", "via": "mcp-command-mirror"},
 			{"name": "Superseding research", "command": "superseded", "description": "For a retracted or older paper, find related more-recent research on the same topic, ranked by citation count.", "rationale": "Joins Crossref retraction/date context with OpenAlex citation-ranked related works published after the original — a cross-source view no single API provides.", "via": "mcp-command-mirror"},
 			{"name": "Retraction watch", "command": "watch", "description": "Monitor a topic or reading list for newly-announced retractions since the last run.", "rationale": "Persists a baseline of seen retraction notices and diffs on each run, using the snapshot/first-run-baseline pattern.", "via": "mcp-command-mirror"},
 		},
 		"playbook": []map[string]string{
-			{"topic": "Retraction check", "insight": "Crossref embeds Retraction Watch update records; we parse update-to/update-by plus the RETRACTED title signal into one structured verdict no raw API call returns."},
+			{"topic": "Retraction check", "insight": "Crossref embeds Retraction Watch update records; we parse update-to/updated-by plus the RETRACTED title signal into one structured verdict no raw API call returns."},
 			{"topic": "Bibliography scan", "insight": "Reuses the batch-file line pattern (skip blank/# lines) and fans out DOI/PMID lookups against Crossref with a single command."},
 			{"topic": "Superseding research", "insight": "Joins Crossref retraction/date context with OpenAlex citation-ranked related works published after the original — a cross-source view no single API provides."},
 			{"topic": "Retraction watch", "insight": "Persists a baseline of seen retraction notices and diffs on each run, using the snapshot/first-run-baseline pattern."},

@@ -15,7 +15,7 @@ import (
 	"github.com/mvanhorn/printing-press-library/library/other/retraction-checker/internal/cliutil"
 )
 
-// retractionTypes are the Crossref update-to/update-by types that indicate a
+// retractionTypes are the Crossref update-to/updated-by types that indicate a
 // paper has been retracted or otherwise flagged.
 var retractionTypes = map[string]bool{
 	"retraction":            true,
@@ -40,7 +40,7 @@ type retractionVerdict struct {
 	Error      string   `json:"error,omitempty"`
 }
 
-// crossrefUpdate mirrors an entry of message.update-to / message.update-by.
+// crossrefUpdate mirrors an entry of message.update-to / message.updated-by.
 type crossrefUpdate struct {
 	DOI     string          `json:"DOI"`
 	Type    string          `json:"type"`
@@ -80,7 +80,7 @@ type crossrefWorkMessage struct {
 	Title     []string         `json:"title"`
 	Type      string           `json:"type"`
 	UpdateTo  []crossrefUpdate `json:"update-to"`
-	UpdateBy  []crossrefUpdate `json:"update-by"`
+	UpdateBy  []crossrefUpdate `json:"updated-by"`
 	Published crossrefDateObj  `json:"published"`
 	Issued    crossrefDateObj  `json:"issued"`
 }
@@ -200,7 +200,7 @@ func checkDOI(ctx context.Context, c crossrefGetter, mailto, doi string) (retrac
 		v.Published = m.Issued.iso()
 	}
 
-	// Signal 1: update-by records pointing at this work (retraction notices).
+	// Signal 1: updated-by records pointing at this work (retraction notices).
 	// Signal 2: update-to records of type retraction on this record itself.
 	updates := append([]crossrefUpdate{}, m.UpdateBy...)
 	updates = append(updates, m.UpdateTo...)
