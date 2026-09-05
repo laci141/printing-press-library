@@ -1,0 +1,17 @@
+{
+  "schema_version": 2,
+  "id": "crossref-updated-by-field-name",
+  "applied_at": "2026-09-05",
+  "base_run_id": "20260702-090842-5bac53b7",
+  "base_printing_press_version": "4.25.0",
+  "summary": "Correct the Crossref work-response struct tag from update-by to updated-by so retraction notices and their metadata reach the verdict, and align the two MCP tool descriptions that named the old field.",
+  "description": "Correct the Crossref work-response struct tag from update-by to updated-by so retraction notices and their metadata reach the verdict, and align the two MCP tool descriptions that named the old field.",
+  "reason": "Crossref names the field updated-by. encoding/json leaves a slice empty on a struct-tag mismatch without raising an error, so signals 1 and 2 in checkDOI never fired and only the RETRACTED title-prefix signal remained. Any retracted paper whose title carries no RETRACTED or WITHDRAWN prefix was reported as not retracted, and date, source, notice_doi and notice_url were always empty. Regeneration must not restore the old name.",
+  "files": [
+    "internal/cli/retraction.go",
+    "internal/cli/retraction_test.go",
+    "internal/mcp/tools.go"
+  ],
+  "safety": "Read-only Crossref lookups. No new network hosts, no credentials, no mutation commands.",
+  "validated_outcome": "check 10.1538/expanim.54.1, a retraction with no title prefix, now reports retracted with date 2022-08-01, source retraction-watch and notice 10.1538/expanim.54.1.r1; before the fix it reported the paper as clean. check 10.1016/S0140-6736(97)11096-0 reports both signals with date 2010-02-06, skips the 2004 correction that precedes the retraction in the updated-by array, and leaves published at 1998-02. retraction_test.go pins all of this, including the empty-date case where only the title prefix fires."
+}
