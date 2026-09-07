@@ -26,7 +26,7 @@ type digestTrial struct {
 	NCTID      string `json:"id"`
 	Title      string `json:"title,omitempty"`
 	Status     string `json:"status,omitempty"`
-	Phase      string `json:"phase,omitempty"`
+	Phase      string `json:"phase"`
 	Sponsor    string `json:"sponsor,omitempty"`
 	LastUpdate string `json:"last_update,omitempty"`
 }

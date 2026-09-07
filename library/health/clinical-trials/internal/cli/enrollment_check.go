@@ -20,7 +20,7 @@ import (
 // enrollmentVerdict bundles the plausibility verdict with its reasoning.
 type enrollmentVerdict struct {
 	Target     int    `json:"target"`
-	Phase      string `json:"phase,omitempty"`
+	Phase      string `json:"phase"`
 	Verdict    string `json:"verdict"`  // "not_posted" | "modest" | "typical" | "ambitious"
 	Label      string `json:"label"`    // human-readable one-liner
 	RiskPoints int    `json:"risk_signal_points"`

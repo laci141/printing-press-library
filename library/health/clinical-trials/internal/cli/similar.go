@@ -18,7 +18,7 @@ type similarMatch struct {
 	NCTID      string   `json:"id"`
 	Title      string   `json:"title,omitempty"`
 	Status     string   `json:"status,omitempty"`
-	Phase      string   `json:"phase,omitempty"`
+	Phase      string   `json:"phase"`
 	Conditions []string `json:"conditions,omitempty"`
 	MatchScore int      `json:"match_score"`
 }
