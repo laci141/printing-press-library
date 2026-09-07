@@ -29,8 +29,8 @@ type Trial struct {
 	NCTID         string   `json:"id"`
 	Title         string   `json:"title"`
 	Status        string   `json:"status"`
-	Phase         string   `json:"phase,omitempty"`
-	Phases        []string `json:"phases,omitempty"`
+	Phase         string   `json:"phase"`
+	Phases        []string `json:"phases"`
 	Conditions    []string `json:"conditions,omitempty"`
 	Interventions []string `json:"interventions,omitempty"`
 	Sponsor       string   `json:"sponsor,omitempty"`
@@ -139,11 +139,13 @@ func normalizeStudy(raw json.RawMessage) (Trial, bool) {
 	if id == "" {
 		return Trial{}, false
 	}
+	// Phases is built with append so it is never nil: the "phases" tag has no
+	// omitempty and must always marshal as [] rather than null.
 	t := Trial{
 		NCTID:        id,
 		Title:        cliutil.CleanText(s.ProtocolSection.IdentificationModule.BriefTitle),
 		Status:       s.ProtocolSection.StatusModule.OverallStatus,
-		Phases:       s.ProtocolSection.DesignModule.Phases,
+		Phases:       append([]string{}, s.ProtocolSection.DesignModule.Phases...),
 		Phase:        strings.Join(s.ProtocolSection.DesignModule.Phases, "/"),
 		Conditions:   s.ProtocolSection.ConditionsModule.Conditions,
 		Sponsor:      cliutil.CleanText(s.ProtocolSection.SponsorCollaboratorsModule.LeadSponsor.Name),
