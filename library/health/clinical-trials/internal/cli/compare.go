@@ -143,6 +143,16 @@ func buildDrugProfile(ctx context.Context, ctgov ctgovClient, src *source.Client
 	phase := newCounter()
 	sponsor := newCounter()
 	for _, t := range trials {
+		// A trial with no phases at all is an observational study, and the
+		// range loop below would skip it entirely — so the distribution
+		// silently summed to less than SampleSize. Count it as N/A, matching
+		// phaseDisplay in recruiting.go, which already answers this same
+		// question the same way for the table's Phase column. The
+		// observational/interventional distinction is not lost: it lives in
+		// the study_type field on every row.
+		if len(t.Phases) == 0 {
+			phase.add(phaseLabel(""))
+		}
 		for _, ph := range t.Phases {
 			phase.add(phaseLabel(ph))
 		}

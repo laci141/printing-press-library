@@ -114,6 +114,12 @@ func newNovelEmergingCmd(flags *rootFlags) *cobra.Command {
 						priorCond.add(key)
 					}
 				}
+				// Phaseless trials are observational; without this the range
+				// loop skips them and the distribution sums to less than
+				// SampleSize. See compare.go for the full rationale.
+				if len(t.Phases) == 0 {
+					phase.add(phaseLabel(""))
+				}
 				for _, ph := range t.Phases {
 					phase.add(phaseLabel(ph))
 				}

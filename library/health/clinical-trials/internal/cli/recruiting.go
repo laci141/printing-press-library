@@ -84,6 +84,15 @@ func buildTrialListView(query, filter string, total int, trials []Trial) trialLi
 	phase := newCounter()
 	geo := newCounter()
 	for _, t := range trials {
+		// A trial with no phases is observational, and the range loop below
+		// skips it — so the distribution used to sum to less than Returned.
+		// N/A is the same answer phaseDisplay gives such a trial for the
+		// Phase column further down this file, so the summary and the rows
+		// agree. The observational/interventional distinction is carried by
+		// study_type, not by this tally.
+		if len(t.Phases) == 0 {
+			phase.add(phaseLabel(""))
+		}
 		for _, ph := range t.Phases {
 			phase.add(phaseLabel(ph))
 		}
