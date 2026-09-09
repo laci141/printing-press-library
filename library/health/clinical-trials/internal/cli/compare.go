@@ -147,9 +147,11 @@ func buildDrugProfile(ctx context.Context, ctgov ctgovClient, src *source.Client
 		// range loop below would skip it entirely — so the distribution
 		// silently summed to less than SampleSize. Count it as N/A, matching
 		// phaseDisplay in recruiting.go, which already answers this same
-		// question the same way for the table's Phase column. The
-		// observational/interventional distinction is not lost: it lives in
-		// the study_type field on every row.
+		// question the same way for the table's Phase column. This bucket is
+		// therefore lossy by design: it holds both interventional trials the
+		// registry marks "NA" and observational studies with no phase at all.
+		// A caller needing the two apart reads Trial.Phases, which is empty
+		// for the second and ["NA"] for the first.
 		if len(t.Phases) == 0 {
 			phase.add(phaseLabel(""))
 		}

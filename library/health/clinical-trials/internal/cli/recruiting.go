@@ -88,8 +88,8 @@ func buildTrialListView(query, filter string, total int, trials []Trial) trialLi
 		// skips it — so the distribution used to sum to less than Returned.
 		// N/A is the same answer phaseDisplay gives such a trial for the
 		// Phase column further down this file, so the summary and the rows
-		// agree. The observational/interventional distinction is carried by
-		// study_type, not by this tally.
+		// agree. The bucket merges two registry states on purpose; Phases is
+		// where they stay distinguishable, empty versus ["NA"].
 		if len(t.Phases) == 0 {
 			phase.add(phaseLabel(""))
 		}
