@@ -127,6 +127,30 @@ var heuristicTiers = []struct {
 	{regexp.MustCompile(`(?i)\bnarrative review\b|\bliterature review\b|\bscoping review\b`), DesignNarrativeReview},
 }
 
+// maxAbstractForHeuristics caps how much of the abstract the heuristic tier
+// reads. OpenAlex's abstract_inverted_index does not reliably stop where the
+// abstract stops: on some works it runs on into the paper's own reference list,
+// and the heuristics then read a CITED paper's design as if it were this
+// work's. Measured 2026-09-11 on 10.7326/0003-4819-55-1-33, the Framingham
+// six-year follow-up cohort, whose 23,238-character "abstract" carries the
+// title "a systematic review and meta-analysis of randomized controlled
+// trials" at character 8,727 and so classified meta-analysis, tier 9 instead
+// of 5, under an omega-3 claim it predates by decades.
+//
+// 5000 rather than a tighter bound, and the sweep is why. Across the 290
+// distinct works in testdata/corpora the median abstract is 1,547 characters
+// and the 90th percentile 2,547; only seven exceed 5,000. Cutting at 5000
+// changes exactly two classifications, both of them the measured-bad ones, and
+// both to cohort-study, which PubMed's MeSH terms confirm for each. Every
+// tighter cut tried (1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500) fixes the
+// same two works but takes real ones with it: 1000 moves thirteen works and
+// drops ten to unclassified. Nothing is promoted at any cut.
+//
+// The cap applies to the HEURISTIC tier only. An authoritative publication
+// type never reads the abstract, so a work whose source names its design is
+// unaffected by this at any length.
+const maxAbstractForHeuristics = 5000
+
 // ClassifyDesign determines a study design using the cascade documented in the
 // research brief: authoritative publication types first (PubMed MeSH / Semantic
 // Scholar), then title+abstract heuristics, then the coarse OpenAlex type, and
@@ -153,7 +177,15 @@ func ClassifyDesign(title, abstract, openalexType string, pubTypes []string) Cla
 		return Classification{Design: best, Tier: TierWeight(best), Method: MethodPubMedPubType}
 	}
 
-	// 2. Title + abstract heuristics.
+	// 2. Title + abstract heuristics. The title is never truncated; only the
+	// abstract is, and only here — see maxAbstractForHeuristics. Cutting on a
+	// byte boundary is deliberate: a split multi-byte rune cannot create a word
+	// that matches, it can only destroy one at the very end of the window, and
+	// the alternative (decoding 23,000 characters to find a rune boundary) buys
+	// nothing the regexes can observe.
+	if len(abstract) > maxAbstractForHeuristics {
+		abstract = abstract[:maxAbstractForHeuristics]
+	}
 	hay := strings.ToLower(title + ". " + abstract)
 	for _, t := range heuristicTiers {
 		if t.re.MatchString(hay) {
