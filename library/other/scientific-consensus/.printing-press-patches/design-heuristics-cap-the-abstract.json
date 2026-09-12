@@ -1,0 +1,14 @@
+{
+  "schema_version": 2,
+  "id": "design-heuristics-cap-the-abstract",
+  "applied_at": "2026-09-12",
+  "base_run_id": "20260620-165352-e55cec69",
+  "base_printing_press_version": "4.24.0",
+  "summary": "The title/abstract heuristic tier now reads at most the first 5000 bytes of the abstract. The title is never truncated and the cap sits after the authoritative-pubtype branch, so a work whose source names its design returns before the abstract is consulted at any length.",
+  "reason": "OpenAlex's abstract_inverted_index does not reliably stop where the abstract stops: on some works it runs on into the paper's own reference list, and the heuristics then read a cited paper's design as if it were this work's. Measured on 10.7326/0003-4819-55-1-33, the Framingham six-year follow-up cohort, whose 23,238-character abstract carries \"a systematic review and meta-analysis of randomized controlled trials\" at character 8,727 and so classified meta-analysis at tier 9 instead of cohort at tier 5, under an omega-3 claim it predates by decades. This is not the generic-review pubtype case: PubMed returns [\"Journal Article\"] for PMID 13751193, OpenAlex supplies the correct PMID and type \"article\", and the title alone classifies as unclassified — only the reference list says otherwise. A bibliography-marker detector was tried first and rejected: it fired on \"We searched PubMed, Ovid MEDLINE, and Google Scholar\", ordinary methods prose, and scored zero on the real window, which is run-on article titles with no DOIs or page ranges to key on. Position is what separates the cases, so the fix is a length cap rather than a detector or a publication-year rule.",
+  "files": [
+    "internal/scengine/evidence.go",
+    "internal/scengine/evidence_abstract_length_test.go"
+  ],
+  "validated_outcome": "5000 was chosen by sweeping eleven cutoffs over the 290 distinct works in testdata/corpora, with live abstracts fetched because the stored ones are truncated and hide the pattern entirely: median abstract 1,547 bytes, 90th percentile 2,547, only seven above 5,000. At 5000 exactly two classifications change, both of them the measured-bad works, both to cohort-study, which PubMed's MeSH terms confirm for each; nothing is promoted at any cutoff and every tighter cut takes real works with it, 1000 moving thirteen and dropping ten to unclassified. Four tests pin it, each verified by mutation: disabling the cap fails the cited-title case, and a cap of 50 fails the two that prove the cap is not too narrow. Every fixture asserts its own shape first, so a fixture that could not distinguish the two behaviours fails loudly instead of passing blind. The full scengine suite passes unchanged. Not addressed here: qualityScore in internal/cli/quality.go receives the same untruncated abstract and awards sample-size points on patterns like \"n = 1234\" and \"population-based\", which a reference list can supply."
+}
