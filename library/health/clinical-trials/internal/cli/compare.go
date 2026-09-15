@@ -156,10 +156,12 @@ func buildDrugProfile(ctx context.Context, ctgov ctgovClient, src *source.Client
 // where the phaseless-trial guard lives.
 //
 // The phase cap of 8 is deliberately fixed while sponsors honour the
-// --top-sponsors flag. There are nine phase labels in total, so eight shows
-// every phase a sample can realistically contain and a flag would only ever
-// hide data the reader needs to sum the distribution. Sponsors have no such
-// bound.
+// --top-sponsors flag. phaseLabel maps the registry's values onto six
+// buckets - Early Phase 1, Phase 1 through Phase 4, and N/A - and passes any
+// value it does not recognise through unchanged, so eight leaves room for two
+// unmapped values before the cap can hide one. Sponsors are unbounded: a
+// sample can hold hundreds, and which ones a reader wants is a judgement the
+// flag exists to make.
 func summarizeTrials(p *drugProfile, trials []Trial, topSponsors int) {
 	p.SampleSize = len(trials)
 
