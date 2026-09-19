@@ -143,8 +143,14 @@ func TestFetchPropagatesAnImmediateError(t *testing.T) {
 // normalization, so it counts trials that made it into the output rather than
 // studies the API returned.
 func TestFetchStopsAtMaxStudies(t *testing.T) {
+	// The first page mixes one study normalizeStudy rejects into four it
+	// accepts. The cap counts trials that reached the output, not studies the
+	// API returned, so a rejected study must not consume a slot: asking for 3
+	// from this page has to yield 3 real trials.
+	const unnormalizable = `{"protocolSection":{}}`
+	mixed := append([]json.RawMessage{json.RawMessage(unnormalizable)}, ctgovTestPage("A", 4)...)
 	c := &pagingCtgov{
-		pages:  [][]json.RawMessage{ctgovTestPage("A", 5), ctgovTestPage("B", 5)},
+		pages:  [][]json.RawMessage{mixed, ctgovTestPage("B", 5)},
 		failOn: -1,
 	}
 
@@ -185,9 +191,17 @@ func TestFetchStopsAtMaxPages(t *testing.T) {
 	if len(got) != 4 {
 		t.Errorf("got %d trials, want the 4 on the first two pages", len(got))
 	}
-	// The cursor must actually be sent, or every page would repeat the first.
-	if len(c.tokens) == 2 && c.tokens[1] == "" {
-		t.Error("the second call carried no pageToken: the cursor is not being passed")
+	// The cursor must be sent AND be the one the previous page handed back.
+	// Checking only that it is non-empty would keep the test green if a change
+	// forwarded a stale or wrong token, which the real API would reject.
+	if len(c.tokens) != 2 {
+		t.Fatalf("recorded %d pageToken values, want 2", len(c.tokens))
+	}
+	if c.tokens[0] != "" {
+		t.Errorf("first call carried pageToken %q, want none", c.tokens[0])
+	}
+	if c.tokens[1] != "token-1" {
+		t.Errorf("second call carried pageToken %q, want token-1 from the first page", c.tokens[1])
 	}
 }
 
