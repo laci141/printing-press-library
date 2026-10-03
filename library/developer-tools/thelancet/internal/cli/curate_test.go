@@ -69,7 +69,7 @@ func TestCurateAutoEmptyLocalFallsBackWithNotice(t *testing.T) {
 	if liveCalls != 1 || !strings.Contains(out, "Live paper") {
 		t.Fatalf("live calls = %d, stdout = %q", liveCalls, out)
 	}
-	if strings.Count(errOut, "\n") != 1 || !strings.Contains(errOut, "no local matches") || !strings.Contains(errOut, "title, abstract and full text") {
+	if strings.Count(errOut, "\n") != 1 || !strings.Contains(errOut, "no local matches") || !strings.Contains(errOut, "title, abstract and full text") || !strings.Contains(errOut, "falling back to the live OpenAlex search") {
 		t.Fatalf("stderr = %q, want exactly one fallback notice", errOut)
 	}
 }
