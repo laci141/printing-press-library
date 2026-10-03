@@ -16,11 +16,18 @@ import (
 // how often each was called, plus stdout and stderr.
 func runCurateStubbed(t *testing.T, dataSource string, local, live []lancet.WorkRow) (localCalls, liveCalls int, stdout, stderr string) {
 	t.Helper()
+	return runCurateStubbedDB(t, dataSource, true, local, live)
+}
+
+// runCurateStubbedDB is runCurateStubbed with control over whether the stubbed
+// local database file exists (dbFound=false simulates a missing database).
+func runCurateStubbedDB(t *testing.T, dataSource string, dbFound bool, local, live []lancet.WorkRow) (localCalls, liveCalls int, stdout, stderr string) {
+	t.Helper()
 	origLocal, origLive := curateLocalFn, curateLiveFn
 	t.Cleanup(func() { curateLocalFn, curateLiveFn = origLocal, origLive })
 	curateLocalFn = func(ctx context.Context, path, topic, issn, sortBy string, openAccess bool, limit int) ([]lancet.WorkRow, bool, error) {
 		localCalls++
-		return local, true, nil
+		return local, dbFound, nil
 	}
 	curateLiveFn = func(ctx context.Context, flags *rootFlags, topic, issn, sortBy string, openAccess bool, limit int) ([]lancet.WorkRow, error) {
 		liveCalls++
@@ -81,5 +88,28 @@ func TestCurateAutoNonEmptyLocalStaysLocal(t *testing.T) {
 	}
 	if errOut != "" {
 		t.Fatalf("stderr = %q, want no notice", errOut)
+	}
+}
+
+func TestCurateLocalMissingDBNeverCallsLive(t *testing.T) {
+	_, liveCalls, out, errOut := runCurateStubbedDB(t, "local", false, nil, curateLiveRows)
+	if liveCalls != 0 {
+		t.Fatalf("local mode called live %d times, want 0", liveCalls)
+	}
+	if strings.TrimSpace(out) != "[]" {
+		t.Fatalf("stdout = %q, want []", out)
+	}
+	if !strings.Contains(errOut, "local database not found") || !strings.Contains(errOut, "never calls the live API") {
+		t.Fatalf("stderr = %q, want missing-database hint", errOut)
+	}
+}
+
+func TestCurateAutoMissingDBFallsBackWithNotice(t *testing.T) {
+	_, liveCalls, out, errOut := runCurateStubbedDB(t, "auto", false, nil, curateLiveRows)
+	if liveCalls != 1 || !strings.Contains(out, "Live paper") {
+		t.Fatalf("live calls = %d, stdout = %q", liveCalls, out)
+	}
+	if strings.Count(errOut, "\n") != 1 || !strings.Contains(errOut, "local database not found") || !strings.Contains(errOut, "falling back to the live OpenAlex search") {
+		t.Fatalf("stderr = %q, want exactly one fallback notice", errOut)
 	}
 }
