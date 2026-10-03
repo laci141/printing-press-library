@@ -16,15 +16,54 @@ import (
 // a stored copy of the old values for deletes, with no storage benefit here.
 const ftsTable = "lancet_works_fts"
 
-func ensureWorksFTS(ctx context.Context, db *sql.DB) error {
+// ftsRebuildHook runs inside the setup transaction right after the rebuild.
+// Tests set it to inject a failure; production leaves it nil.
+var ftsRebuildHook func() error
+
+func ftsTableExists(ctx context.Context, q interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}) (bool, error) {
 	var n int
-	if err := db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?`, ftsTable).Scan(&n); err != nil {
+	err := q.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?`, ftsTable).Scan(&n)
+	return n > 0, err
+}
+
+// ensureWorksFTS creates the index, its triggers and the one-time backfill in a
+// single write-locked transaction: either all of it commits or none of it does,
+// so an interrupted backfill can never leave an empty index behind.
+func ensureWorksFTS(ctx context.Context, db *sql.DB) error {
+	if ok, err := ftsTableExists(ctx, db); err != nil {
+		return fmt.Errorf("lancet fts: %w", err)
+	} else if ok {
+		return nil
+	}
+	conn, err := db.Conn(ctx)
+	if err != nil {
 		return fmt.Errorf("lancet fts: %w", err)
 	}
-	created := n == 0
+	defer conn.Close()
+	// Per-connection wait so a concurrent opener blocks instead of failing.
+	if _, err := conn.ExecContext(ctx, `PRAGMA busy_timeout = 30000`); err != nil {
+		return fmt.Errorf("lancet fts: %w", err)
+	}
+	if _, err := conn.ExecContext(ctx, `BEGIN IMMEDIATE`); err != nil {
+		return fmt.Errorf("lancet fts: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_, _ = conn.ExecContext(context.Background(), `ROLLBACK`)
+		}
+	}()
+	// Re-check under the write lock: another process may have finished first.
+	if ok, err := ftsTableExists(ctx, conn); err != nil {
+		return fmt.Errorf("lancet fts: %w", err)
+	} else if ok {
+		return nil
+	}
 	stmts := []string{
-		`CREATE VIRTUAL TABLE IF NOT EXISTS lancet_works_fts USING fts5(
+		`CREATE VIRTUAL TABLE lancet_works_fts USING fts5(
 			title, topic, content='lancet_works', content_rowid='rowid', tokenize='porter unicode61')`,
 		`CREATE TRIGGER IF NOT EXISTS lancet_works_fts_ai AFTER INSERT ON lancet_works BEGIN
 			INSERT INTO lancet_works_fts(rowid, title, topic) VALUES (new.rowid, new.title, new.topic);
@@ -38,30 +77,33 @@ func ensureWorksFTS(ctx context.Context, db *sql.DB) error {
 		END`,
 	}
 	for _, s := range stmts {
-		if _, err := db.ExecContext(ctx, s); err != nil {
+		if _, err := conn.ExecContext(ctx, s); err != nil {
 			return fmt.Errorf("lancet fts: %w (FTS5 is required for curate word matching)", err)
 		}
 	}
-	if created {
-		// One-time backfill of pre-existing rows; later opens skip it.
-		if _, err := db.ExecContext(ctx, `INSERT INTO lancet_works_fts(lancet_works_fts) VALUES ('rebuild')`); err != nil {
+	if _, err := conn.ExecContext(ctx, `INSERT INTO lancet_works_fts(lancet_works_fts) VALUES ('rebuild')`); err != nil {
+		return fmt.Errorf("lancet fts backfill: %w", err)
+	}
+	if ftsRebuildHook != nil {
+		if err := ftsRebuildHook(); err != nil {
 			return fmt.Errorf("lancet fts backfill: %w", err)
 		}
 	}
+	if _, err := conn.ExecContext(ctx, `COMMIT`); err != nil {
+		return fmt.Errorf("lancet fts commit: %w", err)
+	}
+	committed = true
 	return nil
 }
 
-// ftsMatchQuery turns free text into an FTS5 MATCH expression: every
-// whitespace-separated token becomes a double-quoted phrase (embedded quotes
-// doubled), joined by implicit AND. Tokens without a letter or digit carry no
-// searchable word and are dropped. Returns "" when nothing is left.
+// ftsMatchQuery turns free text into an FTS5 MATCH expression: the text is split
+// on every rune that is not a letter or digit (mirroring the unicode61
+// tokenizer), each part becomes a double-quoted phrase (embedded quotes
+// doubled), joined by implicit AND. Returns "" when nothing is left.
 func ftsMatchQuery(topic string) string {
-	var parts []string
-	for _, tok := range strings.Fields(topic) {
-		if !strings.ContainsFunc(tok, func(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) }) {
-			continue
-		}
-		parts = append(parts, `"`+strings.ReplaceAll(tok, `"`, `""`)+`"`)
+	parts := strings.FieldsFunc(topic, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
+	for i, p := range parts {
+		parts[i] = `"` + strings.ReplaceAll(p, `"`, `""`) + `"`
 	}
 	return strings.Join(parts, " ")
 }

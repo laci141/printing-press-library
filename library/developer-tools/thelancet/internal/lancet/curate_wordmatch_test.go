@@ -3,6 +3,7 @@ package lancet
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"path/filepath"
 	"testing"
 )
@@ -175,5 +176,53 @@ func TestCurateIndexFollowsInsertUpdateDelete(t *testing.T) {
 	}
 	if got := titles(t, db, "stroke"); len(got) != 0 {
 		t.Errorf("deleted row still matches: %v", got)
+	}
+}
+
+func TestCuratePunctuationSplitsWords(t *testing.T) {
+	db := seedWords(t)
+	for _, in := range []string{"ai,diagnosis", "ai/diagnosis"} {
+		if got := titles(t, db, in); len(got) != 1 || !got["AI in diagnosis"] {
+			t.Errorf("%q should behave like 'ai diagnosis', got %v", in, got)
+		}
+	}
+	if got := titles(t, db, "ai,cardiology"); len(got) != 0 {
+		t.Errorf("only one word present must not match, got %v", got)
+	}
+	if got := titles(t, wordDB(t, w("c", "COVID-19 vaccines", "")), "covid-19"); len(got) != 1 {
+		t.Errorf("covid-19 should match COVID-19, got %v", got)
+	}
+}
+
+func TestEnsureWorksFTSInterruptedBackfillRollsBack(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "interrupted.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	if _, err := db.Exec(`CREATE TABLE lancet_works (work_id TEXT PRIMARY KEY, doi TEXT, title TEXT, journal_issn TEXT,
+		journal_name TEXT, pub_year INTEGER, pub_date TEXT, cited_count INTEGER, is_oa INTEGER, topic TEXT, synced_at TEXT)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO lancet_works(work_id,title,topic,cited_count,pub_year,pub_date,is_oa) VALUES ('1','AI in diagnosis','Medicine',1,2024,'2024-01-01',0)`); err != nil {
+		t.Fatal(err)
+	}
+	ftsRebuildHook = func() error { return errors.New("injected rebuild failure") }
+	err = EnsureSchema(ctx, db)
+	ftsRebuildHook = nil
+	if err == nil {
+		t.Fatal("EnsureSchema must fail when the rebuild fails")
+	}
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE name LIKE 'lancet_works_fts%'`).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("FTS objects left behind after failed open: %d (err %v)", n, err)
+	}
+	if err := EnsureSchema(ctx, db); err != nil {
+		t.Fatalf("normal open: %v", err)
+	}
+	if got := titles(t, db, "ai"); len(got) != 1 || !got["AI in diagnosis"] {
+		t.Errorf("pre-existing work not found after recovery: %v", got)
 	}
 }
