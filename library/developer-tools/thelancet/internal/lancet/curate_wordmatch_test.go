@@ -226,3 +226,48 @@ func TestEnsureWorksFTSInterruptedBackfillRollsBack(t *testing.T) {
 		t.Errorf("pre-existing work not found after recovery: %v", got)
 	}
 }
+
+func TestCurateCombiningMarksStayInWord(t *testing.T) {
+	pre, dec := "Naïve trial", "Naïve trial"
+	db := wordDB(t, w("p", pre, ""), w("d", dec, ""))
+	matrix := map[string]map[string]bool{}
+	for name, q := range map[string]string{"precomposed": "naïve", "decomposed": "naïve"} {
+		matrix[name] = titles(t, db, q)
+		t.Logf("query %-11s -> precomposed title: %v, decomposed title: %v", name, matrix[name][pre], matrix[name][dec])
+	}
+	if !matrix["decomposed"][dec] {
+		t.Errorf("decomposed query must match the decomposed title, got %v", matrix["decomposed"])
+	}
+	for title := range matrix["precomposed"] {
+		if !matrix["decomposed"][title] {
+			t.Errorf("decomposed query must match everything the precomposed query matches; missing %q", title)
+		}
+	}
+}
+
+func TestEnsureWorksFTSRestoresBusyTimeout(t *testing.T) {
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "busy.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	db.SetMaxOpenConns(1)
+	ctx := context.Background()
+	if _, err := db.Exec(`CREATE TABLE lancet_works (work_id TEXT PRIMARY KEY, doi TEXT, title TEXT, journal_issn TEXT,
+		journal_name TEXT, pub_year INTEGER, pub_date TEXT, cited_count INTEGER, is_oa INTEGER, topic TEXT, synced_at TEXT)`); err != nil {
+		t.Fatal(err)
+	}
+	var before, after int
+	if err := db.QueryRow(`PRAGMA busy_timeout`).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureWorksFTS(ctx, db); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`PRAGMA busy_timeout`).Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	if after != before {
+		t.Errorf("busy_timeout after setup = %d, want original %d", after, before)
+	}
+}

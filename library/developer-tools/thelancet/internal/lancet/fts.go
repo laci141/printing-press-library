@@ -43,7 +43,15 @@ func ensureWorksFTS(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("lancet fts: %w", err)
 	}
 	defer conn.Close()
-	// Per-connection wait so a concurrent opener blocks instead of failing.
+	// Per-connection wait so a concurrent opener blocks instead of failing; the
+	// original value is restored before the connection returns to the pool.
+	var prevBusy int
+	if err := conn.QueryRowContext(ctx, `PRAGMA busy_timeout`).Scan(&prevBusy); err != nil {
+		return fmt.Errorf("lancet fts: %w", err)
+	}
+	defer func() {
+		_, _ = conn.ExecContext(context.Background(), fmt.Sprintf(`PRAGMA busy_timeout = %d`, prevBusy))
+	}()
 	if _, err := conn.ExecContext(ctx, `PRAGMA busy_timeout = 30000`); err != nil {
 		return fmt.Errorf("lancet fts: %w", err)
 	}
@@ -97,11 +105,11 @@ func ensureWorksFTS(ctx context.Context, db *sql.DB) error {
 }
 
 // ftsMatchQuery turns free text into an FTS5 MATCH expression: the text is split
-// on every rune that is not a letter or digit (mirroring the unicode61
-// tokenizer), each part becomes a double-quoted phrase (embedded quotes
+// on every rune that is not a letter, digit or combining mark (mirroring the
+// unicode61 tokenizer), each part becomes a double-quoted phrase (embedded quotes
 // doubled), joined by implicit AND. Returns "" when nothing is left.
 func ftsMatchQuery(topic string) string {
-	parts := strings.FieldsFunc(topic, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
+	parts := strings.FieldsFunc(topic, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) && !unicode.IsMark(r) })
 	for i, p := range parts {
 		parts[i] = `"` + strings.ReplaceAll(p, `"`, `""`) + `"`
 	}
