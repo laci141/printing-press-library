@@ -365,9 +365,16 @@ func CitationsPerYear(now time.Time, pubDate string, year, cited int) (cpy float
 }
 
 // Same age rule as CitationsPerYear, evaluated in SQL so it can run before LIMIT.
+// validDateSQL accepts pub_date only when it is exactly a real YYYY-MM-DD: the
+// GLOB rejects other shapes ("2024-2-5", timestamps) and the date() round trip
+// rejects day overflow that SQLite would normalise ("2024-02-31"), matching
+// time.Parse in the Go helper. Anything else falls back to July 1 of pub_year.
 const (
-	effDateSQL = `COALESCE(date(pub_date), CASE WHEN pub_year > 0 THEN printf('%04d-07-01', pub_year) END)`
-	cpySQL     = `CASE WHEN ` + effDateSQL + ` IS NULL THEN 0 ELSE ROUND(cited_count / MAX(0.25, (julianday('now') - julianday(` + effDateSQL + `)) / 365.25), 1) END`
+	validDateSQL = `CASE WHEN length(pub_date) = 10 AND pub_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND date(pub_date) = pub_date THEN pub_date END`
+	effDateSQL   = `COALESCE(` + validDateSQL + `, CASE WHEN pub_year > 0 THEN printf('%04d-07-01', pub_year) END)`
+	// rawCpySQL is the unrounded rate, used for ordering; cpySQL rounds it for output.
+	rawCpySQL = `cited_count / MAX(0.25, (julianday('now') - julianday(` + effDateSQL + `)) / 365.25)`
+	cpySQL    = `CASE WHEN ` + effDateSQL + ` IS NULL THEN 0 ELSE ROUND(` + rawCpySQL + `, 1) END`
 )
 
 // Curate selects works matching a topic/keyword (whole words in title or topic),
@@ -378,7 +385,7 @@ func Curate(ctx context.Context, db *sql.DB, topic, issn, sort string, openAcces
 		return nil, err
 	}
 	q := `SELECT title, doi, journal_name, pub_year, cited_count, COALESCE(topic,''),
-	             COALESCE(date(pub_date),''), ` + cpySQL + ` AS cpy
+	             COALESCE(` + validDateSQL + `,''), ` + cpySQL + ` AS cpy
 	      FROM lancet_works WHERE 1=1`
 	var args []any
 	// Whole-word match (porter unicode61, AND across words). A topic with no
@@ -399,7 +406,7 @@ func Curate(ctx context.Context, db *sql.DB, topic, issn, sort string, openAcces
 	case "date":
 		q += ` ORDER BY pub_date DESC`
 	case "per-year":
-		q += ` AND ` + effDateSQL + ` IS NOT NULL ORDER BY cpy DESC, cited_count DESC, title`
+		q += ` AND ` + effDateSQL + ` IS NOT NULL ORDER BY ` + rawCpySQL + ` DESC, cited_count DESC, title`
 	default:
 		q += ` ORDER BY cited_count DESC`
 	}

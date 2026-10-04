@@ -168,3 +168,100 @@ func TestCitationsPerYearHelperRule(t *testing.T) {
 		t.Error("no usable year must report ok=false")
 	}
 }
+
+// The SQL effective date and the Go helper must agree on which pub_date values
+// are usable; anything that is not a real YYYY-MM-DD uses July 1 of pub_year.
+func TestPerYearSQLMatchesGoHelperForPubDates(t *testing.T) {
+	cases := []struct {
+		pubDate string
+		valid   bool
+	}{
+		{"2024-02-29", true},
+		{"2023-02-29", false},
+		{"2024-02-31", false},
+		{"2024-02-15T10:30:00", false},
+		{"2024-2-5", false},
+		{"", false},
+		{"garbage", false},
+	}
+	sameDayOrSkip(t, func(now time.Time) {
+		const year, cited = 2024, 100
+		july1, ok := CitationsPerYear(now, "", year, cited)
+		if !ok {
+			t.Fatal("July 1 fallback must be usable")
+		}
+		for _, c := range cases {
+			want, ok := CitationsPerYear(now, c.pubDate, year, cited)
+			if !ok {
+				t.Fatalf("%q: Go helper reported no usable date", c.pubDate)
+			}
+			if !c.valid && want != july1 {
+				t.Errorf("%q: Go helper = %v, want the July 1 value %v", c.pubDate, want, july1)
+			}
+			rows := curateJSON(t, []decodedWork{vw("1", "Dated", c.pubDate, year, cited)}, "rate", "per-year", 10)
+			if len(rows) != 1 {
+				t.Fatalf("%q: rows = %d, want 1", c.pubDate, len(rows))
+			}
+			got := num(rows[0])
+			if math.Abs(got-want) > 0.1+1e-9 {
+				t.Errorf("%q: SQL citations_per_year = %v, Go helper = %v", c.pubDate, got, want)
+			}
+			if !c.valid && math.Abs(got-july1) > 0.1+1e-9 {
+				t.Errorf("%q: SQL citations_per_year = %v, want the July 1 value %v", c.pubDate, got, july1)
+			}
+			wantDate := ""
+			if c.valid {
+				wantDate = c.pubDate
+			}
+			if rows[0]["pub_date"] != wantDate {
+				t.Errorf("%q: pub_date = %v, want %q", c.pubDate, rows[0]["pub_date"], wantDate)
+			}
+		}
+	})
+}
+
+// Ordering uses the unrounded rate: two works whose rates round to the same
+// one-decimal value must still rank by the raw rate, even when the lower raw
+// rate has more citations (the old tie-break).
+func TestPerYearOrdersByUnroundedRate(t *testing.T) {
+	sameDayOrSkip(t, func(now time.Time) {
+		const daysA, daysB = 10957, 7305 // A is older with more citations
+		age := func(days int) float64 {
+			d := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC).AddDate(0, 0, -days)
+			return now.Sub(d).Hours() / 24 / 365.25
+		}
+		round1 := func(v float64) float64 { return math.Round(v*10) / 10 }
+		// Keep the rates away from a rounding boundary so the pair stays a
+		// near-tie as the clock moves within the day.
+		safe := func(v float64) bool { return math.Abs(math.Mod(v*10, 1)-0.5) > 0.05 }
+		citedA, citedB := 0, 1000
+		for ; citedB < 1100 && citedA == 0; citedB++ {
+			rb := float64(citedB) / age(daysB)
+			for a := citedB + 1; a < citedB*2; a++ {
+				ra := float64(a) / age(daysA)
+				if ra < rb && round1(ra) == round1(rb) && safe(ra) && safe(rb) {
+					citedA = a
+					break
+				}
+			}
+		}
+		citedB--
+		if citedA == 0 {
+			t.Fatal("no near-tie fixture found")
+		}
+		rows := curateJSON(t, []decodedWork{
+			vw("1", "Older more cited", dateAgo(now, daysA), now.Year()-30, citedA),
+			vw("2", "Newer faster", dateAgo(now, daysB), now.Year()-20, citedB),
+		}, "rate", "per-year", 1)
+		if len(rows) != 1 || rows[0]["title"] != "Newer faster" {
+			t.Fatalf("limit 1 winner = %v, want [Newer faster] (cited %d vs %d)", titleOrder(rows), citedB, citedA)
+		}
+		all := curateJSON(t, []decodedWork{
+			vw("1", "Older more cited", dateAgo(now, daysA), now.Year()-30, citedA),
+			vw("2", "Newer faster", dateAgo(now, daysB), now.Year()-20, citedB),
+		}, "rate", "per-year", 10)
+		if len(all) != 2 || num(all[0]) != num(all[1]) {
+			t.Fatalf("fixture is not a rounded tie: %v %v", num(all[0]), num(all[1]))
+		}
+	})
+}

@@ -26,8 +26,11 @@ func newNovelCurateCmd(flags *rootFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "curate",
 		Short: "Build a ranked Lancet reading list for a topic (Markdown/BibTeX/JSON)",
-		Long: "Select Lancet works matching a topic or keyword and rank them by citations or\n" +
-			"date, exportable as a Markdown list, BibTeX, or JSON. Reads the local mirror;\n" +
+		Long: "Select Lancet works matching a topic or keyword and rank them by citations,\n" +
+			"date or per-year (average citations per year since publication; age = years\n" +
+			"since pub_date, or July 1 of the year if unknown, at least 0.25; per-year\n" +
+			"needs the local store), exportable as a Markdown list, BibTeX, or JSON.\n" +
+			"Reads the local mirror;\n" +
 			"run 'thelancet-pp-cli refresh' first.",
 		Example:     "  thelancet-pp-cli curate --topic 'gene therapy' --sort citations --output bibtex\n  thelancet-pp-cli curate --topic immunotherapy --journal lancet-oncology --output markdown",
 		Annotations: map[string]string{"mcp:read-only": "true", "pp:happy-args": "--topic=cancer"},
