@@ -105,11 +105,13 @@ func ensureWorksFTS(ctx context.Context, db *sql.DB) error {
 }
 
 // ftsMatchQuery turns free text into an FTS5 MATCH expression: the text is split
-// on every rune that is not a letter, digit or combining mark (mirroring the
-// unicode61 tokenizer), each part becomes a double-quoted phrase (embedded quotes
+// on every rune that is not a letter, number (Nd, Nl, No), combining mark or
+// private-use rune (mirroring the unicode61 token characters), each part becomes a double-quoted phrase (embedded quotes
 // doubled), joined by implicit AND. Returns "" when nothing is left.
 func ftsMatchQuery(topic string) string {
-	parts := strings.FieldsFunc(topic, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) && !unicode.IsMark(r) })
+	parts := strings.FieldsFunc(topic, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsNumber(r) && !unicode.IsMark(r) && !unicode.Is(unicode.Co, r)
+	})
 	for i, p := range parts {
 		parts[i] = `"` + strings.ReplaceAll(p, `"`, `""`) + `"`
 	}

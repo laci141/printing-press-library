@@ -271,3 +271,20 @@ func TestEnsureWorksFTSRestoresBusyTimeout(t *testing.T) {
 		t.Errorf("busy_timeout after setup = %d, want original %d", after, before)
 	}
 }
+
+func TestCurateNumberAndPrivateUseRunesStayInWord(t *testing.T) {
+	forms := map[string]string{
+		"superscript-No": "a²",
+		"roman-Nl":       "Ⅻ",
+		"subscript-No":   "x₂",
+		"private-use-Co": "pq",
+	}
+	for name, form := range forms {
+		db := wordDB(t, w("1", "Study of "+form+" markers", ""))
+		got := titles(t, db, form)
+		t.Logf("%-15s query %q -> match: %v", name, form, len(got) == 1)
+		if len(got) != 1 {
+			t.Errorf("%s: query %q must match its own title, got %v", name, form, got)
+		}
+	}
+}
