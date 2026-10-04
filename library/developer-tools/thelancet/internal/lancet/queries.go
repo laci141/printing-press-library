@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"math"
+	"time"
 )
 
 // AuthorRank is one row of the rank-authors output.
@@ -334,15 +336,49 @@ type WorkRow struct {
 	Year    int    `json:"year"`
 	Cited   int    `json:"cited_by_count"`
 	Topic   string `json:"topic"`
+	// PubDate is YYYY-MM-DD, empty when unknown.
+	PubDate          string  `json:"pub_date"`
+	CitationsPerYear float64 `json:"citations_per_year"`
 }
 
+// minAgeYears floors a work's age so a paper published days ago does not get an
+// absurd citations-per-year figure.
+const minAgeYears = 0.25
+
+// CitationsPerYear is cited / age in years, rounded to one decimal. Age is
+// (now - pubDate) / 365.25 days; an empty or invalid pubDate falls back to
+// July 1 of year; age is floored at 0.25 years. ok is false when neither a
+// valid date nor a year is available.
+func CitationsPerYear(now time.Time, pubDate string, year, cited int) (cpy float64, ok bool) {
+	d, err := time.Parse("2006-01-02", pubDate)
+	if err != nil {
+		if year <= 0 {
+			return 0, false
+		}
+		d = time.Date(year, time.July, 1, 0, 0, 0, 0, time.UTC)
+	}
+	age := now.Sub(d).Hours() / 24 / 365.25
+	if age < minAgeYears {
+		age = minAgeYears
+	}
+	return math.Round(float64(cited)/age*10) / 10, true
+}
+
+// Same age rule as CitationsPerYear, evaluated in SQL so it can run before LIMIT.
+const (
+	effDateSQL = `COALESCE(date(pub_date), CASE WHEN pub_year > 0 THEN printf('%04d-07-01', pub_year) END)`
+	cpySQL     = `CASE WHEN ` + effDateSQL + ` IS NULL THEN 0 ELSE ROUND(cited_count / MAX(0.25, (julianday('now') - julianday(` + effDateSQL + `)) / 365.25), 1) END`
+)
+
 // Curate selects works matching a topic/keyword (whole words in title or topic),
-// scoped optionally to a journal, sorted by "citations" or "date".
+// scoped optionally to a journal, sorted by "citations", "date" or "per-year"
+// (average citations per year, ranked over all matching rows before LIMIT).
 func Curate(ctx context.Context, db *sql.DB, topic, issn, sort string, openAccessOnly bool, limit int) ([]WorkRow, error) {
 	if err := EnsureSchema(ctx, db); err != nil {
 		return nil, err
 	}
-	q := `SELECT title, doi, journal_name, pub_year, cited_count, COALESCE(topic,'')
+	q := `SELECT title, doi, journal_name, pub_year, cited_count, COALESCE(topic,''),
+	             COALESCE(date(pub_date),''), ` + cpySQL + ` AS cpy
 	      FROM lancet_works WHERE 1=1`
 	var args []any
 	// Whole-word match (porter unicode61, AND across words). A topic with no
@@ -362,6 +398,8 @@ func Curate(ctx context.Context, db *sql.DB, topic, issn, sort string, openAcces
 	switch sort {
 	case "date":
 		q += ` ORDER BY pub_date DESC`
+	case "per-year":
+		q += ` AND ` + effDateSQL + ` IS NOT NULL ORDER BY cpy DESC, cited_count DESC, title`
 	default:
 		q += ` ORDER BY cited_count DESC`
 	}
@@ -376,11 +414,12 @@ func Curate(ctx context.Context, db *sql.DB, topic, issn, sort string, openAcces
 	var out []WorkRow
 	for rows.Next() {
 		var w WorkRow
-		var title, doi, jn, tp sql.NullString
-		if err := rows.Scan(&title, &doi, &jn, &w.Year, &w.Cited, &tp); err != nil {
+		var title, doi, jn, tp, pd sql.NullString
+		if err := rows.Scan(&title, &doi, &jn, &w.Year, &w.Cited, &tp, &pd, &w.CitationsPerYear); err != nil {
 			continue
 		}
 		w.Title, w.DOI, w.Journal, w.Topic = title.String, doi.String, jn.String, tp.String
+		w.PubDate = pd.String
 		out = append(out, w)
 	}
 	return out, rows.Err()

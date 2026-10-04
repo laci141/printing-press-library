@@ -113,3 +113,45 @@ func TestCurateAutoMissingDBFallsBackWithNotice(t *testing.T) {
 		t.Fatalf("stderr = %q, want exactly one fallback notice", errOut)
 	}
 }
+
+func TestCuratePerYearLivePathErrors(t *testing.T) {
+	for _, ds := range []string{"live", "auto"} {
+		t.Run(ds, func(t *testing.T) {
+			origLocal, origLive := curateLocalFn, curateLiveFn
+			t.Cleanup(func() { curateLocalFn, curateLiveFn = origLocal, origLive })
+			liveCalls := 0
+			curateLocalFn = func(ctx context.Context, path, topic, issn, sortBy string, openAccess bool, limit int) ([]lancet.WorkRow, bool, error) {
+				return nil, true, nil
+			}
+			curateLiveFn = func(ctx context.Context, flags *rootFlags, topic, issn, sortBy string, openAccess bool, limit int) ([]lancet.WorkRow, error) {
+				liveCalls++
+				return curateLiveRows, nil
+			}
+			cmd := newNovelCurateCmd(&rootFlags{dataSource: ds, asJSON: true})
+			var out, errb bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetErr(&errb)
+			cmd.SetArgs([]string{"--topic", "ai", "--sort", "per-year", "--db", "unused.db"})
+			err := cmd.Execute()
+			if err == nil || !strings.Contains(err.Error(), "local store") {
+				t.Fatalf("err = %v, want a 'needs the local store' error", err)
+			}
+			if liveCalls != 0 || strings.Contains(out.String(), "Live paper") {
+				t.Fatalf("live was used silently: calls=%d stdout=%q", liveCalls, out.String())
+			}
+		})
+	}
+}
+
+// "velocity" is reserved for a future recent-window metric, so it is rejected for now.
+func TestCurateRejectsVelocitySort(t *testing.T) {
+	cmd := newNovelCurateCmd(&rootFlags{dataSource: "local", asJSON: true})
+	var out, errb bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errb)
+	cmd.SetArgs([]string{"--topic", "ai", "--sort", "velocity", "--db", "unused.db"})
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "'citations', 'date' or 'per-year'") {
+		t.Fatalf("err = %v, want rejection listing citations, date and per-year", err)
+	}
+}

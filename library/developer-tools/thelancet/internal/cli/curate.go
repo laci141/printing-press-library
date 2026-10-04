@@ -40,10 +40,10 @@ func newNovelCurateCmd(flags *rootFlags) *cobra.Command {
 				return usageErr(fmt.Errorf("--topic is required (the subject to curate)"))
 			}
 			switch sortBy {
-			case "", "citations", "date":
+			case "", "citations", "date", "per-year":
 			default:
 				_ = cmd.Usage()
-				return usageErr(fmt.Errorf("--sort must be 'citations' or 'date'"))
+				return usageErr(fmt.Errorf("--sort must be 'citations', 'date' or 'per-year'"))
 			}
 			switch output {
 			case "", "json", "markdown", "bibtex":
@@ -79,7 +79,7 @@ func newNovelCurateCmd(flags *rootFlags) *cobra.Command {
 				} else if len(rows) == 0 && flags.dataSource == "local" {
 					fmt.Fprintf(cmd.ErrOrStderr(), "no local matches for %q (--data-source local never calls the live API)\n", topic)
 				}
-				if len(rows) == 0 && flags.dataSource != "local" {
+				if len(rows) == 0 && flags.dataSource != "local" && sortBy != "per-year" {
 					reason := "no local matches"
 					if !found {
 						reason = "local database not found"
@@ -88,6 +88,9 @@ func newNovelCurateCmd(flags *rootFlags) *cobra.Command {
 				}
 			}
 			if len(rows) == 0 && flags.dataSource != "local" {
+				if sortBy == "per-year" {
+					return fmt.Errorf("--sort per-year needs the local store (OpenAlex cannot rank by citations per year); run 'refresh' and use --data-source local, or sort by citations or date")
+				}
 				rows, err = curateLiveFn(ctx, flags, topic, issn, sortBy, openAccess, limit)
 				if err != nil {
 					return err
@@ -118,7 +121,7 @@ func newNovelCurateCmd(flags *rootFlags) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&topic, "topic", "", "Topic or keyword to curate (matches title or topic)")
 	cmd.Flags().StringVar(&journal, "journal", "", "Scope to a Lancet journal slug, or omit for all")
-	cmd.Flags().StringVar(&sortBy, "sort", "citations", "Sort order: citations or date")
+	cmd.Flags().StringVar(&sortBy, "sort", "citations", "Sort order: citations, date or per-year (average citations per year since publication; age = years since pub_date, or July 1 of the year if unknown, at least 0.25; local store only)")
 	cmd.Flags().StringVar(&output, "output", "", "Output format: json (default), markdown, or bibtex")
 	cmd.Flags().BoolVar(&openAccess, "open-access", false, "Only include open-access works")
 	cmd.Flags().IntVar(&limit, "limit", 25, "Maximum works to include")
