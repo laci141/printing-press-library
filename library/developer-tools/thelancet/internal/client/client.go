@@ -94,6 +94,11 @@ func New(cfg *config.Config, timeout time.Duration, rateLimit float64) *Client {
 		if req.URL.Host == via[0].URL.Host {
 			if h, err := c.authHeaderFor(req.Context(), req.URL); err == nil && h != "" {
 				req.Header.Set("Authorization", h)
+			} else if c.envKeyGateRejects(req.URL) {
+				// PATCH(thelancet-openalex-api-key): same host but the env key
+				// gate rejects the target (https -> http downgrade); Go kept the
+				// inherited header, so drop it.
+				req.Header.Del("Authorization")
 			}
 		} else {
 			// Cross-host hop: Go strips standard auth headers (Authorization,
@@ -672,11 +677,17 @@ func (c *Client) authHeader(ctx context.Context) (string, error) {
 // absolute URL cannot receive it. A key set in the config file is not gated.
 func (c *Client) authHeaderFor(ctx context.Context, u *url.URL) (string, error) {
 	h, err := c.authHeader(ctx)
-	if h != "" && c.Config != nil && c.Config.AuthSource == config.AuthSourceOpenAlexEnv &&
-		!(u != nil && u.Scheme == "https" && strings.EqualFold(u.Hostname(), "api.openalex.org")) {
+	if h != "" && c.envKeyGateRejects(u) {
 		return "", err
 	}
 	return h, err
+}
+
+// envKeyGateRejects reports whether the credential comes from OPENALEX_API_KEY
+// and u is not https://api.openalex.org, i.e. the env key must not be sent to u.
+func (c *Client) envKeyGateRejects(u *url.URL) bool {
+	return c.Config != nil && c.Config.AuthSource == config.AuthSourceOpenAlexEnv &&
+		!(u != nil && u.Scheme == "https" && strings.EqualFold(u.Hostname(), "api.openalex.org"))
 }
 
 // binaryResponseEnvelope wraps a non-textual success body so it survives the

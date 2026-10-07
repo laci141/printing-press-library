@@ -295,3 +295,82 @@ func TestOpenAlexClearingTestRestoresEnv(t *testing.T) {
 		t.Errorf("parent value after subtest = %q, want %q", got, parent)
 	}
 }
+
+// redirectRecorder answers the first request with a 302 to location and
+// records the headers of every later request.
+func redirectRecorder(location string, second *http.Header) roundTripFunc {
+	n := 0
+	return func(req *http.Request) (*http.Response, error) {
+		n++
+		if n == 1 {
+			return &http.Response{
+				StatusCode: http.StatusFound,
+				Header:     http.Header{"Location": []string{location}},
+				Body:       io.NopCloser(strings.NewReader("")),
+				Request:    req,
+			}, nil
+		}
+		*second = req.Header.Clone()
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{},
+			Body:       io.NopCloser(strings.NewReader(`{}`)),
+			Request:    req,
+		}, nil
+	}
+}
+
+// T11: a same-host https -> http redirect must not carry the env key.
+func TestOpenAlexKeyDroppedOnHTTPDowngradeRedirect(t *testing.T) {
+	var second http.Header
+	c := newKeyTestClientAt(t, "https://api.openalex.org", fakeOpenAlexKey)
+	c.HTTPClient.Transport = redirectRecorder("http://api.openalex.org/works?per-page=1", &second)
+	if _, err := c.GetNoCache(context.Background(), "/works", nil); err != nil {
+		t.Fatal(err)
+	}
+	if second == nil {
+		t.Fatal("redirect was not followed")
+	}
+	if got := second.Get("Authorization"); got != "" {
+		t.Errorf("redirected http request carried Authorization = %q, want none", got)
+	}
+}
+
+// T12: a same-host https -> https redirect keeps the env key.
+func TestOpenAlexKeyKeptOnSameHostHTTPSRedirect(t *testing.T) {
+	var second http.Header
+	c := newKeyTestClientAt(t, "https://api.openalex.org", fakeOpenAlexKey)
+	c.HTTPClient.Transport = redirectRecorder("https://api.openalex.org/other", &second)
+	if _, err := c.GetNoCache(context.Background(), "/works", nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := second.Get("Authorization"); got != "Bearer "+fakeOpenAlexKey {
+		t.Errorf("redirected https request Authorization = %q, want Bearer + key", got)
+	}
+}
+
+// T13: a config-file key is not gated by the env-key rule, so the same
+// downgrade redirect keeps it (existing behaviour, unchanged by the fix).
+func TestConfigFileKeyUnchangedOnHTTPDowngradeRedirect(t *testing.T) {
+	var second http.Header
+	cfgPath := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(cfgPath, []byte("auth_header = \"Bearer file-key-0000\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("THELANCET_CONFIG", cfgPath)
+	t.Setenv("THELANCET_BASE_URL", "https://api.openalex.org")
+	setOpenAlexKey(t, "")
+	cfg, err := config.Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := New(cfg, 5*time.Second, 0)
+	c.cacheDir = t.TempDir()
+	c.HTTPClient.Transport = redirectRecorder("http://api.openalex.org/works", &second)
+	if _, err := c.GetNoCache(context.Background(), "/works", nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := second.Get("Authorization"); got != "Bearer file-key-0000" {
+		t.Errorf("config-file Authorization after redirect = %q, want unchanged Bearer file-key-0000", got)
+	}
+}
