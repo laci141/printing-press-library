@@ -12,6 +12,10 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
+// AuthSourceOpenAlexEnv labels a credential taken from OPENALEX_API_KEY; the
+// client sends it only to https://api.openalex.org.
+const AuthSourceOpenAlexEnv = "env:OPENALEX_API_KEY"
+
 type Config struct {
 	BaseURL       string            `toml:"base_url"`
 	AuthHeaderVal string            `toml:"auth_header"`
@@ -54,7 +58,7 @@ func Load(configPath string) (*Config, error) {
 	// handles "Bearer <token>" values.
 	if v := strings.TrimSpace(os.Getenv("OPENALEX_API_KEY")); v != "" {
 		cfg.AuthHeaderVal = "Bearer " + v
-		cfg.AuthSource = "env:OPENALEX_API_KEY"
+		cfg.AuthSource = AuthSourceOpenAlexEnv
 		cfg.markEnvOverride("AuthHeaderVal")
 	}
 

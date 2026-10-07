@@ -92,7 +92,7 @@ func New(cfg *config.Config, timeout time.Duration, rateLimit float64) *Client {
 		// receive the auth credential, even though we are inside
 		// CheckRedirect where Go's automatic stripping has already run.
 		if req.URL.Host == via[0].URL.Host {
-			if h, err := c.authHeader(req.Context()); err == nil && h != "" {
+			if h, err := c.authHeaderFor(req.Context(), req.URL); err == nil && h != "" {
 				req.Header.Set("Authorization", h)
 			}
 		} else {
@@ -451,7 +451,11 @@ func (c *Client) doInternal(ctx context.Context, method, path string, params map
 	// exactly what would be sent. Uses only cached credentials; a token that
 	// requires a network refresh will be re-fetched on the live request path,
 	// not during dry-run.
-	authHeader, err := c.authHeader(ctx)
+	reqURL, err := url.Parse(targetURL)
+	if err != nil {
+		return nil, 0, fmt.Errorf("parsing request URL: %w", err)
+	}
+	authHeader, err := c.authHeaderFor(ctx, reqURL)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -660,6 +664,19 @@ func (c *Client) authHeader(ctx context.Context) (string, error) {
 	}
 	authHeader := c.Config.AuthHeader()
 	return authHeader, nil
+}
+
+// authHeaderFor is authHeader gated by the request URL. PATCH(thelancet-openalex-api-key):
+// the OPENALEX_API_KEY credential is only ever sent to https://api.openalex.org
+// (exact host, case-insensitive), so a custom base URL, THELANCET_BASE_URL or an
+// absolute URL cannot receive it. A key set in the config file is not gated.
+func (c *Client) authHeaderFor(ctx context.Context, u *url.URL) (string, error) {
+	h, err := c.authHeader(ctx)
+	if h != "" && c.Config != nil && c.Config.AuthSource == config.AuthSourceOpenAlexEnv &&
+		!(u != nil && u.Scheme == "https" && strings.EqualFold(u.Hostname(), "api.openalex.org")) {
+		return "", err
+	}
+	return h, err
 }
 
 // binaryResponseEnvelope wraps a non-textual success body so it survives the
