@@ -329,7 +329,7 @@ Static request headers can be configured under `headers`; per-command header ove
 ### API-specific
 - **analytics command says 'no local mirror'** — Run refresh first: thelancet-pp-cli refresh --journal lancet (analytics read the local OpenAlex-derived store)
 - **rank-authors or mesh returns empty for an institution** — Institution names match OpenAlex display names; try a distinctive substring like 'Oxford' rather than a full legal name or acronym
-- **OpenAlex returns 429 (rate limited)** — OpenAlex allows ~10 req/s; lower --rate-limit or set a contact email via OPENALEX_MAILTO to join the polite pool
+- **OpenAlex returns 429 (rate limited)** — OpenAlex meters usage per API key (no key = 1,000 list calls/day). Get a free key at openalex.org/settings/api and export OPENALEX_API_KEY (sent as a Bearer header, masked in dry-run output and errors); also lower --rate-limit if needed
 
 ## Sources & Inspiration
 

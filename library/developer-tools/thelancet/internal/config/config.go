@@ -49,6 +49,14 @@ func Load(configPath string) (*Config, error) {
 	cfg.snapshotFileConfig()
 
 	// Env var overrides
+	// PATCH(thelancet-openalex-api-key): OpenAlex meters per key, so send the
+	// key as a Bearer header (never in the URL). The client's masking already
+	// handles "Bearer <token>" values.
+	if v := strings.TrimSpace(os.Getenv("OPENALEX_API_KEY")); v != "" {
+		cfg.AuthHeaderVal = "Bearer " + v
+		cfg.AuthSource = "env:OPENALEX_API_KEY"
+		cfg.markEnvOverride("AuthHeaderVal")
+	}
 
 	// Label config-file-derived credentials so doctor can distinguish
 	// "credentials persisted on disk" from "no credentials at all" — without
