@@ -374,3 +374,96 @@ func TestConfigFileKeyUnchangedOnHTTPDowngradeRedirect(t *testing.T) {
 		t.Errorf("config-file Authorization after redirect = %q, want unchanged Bearer file-key-0000", got)
 	}
 }
+
+// newHeadersConfigClient builds a client for baseURL with OPENALEX_API_KEY set
+// and an explicit [headers] Authorization in the config file.
+func newHeadersConfigClient(t *testing.T, baseURL string) *Client {
+	t.Helper()
+	cfgPath := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(cfgPath, []byte("[headers]\nAuthorization = \"Bearer custom-0000\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("THELANCET_CONFIG", cfgPath)
+	t.Setenv("THELANCET_BASE_URL", baseURL)
+	setOpenAlexKey(t, fakeOpenAlexKey)
+	cfg, err := config.Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := New(cfg, 5*time.Second, 0)
+	c.cacheDir = t.TempDir()
+	return c
+}
+
+// recordAll answers the first request with a 302 to location and records the
+// headers of every request, first included.
+func recordAll(location string, seen *[]http.Header) roundTripFunc {
+	inner := redirectRecorder(location, new(http.Header))
+	return func(req *http.Request) (*http.Response, error) {
+		*seen = append(*seen, req.Header.Clone())
+		return inner(req)
+	}
+}
+
+// T14: an explicit [headers] Authorization on a custom server (env key set)
+// survives a same-host redirect.
+func TestExplicitHeadersAuthKeptOnSameHostRedirect(t *testing.T) {
+	var seen []http.Header
+	c := newHeadersConfigClient(t, "http://proxy.test")
+	c.HTTPClient.Transport = recordAll("http://proxy.test/next", &seen)
+	if _, err := c.GetNoCache(context.Background(), "/works", nil); err != nil {
+		t.Fatal(err)
+	}
+	if len(seen) != 2 {
+		t.Fatalf("saw %d requests, want 2", len(seen))
+	}
+	for i, h := range seen {
+		if got := h.Get("Authorization"); got != "Bearer custom-0000" {
+			t.Errorf("request %d Authorization = %q, want Bearer custom-0000", i+1, got)
+		}
+	}
+}
+
+// T15: https -> http downgrade on api.openalex.org with a per-call
+// Authorization override keeps the override and never sends the env key.
+func TestPerCallAuthOverrideKeptOnDowngradeRedirect(t *testing.T) {
+	var seen []http.Header
+	c := newKeyTestClientAt(t, "https://api.openalex.org", fakeOpenAlexKey)
+	c.HTTPClient.Transport = recordAll("http://api.openalex.org/works", &seen)
+	hdr := map[string]string{"Authorization": "Bearer custom-0000"}
+	if _, err := c.GetWithHeadersNoCache(context.Background(), "/works", nil, hdr); err != nil {
+		t.Fatal(err)
+	}
+	if len(seen) != 2 {
+		t.Fatalf("saw %d requests, want 2", len(seen))
+	}
+	if got := seen[0].Get("Authorization"); got != "Bearer custom-0000" {
+		t.Errorf("first request Authorization = %q, want the override", got)
+	}
+	if got := seen[1].Get("Authorization"); got != "Bearer custom-0000" {
+		t.Errorf("http hop Authorization = %q, want the override kept", got)
+	}
+	for i, h := range seen {
+		if strings.Contains(h.Get("Authorization"), fakeOpenAlexKey) {
+			t.Errorf("request %d carried the env key", i+1)
+		}
+	}
+}
+
+// T16: an override that merely contains the env credential is not the env
+// credential, so the downgrade redirect keeps it.
+func TestAuthOverrideContainingEnvKeyKeptOnDowngradeRedirect(t *testing.T) {
+	var seen []http.Header
+	c := newKeyTestClientAt(t, "https://api.openalex.org", fakeOpenAlexKey)
+	c.HTTPClient.Transport = recordAll("http://api.openalex.org/works", &seen)
+	custom := "Bearer " + fakeOpenAlexKey + "-extra"
+	if _, err := c.GetWithHeadersNoCache(context.Background(), "/works", nil, map[string]string{"Authorization": custom}); err != nil {
+		t.Fatal(err)
+	}
+	if len(seen) != 2 {
+		t.Fatalf("saw %d requests, want 2", len(seen))
+	}
+	if got := seen[1].Get("Authorization"); got != custom {
+		t.Errorf("http hop Authorization = %q, want %q kept", got, custom)
+	}
+}

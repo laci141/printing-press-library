@@ -94,10 +94,12 @@ func New(cfg *config.Config, timeout time.Duration, rateLimit float64) *Client {
 		if req.URL.Host == via[0].URL.Host {
 			if h, err := c.authHeaderFor(req.Context(), req.URL); err == nil && h != "" {
 				req.Header.Set("Authorization", h)
-			} else if c.envKeyGateRejects(req.URL) {
+			} else if c.envKeyGateRejects(req.URL) && req.Header.Get("Authorization") == c.Config.AuthHeader() {
 				// PATCH(thelancet-openalex-api-key): same host but the env key
 				// gate rejects the target (https -> http downgrade); Go kept the
-				// inherited header, so drop it.
+				// inherited header. Drop it only when it IS the env-derived
+				// credential; an explicit [headers] or per-call Authorization
+				// is the caller's and stays.
 				req.Header.Del("Authorization")
 			}
 		} else {
