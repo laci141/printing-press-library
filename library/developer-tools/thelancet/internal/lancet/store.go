@@ -48,6 +48,7 @@ func EnsureSchema(ctx context.Context, db *sql.DB) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_lancet_works_issn ON lancet_works(journal_issn)`,
 		`CREATE INDEX IF NOT EXISTS idx_lancet_works_year ON lancet_works(pub_year)`,
+		`CREATE INDEX IF NOT EXISTS idx_lancet_works_doi_lower ON lancet_works(lower(doi))`,
 		`CREATE INDEX IF NOT EXISTS idx_lancet_auth_author ON lancet_authorships(author_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_lancet_affil_inst ON lancet_affiliations(institution_name)`,
 		`CREATE INDEX IF NOT EXISTS idx_lancet_affil_work_author ON lancet_affiliations(work_id, author_id)`,
@@ -80,6 +81,9 @@ func WorkCount(ctx context.Context, db *sql.DB, issn string) (int, error) {
 // upsertWork stores one decomposed work and its authorships/affiliations within
 // a transaction.
 func upsertWork(ctx context.Context, tx *sql.Tx, w decodedWork, issn, journalName, syncedAt string) error {
+	if err := deleteSupersededByDOI(ctx, tx, w); err != nil {
+		return err
+	}
 	var countsSyncedAt any // NULL unless the response carried counts_by_year
 	if w.CountsSynced {
 		countsSyncedAt = syncedAt
@@ -123,6 +127,26 @@ func upsertWork(ctx context.Context, tx *sql.Tx, w decodedWork, issn, journalNam
 		}
 	}
 	return upsertAuthorships(ctx, tx, w)
+}
+
+// deleteSupersededByDOI removes any other work that carries the same DOI
+// (case-insensitive) as w, together with its authorship, affiliation and
+// yearly-count rows. OpenAlex re-identifies works: the DOI resolves to a new
+// work_id while the old row would otherwise linger and be curated twice. Works
+// without a DOI never match. Within a batch the work stored last wins. The
+// lancet_works delete fires the FTS delete trigger, keeping the index in sync.
+func deleteSupersededByDOI(ctx context.Context, tx *sql.Tx, w decodedWork) error {
+	if w.DOI == "" {
+		return nil
+	}
+	const stale = `SELECT work_id FROM lancet_works WHERE lower(doi) = lower(?) AND work_id <> ?`
+	for _, table := range []string{"lancet_authorships", "lancet_affiliations", "lancet_work_year_counts"} {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE work_id IN (`+stale+`)`, w.DOI, w.ID); err != nil {
+			return err
+		}
+	}
+	_, err := tx.ExecContext(ctx, `DELETE FROM lancet_works WHERE lower(doi) = lower(?) AND work_id <> ?`, w.DOI, w.ID)
+	return err
 }
 
 // upsertAuthorships replaces authorship/affiliation rows for a work to stay idempotent.

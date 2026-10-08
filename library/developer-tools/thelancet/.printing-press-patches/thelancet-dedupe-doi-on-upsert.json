@@ -1,0 +1,14 @@
+{
+  "schema_version": 2,
+  "id": "thelancet-dedupe-doi-on-upsert",
+  "applied_at": "2026-10-08",
+  "base_run_id": "20260617-072858-2f9fe13e",
+  "base_printing_press_version": "4.24.0",
+  "summary": "OpenAlex re-identifies works (the old W id 404s and the DOI resolves to a new one), so storing a work must delete any other work with the same DOI (case-insensitive, non-empty only) and its authorship, affiliation and year-count rows in the same transaction; a regen must keep this, and within one batch the work stored last wins.",
+  "reason": "Refresh stored the new work_id and left the old row forever (foreign keys are off, nothing cascades), so curate returned the same paper twice (55 DOIs on a 127k-work mirror). Works without a DOI are never matched; the lancet_works delete fires the FTS delete trigger so the word-match index stays consistent.",
+  "files": [
+    "internal/lancet/store.go",
+    "internal/lancet/dedupe_doi_test.go"
+  ],
+  "validated_outcome": "Tests assert child rows are gone and that curate/search returns the DOI once and no longer matches the old title text."
+}
