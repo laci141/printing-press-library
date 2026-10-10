@@ -1,7 +1,7 @@
 ---
-name: pp-costco-sameday
-description: "Printing Press CLI for Costco Sameday. Costco Same-Day (sameday.costco.com) GraphQL CLI. Cookie auth after Costco Azure B2C SSO."
-author: "Dash Labs"
+name: pp-fooda
+description: "Your Fooda office lunch history, subsidy and this week's popups in a terminal, with vendor and spend analytics the app does not offer."
+author: "Allen Lew"
 license: "Apache-2.0"
 argument-hint: "<command> [args] | install cli|mcp"
 allowed-tools: "Read Bash"
@@ -9,131 +9,187 @@ metadata:
   openclaw:
     requires:
       bins:
-        - costco-sameday-pp-cli
+        - fooda-pp-cli
     install:
       - kind: go
-        bins: [costco-sameday-pp-cli]
-        module: github.com/mvanhorn/printing-press-library/library/commerce/costco-sameday/cmd/costco-sameday-pp-cli
+        bins: [fooda-pp-cli]
+        module: github.com/mvanhorn/printing-press-library/library/food-and-dining/fooda/cmd/fooda-pp-cli
 ---
 <!-- GENERATED FILE — DO NOT EDIT.
-     This file is a verbatim mirror of library/commerce/costco-sameday/SKILL.md,
+     This file is a verbatim mirror of library/food-and-dining/fooda/SKILL.md,
      regenerated post-merge by tools/generate-skills/. Hand-edits here are
      silently overwritten on the next regen. Edit the library/ source instead.
      See the repository agent guide, section "Generated artifacts: registry.json, cli-skills/". -->
 
-# Costco Sameday — Printing Press CLI
+# Fooda — Printing Press CLI
 
 ## Prerequisites: Install the CLI
 
-This skill drives the `costco-sameday-pp-cli` binary. **You must verify the CLI is installed before invoking any command from this skill.** If it is missing, install it first:
+This skill drives the `fooda-pp-cli` binary. **You must verify the CLI is installed before invoking any command from this skill.** If it is missing, install it first:
 
 1. Install via the Printing Press installer. It defaults binaries to `$HOME/.local/bin` on macOS/Linux and `%LOCALAPPDATA%\Programs\PrintingPress\bin` on Windows:
    ```bash
-   npx -y @mvanhorn/printing-press-library install costco-sameday --cli-only
+   npx -y @mvanhorn/printing-press-library install fooda --cli-only
    ```
-2. Verify: `costco-sameday-pp-cli --version`
+2. Verify: `fooda-pp-cli --version`
 3. Ensure the reported install directory is on `$PATH` for the agent/runtime that will invoke this skill.
 
 If the `npx` install fails (no Node, offline, etc.), fall back to a direct Go install (requires Go 1.26.6 or newer). This installs into `$GOPATH/bin` (default `$HOME/go/bin`), so add that directory to `$PATH` instead:
 
 ```bash
-go install github.com/mvanhorn/printing-press-library/library/commerce/costco-sameday/cmd/costco-sameday-pp-cli@latest
+go install github.com/mvanhorn/printing-press-library/library/food-and-dining/fooda/cmd/fooda-pp-cli@latest
 ```
 
 If `--version` reports "command not found" after install, the runtime cannot see the binary directory on `$PATH`. Do not proceed with skill commands until verification succeeds.
 
-Costco Same-Day (sameday.costco.com) GraphQL CLI. Cookie auth after Costco Azure B2C SSO. Place-order mutation is FinalizeCheckout — exposed only via gated `order place` (--yes + --confirm-charge; --dry-run never charges). Tip updates via UpdateCheckout tipsUpdate. Cancel mutation not captured.
+Fooda has no public API. This CLI reads the logged-in web app with your Chrome session, syncs your order history locally, and answers questions like what you ate, where you keep ordering, and how much subsidy you have left today.
 
-## HTTP Transport
+## Unique Capabilities
 
-This CLI uses standard HTTP transport with HTTP/2 disabled for browser-facing endpoints. It does not require a resident browser process for normal API calls.
+These capabilities aren't available in any other tool for this API.
+
+### Local history that compounds
+- **`served-history`** — See every lunch you were actually served, with date, vendor, items and price.
+
+  _Use when an agent needs a longitudinal record of what a person ate rather than today's menu._
+
+  ```bash
+  fooda-pp-cli served-history --since 90d --agent
+  ```
+- **`venue-rotation`** — Rank vendors by how often and how recently you ordered from them.
+
+  _Use to spot vendor fatigue or under-used favorites before choosing lunch._
+
+  ```bash
+  fooda-pp-cli venue-rotation --since 120d --agent
+  ```
+- **`spend-trends`** — Spend per month or week, split into subsidy-covered and out-of-pocket.
+
+  _Use for budget or subsidy-utilization reporting._
+
+  ```bash
+  fooda-pp-cli spend-trends --since 6mo --group-by month --agent
+  ```
+
+### Lunch planning
+- **`week-ahead`** — One-line-per-day digest of upcoming events and restaurants at your building.
+
+  _Use for a quick morning check of what is being served this week._
+
+  ```bash
+  fooda-pp-cli week-ahead --agent
+  ```
+- **`subsidy-status`** — Remaining dollars of today's subsidy and when it is valid.
+
+  _Use before ordering to know how much of the meal is covered._
+
+  ```bash
+  fooda-pp-cli subsidy-status --agent
+  ```
+- **`menu-search`** — Search menu items across all of today's events.
+
+  _Use for dietary or craving lookups without opening each vendor page._
+
+  ```bash
+  fooda-pp-cli menu-search vegan --agent
+  ```
+
+## Anti-Triggers & Limitations
+
+- **Ordering Support**: Ordering is supported via `order add` and `order place` when using `--confirm`. Automated agents must never pass `--confirm` without explicit user intent.
+- **Cancellation Limitation**: The `order cancel` command is not supported (please cancel manually in the Fooda app).
+- **`whoami` Cloudflare Constraints**: The `whoami` command is heavily limited by Cloudflare challenges. It fallbacks to greeting pages; account and building IDs are extracted from the home page.
+- **Catering / Billing**: Do not use this CLI for Fooda Catering orders or billing.
+
+## Cookbook / Recipes
+
+- **Budget-Optimized Lunch Planning**: Plan an add-on item, add both to cart, and place order:
+  ```bash
+  fooda-pp-cli order plan --event S609348 --budget 20 --anchor "Beef Bulgogi Bowl"
+  fooda-pp-cli order add 589968 --event S609348 --confirm
+  fooda-pp-cli order add 589973 --event S609348 --confirm
+  fooda-pp-cli order place --event S609348 --confirm
+  ```
+- **Vendor Fatigue Check**: `fooda-pp-cli venue-rotation --since 120d --agent --select vendor,order_count,last_ordered`
+- **Monthly Subsidy Report**: `fooda-pp-cli spend-trends --since 6mo --group-by month`
+- **Vegan Options Today**: `fooda-pp-cli menu-search vegan`
+
+## Recipes
+
+### Budget-optimized lunch planning
+
+```bash
+fooda-pp-cli order plan --event S609348 --budget 20 --anchor "Beef Bulgogi Bowl"
+```
+
+Suggests a budget-optimized add-on item from the event menu.
+
+### Vendor fatigue check
+
+```bash
+fooda-pp-cli venue-rotation --since 120d --agent --select vendor,order_count,last_ordered
+```
+
+Shows only the fields needed to see repeat vendors.
+
+### Monthly subsidy report
+
+```bash
+fooda-pp-cli spend-trends --since 6mo --group-by month
+```
+
+Splits covered and out-of-pocket spend per month.
+
+### Vegan options today
+
+```bash
+fooda-pp-cli menu-search vegan
+```
+
+Searches every event menu for the term.
 
 ## Command Reference
 
-**account** — Costco Same-Day account GraphQL operations
+**cards** — 
 
-- `costco-sameday-pp-cli account gethouseholdbyuser` — GraphQL query GetHouseholdByUser (persistedQuery)
-- `costco-sameday-pp-cli account householdbyuser` — GraphQL query HouseholdByUser (persistedQuery)
+- `fooda-pp-cli cards balances` — Outstanding Fooda Card balances.
+- `fooda-pp-cli cards list` — Saved payment cards for a user id (variables: {userId}).
 
-**cart** — Costco Same-Day cart GraphQL operations
+**events** — 
 
-- `costco-sameday-pp-cli cart activecartid` — GraphQL query ActiveCartId (persistedQuery)
-- `costco-sameday-pp-cli cart cartbottombannerquery` — GraphQL query CartBottomBannerQuery (persistedQuery)
-- `costco-sameday-pp-cli cart cartcheckoutvalidation` — GraphQL query CartCheckoutValidation (persistedQuery)
-- `costco-sameday-pp-cli cart cartcouponremovalpopupquery` — GraphQL query CartCouponRemovalPopupQuery (persistedQuery)
-- `costco-sameday-pp-cli cart cartonloadplacementquery` — GraphQL query CartOnloadPlacementQuery (persistedQuery)
-- `costco-sameday-pp-cli cart cartproductsrecomendation` — GraphQL query CartProductsRecomendation (persistedQuery)
-- `costco-sameday-pp-cli cart cartrecommendationsplacements` — GraphQL query CartRecommendationsPlacements (persistedQuery)
-- `costco-sameday-pp-cli cart cartsignaledeta` — GraphQL query CartSignaledEta (persistedQuery)
-- `costco-sameday-pp-cli cart cartswitchervariant` — GraphQL query CartSwitcherVariant (persistedQuery)
-- `costco-sameday-pp-cli cart carttotals` — GraphQL query CartTotals (persistedQuery)
-- `costco-sameday-pp-cli cart cartviewlayout` — GraphQL query CartViewLayout (persistedQuery)
-- `costco-sameday-pp-cli cart familyexpeditedonboardingcart` — GraphQL query FamilyExpeditedOnboardingCart (persistedQuery)
-- `costco-sameday-pp-cli cart finishmycartviewlayout` — GraphQL query FinishMyCartViewLayout (persistedQuery)
-- `costco-sameday-pp-cli cart finishmycartviewuilayout` — GraphQL query FinishMyCartViewUILayout (persistedQuery)
-- `costco-sameday-pp-cli cart fixcartbasketforcheckout` — GraphQL query FixCartBasketForCheckout (persistedQuery)
-- `costco-sameday-pp-cli cart floatingcartmessages` — GraphQL query FloatingCartMessages (persistedQuery)
-- `costco-sameday-pp-cli cart getexpresscartplacementsquery` — GraphQL query GetExpressCartPlacementsQuery (persistedQuery)
-- `costco-sameday-pp-cli cart inlinecarteppvariant` — GraphQL query InlineCartEppVariant (persistedQuery)
-- `costco-sameday-pp-cli cart othersingleretailercarts` — GraphQL query OtherSingleRetailerCarts (persistedQuery)
-- `costco-sameday-pp-cli cart personalactivecarts` — GraphQL query PersonalActiveCarts (persistedQuery)
-- `costco-sameday-pp-cli cart treatmentcartmessages` — GraphQL query TreatmentCartMessages (persistedQuery)
-- `costco-sameday-pp-cli cart updatecartitemsmutation` — GraphQL mutation UpdateCartItemsMutation (persistedQuery)
-- `costco-sameday-pp-cli cart usercart` — GraphQL query UserCart (persistedQuery)
-- `costco-sameday-pp-cli cart usercartenriched` — GraphQL query UserCartEnriched (persistedQuery)
+- `fooda-pp-cli events` — Search public events (popup, cafe, delivery, catering) for an account/building and date range.
 
-**checkout** — Costco Same-Day checkout GraphQL operations
+**recommendations** — 
 
-- `costco-sameday-pp-cli checkout checkoutaisleitemmin` — GraphQL query CheckoutAisleItemMin (persistedQuery)
-- `costco-sameday-pp-cli checkout checkoutcmd` — GraphQL query CheckoutCmd (persistedQuery)
-- `costco-sameday-pp-cli checkout checkoutdraftorderinvoicev2` — GraphQL query CheckoutDraftOrderInvoiceV2 (persistedQuery)
-- `costco-sameday-pp-cli checkout checkoutheaderview` — GraphQL query CheckoutHeaderView (persistedQuery)
-- `costco-sameday-pp-cli checkout checkoutpagemeta` — GraphQL query CheckoutPageMeta (persistedQuery)
-- `costco-sameday-pp-cli checkout checkoutv4disclaimeronetrusttoggle` — GraphQL query CheckoutV4DisclaimerOneTrustToggle (persistedQuery)
-- `costco-sameday-pp-cli checkout getexpresscheckouttoggleplacements` — GraphQL query GetExpressCheckoutTogglePlacements (persistedQuery)
-- `costco-sameday-pp-cli checkout giftingexpandedcheckoutdetails` — GraphQL query GiftingExpandedCheckoutDetails (persistedQuery)
-- `costco-sameday-pp-cli checkout initializecheckout` — GraphQL query InitializeCheckout (persistedQuery)
-- `costco-sameday-pp-cli checkout updatebuyflowpaymentinstructionsv2` — GraphQL mutation UpdateBuyflowPaymentInstructionsV2 — attach/select payment instrument on checkout session (not
-- `costco-sameday-pp-cli checkout updatecheckout` — GraphQL mutation UpdateCheckout (persistedQuery). Tip changes use checkoutUpdates.tipsUpdate.tippingFields.
+- `fooda-pp-cli recommendations` — Personalized recommendations for a select event (variables.input.targetId).
 
-**orders** — Costco Same-Day orders GraphQL operations
+**subsidies** — 
 
-- `costco-sameday-pp-cli orders customercancelselections` — GraphQL query CustomerCancelSelections — cancel-reason options UI.
-- `costco-sameday-pp-cli orders orderuptimer` — GraphQL query OrderUpTimer (persistedQuery)
+- `fooda-pp-cli subsidies` — List your subsidies with coverage, validity, state, and remaining balance (qrInfo).
 
-**products** — Costco Same-Day products GraphQL operations
+**served-history** —
 
-- `costco-sameday-pp-cli products autosuggestions` — GraphQL query Autosuggestions (persistedQuery)
-- `costco-sameday-pp-cli products itemcardsizesearchvariant` — GraphQL query ItemCardSizeSearchVariant (persistedQuery)
-- `costco-sameday-pp-cli products itemdetaildata` — GraphQL query ItemDetailData (persistedQuery)
-- `costco-sameday-pp-cli products itemdetailfeaturedproductlist` — GraphQL query ItemDetailFeaturedProductList (persistedQuery)
-- `costco-sameday-pp-cli products itemdetailsrecommendationsplacements` — GraphQL query ItemDetailsRecommendationsPlacements (persistedQuery)
-- `costco-sameday-pp-cli products itemdetailsretailerproduct` — GraphQL query ItemDetailsRetailerProduct (persistedQuery)
-- `costco-sameday-pp-cli products itemdetailsupplementalfields` — GraphQL query ItemDetailSupplementalFields (persistedQuery)
-- `costco-sameday-pp-cli products itemdetailsv2flags` — GraphQL query ItemDetailsV2Flags (persistedQuery)
-- `costco-sameday-pp-cli products itemdetailsv4` — GraphQL query ItemDetailsV4 (persistedQuery)
-- `costco-sameday-pp-cli products itemdetailviewlayout` — GraphQL query ItemDetailViewLayout (persistedQuery)
-- `costco-sameday-pp-cli products items` — GraphQL query Items (persistedQuery)
-- `costco-sameday-pp-cli products klarnaosmitemdetails` — GraphQL query KlarnaOSMItemDetails (persistedQuery)
-- `costco-sameday-pp-cli products postaddtocartsearchlayoutquery` — GraphQL query PostAddToCartSearchLayoutQuery (persistedQuery)
-- `costco-sameday-pp-cli products searchfacets` — GraphQL query SearchFacets (persistedQuery)
-- `costco-sameday-pp-cli products searchresultsplacements` — GraphQL query SearchResultsPlacements (persistedQuery)
-- `costco-sameday-pp-cli products viewlayoutsearchresults` — GraphQL query ViewLayoutSearchResults (persistedQuery)
+- `fooda-pp-cli served-history` — Show food history based on synced orders.
 
-**retailer** — Costco Same-Day retailer GraphQL operations
+**venue-rotation** —
 
-- `costco-sameday-pp-cli retailer currentretailer` — GraphQL query CurrentRetailer (persistedQuery)
-- `costco-sameday-pp-cli retailer landingretailermetas` — GraphQL query LandingRetailerMetas (persistedQuery)
+- `fooda-pp-cli venue-rotation` — Analyze vendor order frequency and last ordered date.
 
-**session** — Costco Same-Day session GraphQL operations
+**spend-trends** —
 
-- `costco-sameday-pp-cli session complementaryproductitems` — GraphQL query ComplementaryProductItems (persistedQuery)
-- `costco-sameday-pp-cli session getcobrandcreditcardoffermutation` — GraphQL mutation GetCobrandCreditCardOfferMutation (persistedQuery)
+- `fooda-pp-cli spend-trends` — Generate time-series spend reports showing subsidy and out-of-pocket costs.
 
-**slots** — Costco Same-Day slots GraphQL operations
+**week-ahead** —
 
-- `costco-sameday-pp-cli slots availableservices` — GraphQL query AvailableServices (persistedQuery)
-- `costco-sameday-pp-cli slots slotcampaignplacement` — GraphQL query SlotCampaignPlacement (persistedQuery)
+- `fooda-pp-cli week-ahead` — View live events for the next 7 days in a daily one-line digest.
+
+**subsidy-status** —
+
+- `fooda-pp-cli subsidy-status` — Display today's remaining dollar subsidy and validity details.
+
+**menu-search** —
+
+- `fooda-pp-cli menu-search <keyword>` — Filter and search menu items across today's events.
 
 
 ### Finding the right command
@@ -141,28 +197,16 @@ This CLI uses standard HTTP transport with HTTP/2 disabled for browser-facing en
 When you know what you want to do but not which command does it, ask the CLI directly:
 
 ```bash
-costco-sameday-pp-cli which "<capability in your own words>"
+fooda-pp-cli which "<capability in your own words>"
 ```
 
 `which` resolves a natural-language capability query to the best matching command from this CLI's curated feature index. Exit code `0` means at least one match; exit code `2` means no confident match — fall back to `--help` or use a narrower query. `--json` (and other machine formats) keep that exit-2 contract and write `{"matches":[]}` on stdout so agents can inspect the envelope without treating a miss as success.
 
 ## Auth Setup
 
-This CLI uses a browser session. Log in to sameday.costco.com in Chrome, then:
+Fooda sits behind Cloudflare and has no API key. Log in to app.fooda.com in Chrome, then run `auth login --chrome` to import your session cookies, or use `auth login --cookies-file <file>` to import cookies from a JSON file. The CLI never logs in itself.
 
-```bash
-costco-sameday-pp-cli auth login --chrome
-```
-
-Or import an existing browser capture:
-
-```bash
-costco-sameday-pp-cli auth login --cookies-file storage-state.json
-```
-
-`--cookies-file` accepts Playwright storage-state JSON or a raw `Cookie:` header text file. Use `--cookies-file -` to read the header from stdin (for example `pbpaste | costco-sameday-pp-cli auth login --cookies-file -`). Stdin also accepts DevTools "Copy request headers" or "Copy as cURL (bash)" output from a sameday.costco.com request. Only the `__Host-instacart_sid` session cookie is required; it is HttpOnly, so copy it from DevTools Network rather than `document.cookie`. Other Same-Day cookies are kept when present. Add `--diagnose` to check a paste without saving anything: it prints only the byte count, detected format, parse stage, cookie names, and whether `__Host-instacart_sid` is present, never values. The Chrome path requires a cookie extraction tool (`pycookiecheat` via pip, or `cookies` via Homebrew).
-
-Run `costco-sameday-pp-cli doctor` to verify setup.
+Run `fooda-pp-cli doctor` to verify setup.
 
 ## Agent Mode
 
@@ -179,13 +223,12 @@ Global format flags share one contract on promoted, novel, sync, and `--deliver`
 - **Filterable** — `--select` keeps a subset of fields. Dotted paths descend into nested structures; arrays traverse element-wise. Critical for keeping context small on verbose APIs:
 
   ```bash
-  costco-sameday-pp-cli account gethouseholdbyuser --operation-name GetHouseholdByUser --agent
+  fooda-pp-cli card --agent
   ```
 - **Previewable** — `--dry-run` shows the request without sending
 - **Offline-friendly** — sync/search commands can use the local SQLite store when available
 - **Non-interactive** — never prompts, every input is a flag
 - **Explicit confirmation** — `--agent` does not imply `--yes`; pass `--yes` separately only after the target, arguments, and side effects are clear
-- **Explicit retries** — use `--idempotent` only when an already-existing create should count as success
 
 ### Response envelope
 
@@ -204,28 +247,28 @@ Parse `.results` for data and `.meta.source` to know whether it's live or local.
 
 Agents should treat the CLI's path resolver as part of the runtime contract:
 
-- Use `--home <dir>` for one invocation, or set `COSTCO_SAMEDAY_HOME=<dir>` to relocate all four path kinds under one root.
-- Use per-kind env vars only when a specific kind must diverge: `COSTCO_SAMEDAY_CONFIG_DIR`, `COSTCO_SAMEDAY_DATA_DIR`, `COSTCO_SAMEDAY_STATE_DIR`, `COSTCO_SAMEDAY_CACHE_DIR`.
-- Resolution order is per-kind env var, `--home`, `COSTCO_SAMEDAY_HOME`, XDG (`XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`, `XDG_CACHE_HOME`), then platform defaults.
+- Use `--home <dir>` for one invocation, or set `FOODA_HOME=<dir>` to relocate all four path kinds under one root.
+- Use per-kind env vars only when a specific kind must diverge: `FOODA_CONFIG_DIR`, `FOODA_DATA_DIR`, `FOODA_STATE_DIR`, `FOODA_CACHE_DIR`.
+- Resolution order is per-kind env var, `--home`, `FOODA_HOME`, XDG (`XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`, `XDG_CACHE_HOME`), then platform defaults.
 - `config` contains settings like `config.toml` and profiles. `data` contains `credentials.toml`, `data.db`, cookies, and auth sidecars. `state` contains persisted queries, jobs, and `teach.log`. `cache` contains regenerable HTTP/cache files.
 - Stored secrets live in `credentials.toml` under the data dir. Existing legacy `config.toml` secrets are read for compatibility and leave `config.toml` on the first auth write.
-- Run `costco-sameday-pp-cli doctor --fail-on warn` to surface path and credential-location warnings. `agent-context` exposes a schema v4 `paths` block for agents that need the resolved dirs.
+- Run `fooda-pp-cli doctor --fail-on warn` to surface path and credential-location warnings. `agent-context` exposes a schema v4 `paths` block for agents that need the resolved dirs.
 - For MCP, pass relocation through the MCP host config. The MCP binary does not inherit CLI flags:
 
   ```json
   {
     "mcpServers": {
-      "costco-sameday": {
-        "command": "costco-sameday-pp-mcp",
+      "fooda": {
+        "command": "fooda-pp-mcp",
         "env": {
-          "COSTCO_SAMEDAY_HOME": "/srv/costco-sameday"
+          "FOODA_HOME": "/srv/fooda"
         }
       }
     }
   }
   ```
 
-Fleet precedence: an inherited per-kind env var overrides an explicit `--home` for that kind. Use `COSTCO_SAMEDAY_HOME` or per-kind vars as durable fleet levers, and use `--home` only for a single invocation. Relocation is not reversible by unsetting env vars; move files manually before clearing `COSTCO_SAMEDAY_HOME`, or `doctor` will not find credentials left under the former root.
+Fleet precedence: an inherited per-kind env var overrides an explicit `--home` for that kind. Use `FOODA_HOME` or per-kind vars as durable fleet levers, and use `--home` only for a single invocation. Relocation is not reversible by unsetting env vars; move files manually before clearing `FOODA_HOME`, or `doctor` will not find credentials left under the former root.
 
 ## Automatic learning
 
@@ -233,11 +276,19 @@ This CLI ships a self-capturing learning loop. The CLI does its own bookkeeping:
 
 ### Step 1: `recall` before any discovery
 
-Before list/search/drill commands on a new user question, run:
+Before list/search/drill commands on a new user question, pass the question as an argv or MCP tool argument to `recall --agent`. Do not interpolate user-controlled text into a shell command line.
+
+Quoted `recall "<question>"` breaks on an apostrophe, which is ordinary English. A quoted heredoc breaks when a body line equals the delimiter, and that delimiter is published in these docs. Write the question with a non-shell file-writing tool, then read it back as data:
 
 ```bash
-costco-sameday-pp-cli recall "<user's question>" --agent
+# Write the question verbatim with your file-writing tool (no shell involved).
+# Command substitution on a file only ever yields data — the shell never
+# parses the file's bytes as syntax.
+QUERY=$(cat /path/to/question.txt)
+fooda-pp-cli recall "$QUERY" --agent
 ```
+
+Prefer MCP: pass the question as the tool's query argument. `"$QUERY"` after a file read is argv-safe; putting the question itself in the command text is not.
 
 The response envelope:
 
@@ -259,7 +310,7 @@ The response envelope:
     { "id": 12, "class": "flag_alias | playbook_candidate",
       "summary": "...", "sightings": 3, "last_seen": "...",
       "rationale": "...",
-      "next_action": ["<trial command>", "costco-sameday-pp-cli learnings confirm 12"] }
+      "next_action": ["<trial command>", "fooda-pp-cli learnings confirm 12"] }
   ],
   "playbook": {
     "query_family": "...",
@@ -298,7 +349,7 @@ if Playbook present:
        for the entity slot tokens. If a step's slot is unresolved, fall back to
        discovery for that step only.
     -> the Playbook's expected_tool_calls is a budget; if you find yourself running
-       materially more, record the divergence via `costco-sameday-pp-cli playbook amend`
+       materially more, record the divergence via `fooda-pp-cli playbook amend`
        at end-of-session.
 
 elif Notes present (no Playbook):
@@ -324,7 +375,7 @@ else:  // Found == false, no playbook, no notes
 
 Playbook and Notes are orthogonal to the per-resource path. A recall response can carry both a Playbook AND a `Results[]` hit - use both: the Playbook tells you which choreography to run; the resource hits short-circuit specific steps. Default to skipping `mismatches`; pass `--debug-mismatches` only when investigating cold-start surprises.
 
-Candidate judgment details: `learnings confirm <id>` prints the candidate's full payload before materializing it - check that the printed payload matches the behavior you verified. `learnings reject <id>` tombstones the derivation signature so the same candidate does not resurface. The envelope carries only the few candidates worth acting on now; `costco-sameday-pp-cli learnings candidates` lists the full open set.
+Candidate judgment details: `learnings confirm <id>` prints the candidate's full payload before materializing it - check that the printed payload matches the behavior you verified. `learnings reject <id>` tombstones the derivation signature so the same candidate does not resurface. The envelope carries only the few candidates worth acting on now; `fooda-pp-cli learnings candidates` lists the full open set.
 
 Graceful degradation: if `learnings confirm` is an unknown command, you are driving an older binary - ignore the candidates guidance and follow the rest of the protocol.
 
@@ -336,15 +387,15 @@ Graceful degradation: if `learnings confirm` is an unknown command, you are driv
 - `similar_shape_different_entity:<canonical>` (top-level): a structurally matching row exists but its canonical entity differs from the live query's. Treated as cold start; the warning carries the conflicting canonical as a hint, but the row is NOT promoted into Results.
 - `ambiguous_alias` (top-level): a single query entity resolved to multiple canonicals (e.g., "Cards" → Arizona Cardinals + St. Louis Cardinals). Surface the ambiguity from context before committing to a resource.
 - `candidates_present` (top-level): the envelope carries a `candidates` section. Handle it via the candidates branch in Step 2 before anything else.
-- `lookup_refresh_available` (top-level): an entity in the query has no lookup row yet, but synced data could provide one. Run `costco-sameday-pp-cli sync --resources account,cart,checkout,orders,products,retailer,session,slots` to refresh entity lookups.
 - Top-level `no_learnings_for_query_family`: the table had no rows above the Jaccard floor. Pure cold start.
 
 ### Step 4: `teach &` after finalizing your response - always
 
-Teaching is unconditional. After resolving a query the store could not answer, background-teach the final resource mapping - no call-count threshold, no judging whether it was "worth" learning. The teach is the anchor of the loop: it triggers playbook synthesis for a family without a playbook, and same-referent phrasings fold into one family so near-duplicate teaches do not fragment the store. Fire it after assembling your user-facing response but BEFORE emitting it, with a shell `&` so the call returns immediately:
+Teaching is unconditional. After resolving a query the store could not answer, background-teach the final resource mapping - no call-count threshold, no judging whether it was "worth" learning. The teach is the anchor of the loop: it triggers playbook synthesis for a family without a playbook, and same-referent phrasings fold into one family so near-duplicate teaches do not fragment the store. Fire it after assembling your user-facing response but BEFORE emitting it, with a shell `&` so the call returns immediately. Pass the query the same way as recall — argv/MCP, or file-then-`$QUERY`. Do not splice the question into the command text:
 
 ```bash
-costco-sameday-pp-cli teach --query "<user's question>" --resource-type <type> --resource <id1> --resource <id2>
+QUERY=$(cat /path/to/question.txt)
+fooda-pp-cli teach --query "$QUERY" --resource-type <type> --resource <id1> --resource <id2>
 # (append shell `&` to background it)
 ```
 
@@ -358,16 +409,18 @@ You do not need to decide whether a session "deserves" a playbook: a teach on a 
 
 ```bash
 # Common case: record both the resource learning AND the playbook in one call.
-costco-sameday-pp-cli teach \
-  --query "<user's question>" \
+QUERY=$(cat /path/to/question.txt)
+fooda-pp-cli teach \
+  --query "$QUERY" \
   --resource <id> \
   --playbook-file ~/playbooks/<shape>.json \
   --playbook-notes-file ~/playbooks/<shape>-notes.md
 # (append shell `&` to background it)
 
 # Alternate: playbook-only (no resource to record alongside).
-costco-sameday-pp-cli teach-playbook \
-  --query "<user's question>" \
+QUERY=$(cat /path/to/question.txt)
+fooda-pp-cli teach-playbook \
+  --query "$QUERY" \
   --playbook-file ~/playbooks/<shape>.json \
   --notes-file ~/playbooks/<shape>-notes.md
 ```
@@ -378,12 +431,14 @@ When you DO find a playbook on a future recall, treat it as ground truth: replay
 
 ### Step 6: `playbook amend &` when your debug response identifies a correction
 
-If your debug-protocol response identifies a concrete correction the notes or playbook should know — a workaround, an undocumented endpoint shape, a stale field name, observed schema drift, an empty-payload fallback — fire `playbook amend` BEFORE emitting your user-facing response. Same fire-and-forget posture as `teach`.
+If your debug-protocol response identifies a concrete correction the notes or playbook should know — a workaround, an undocumented endpoint shape, a stale field name, observed schema drift, an empty-payload fallback — fire `playbook amend` BEFORE emitting your user-facing response. Same fire-and-forget posture as `teach`. Pass the query and note as argv/MCP arguments, or write each with a non-shell file tool and read them back (`QUERY=$(cat ...)`, `NOTE=$(cat ...)`). Do not interpolate either string into the command text:
 
 ```bash
-costco-sameday-pp-cli playbook amend \
-  --query "<exact recall query string>" \
-  --add-note "<your concrete correction>"
+QUERY=$(cat /path/to/question.txt)
+NOTE=$(cat /path/to/note.txt)
+fooda-pp-cli playbook amend \
+  --query "$QUERY" \
+  --add-note "$NOTE"
 # (append shell `&` to background it)
 ```
 
@@ -412,24 +467,24 @@ If a correction is only meaningful with user-specific context, it belongs in a p
 
 ### Measuring the loop
 
-`costco-sameday-pp-cli learnings stats` reports recall hit rate, teach-to-reuse, playbook resolution rate, and candidate confirm/reject counts from the local `learn_events` table. Rates are null until they have a denominator; everything stays on this machine. Use it to check whether the loop is earning its keep for this CLI.
+`fooda-pp-cli learnings stats` reports recall hit rate, teach-to-reuse, playbook resolution rate, and candidate confirm/reject counts from the local `learn_events` table. Rates are null until they have a denominator; everything stays on this machine. Use it to check whether the loop is earning its keep for this CLI.
 
 ### Disabling learning
 
 - `--no-learn` on a single command short-circuits both `recall` and the `teach` write path. Use for deterministic agent flows or tests that must not be affected by accumulated learnings.
-- `COSTCO_SAMEDAY_NO_LEARN=true` in the environment globally disables the pipeline.
+- `FOODA_NO_LEARN=true` in the environment globally disables the pipeline.
 
 ## Agent Feedback
 
 When you (or the agent) notice something off about this CLI, record it:
 
 ```
-costco-sameday-pp-cli feedback "the --since flag is inclusive but docs say exclusive"
-costco-sameday-pp-cli feedback --stdin < notes.txt
-costco-sameday-pp-cli feedback list --json --limit 10
+fooda-pp-cli feedback "the --since flag is inclusive but docs say exclusive"
+fooda-pp-cli feedback --stdin < notes.txt
+fooda-pp-cli feedback list --json --limit 10
 ```
 
-Entries are stored locally as `feedback.jsonl` under the resolved data dir. They are never POSTed unless `COSTCO_SAMEDAY_FEEDBACK_ENDPOINT` is set AND either `--send` is passed or `COSTCO_SAMEDAY_FEEDBACK_AUTO_SEND=true`. Default behavior is local-only.
+Entries are stored locally as `feedback.jsonl` under the resolved data dir. They are never POSTed unless `FOODA_FEEDBACK_ENDPOINT` is set AND either `--send` is passed or `FOODA_FEEDBACK_AUTO_SEND=true`. Default behavior is local-only.
 
 Write what *surprised* you, not a bug report. Short, specific, one line: that is the part that compounds.
 
@@ -450,11 +505,11 @@ Unknown schemes are refused with a structured error naming the supported set. We
 A profile is a saved set of flag values, reused across invocations. Use it when a scheduled or recurring agent reuses the same saved flags while providing different input each run.
 
 ```
-costco-sameday-pp-cli profile save briefing --json
-costco-sameday-pp-cli --profile briefing account gethouseholdbyuser --operation-name GetHouseholdByUser
-costco-sameday-pp-cli profile list --json
-costco-sameday-pp-cli profile show briefing
-costco-sameday-pp-cli profile delete briefing --yes
+fooda-pp-cli profile save briefing --json
+fooda-pp-cli --profile briefing card
+fooda-pp-cli profile list --json
+fooda-pp-cli profile show briefing
+fooda-pp-cli profile delete briefing --yes
 ```
 
 Explicit flags always win over profile values; profile values win over defaults. `agent-context` lists all available profiles under `available_profiles` so introspecting agents discover them at runtime.
@@ -468,6 +523,7 @@ Explicit flags always win over profile values; profile values win over defaults.
 | 3 | Resource not found |
 | 4 | Authentication required |
 | 5 | API error (upstream issue) |
+| 6 | Partial failure |
 | 7 | Rate limited (wait and retry) |
 | 10 | Config error |
 
@@ -475,7 +531,7 @@ Explicit flags always win over profile values; profile values win over defaults.
 
 Parse `$ARGUMENTS`:
 
-1. **Empty, `help`, or `--help`** → show `costco-sameday-pp-cli --help` output
+1. **Empty, `help`, or `--help`** → show `fooda-pp-cli --help` output
 2. **Starts with `install`** → ends with `mcp` → MCP installation; otherwise → see Prerequisites above
 3. **Anything else** → Direct Use (execute as CLI command with `--agent`)
 
@@ -483,21 +539,21 @@ Parse `$ARGUMENTS`:
 
 1. Install the MCP server:
    ```bash
-   go install github.com/mvanhorn/printing-press-library/library/commerce/costco-sameday/cmd/costco-sameday-pp-mcp@latest
+   go install github.com/mvanhorn/printing-press-library/library/food-and-dining/fooda/cmd/fooda-pp-mcp@latest
    ```
 2. Register with Claude Code:
    ```bash
-   claude mcp add costco-sameday-pp-mcp -- costco-sameday-pp-mcp
+   claude mcp add fooda-pp-mcp -- fooda-pp-mcp
    ```
 3. Verify: `claude mcp list`
 
 ## Direct Use
 
-1. Check if installed: `which costco-sameday-pp-cli`
+1. Check if installed: `which fooda-pp-cli`
    If not found, offer to install (see Prerequisites at the top of this skill).
 2. Match the user query to the best command from the Unique Capabilities and Command Reference above.
 3. Execute with the `--agent` flag:
    ```bash
-   costco-sameday-pp-cli <command> [subcommand] [args] --agent
+   fooda-pp-cli <command> [subcommand] [args] --agent
    ```
-4. If ambiguous, drill into subcommand help: `costco-sameday-pp-cli <command> --help`.
+4. If ambiguous, drill into subcommand help: `fooda-pp-cli <command> --help`.
