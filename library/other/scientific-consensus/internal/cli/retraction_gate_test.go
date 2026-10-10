@@ -133,6 +133,119 @@ func TestFilterRetracted(t *testing.T) {
 	}
 }
 
+// TestFilterRetractedPropagatesToSameTitleYearTwin pins the measured bug: the
+// same paper indexed twice (a curly-apostrophe copy with no DOI and no flag, and
+// a straight-apostrophe copy that OpenAlex flags) used to be split, the
+// unflagged copy being scored. Works are addressed by ID because the helper
+// returns them partitioned, not in input order.
+func TestFilterRetractedPropagatesToSameTitleYearTwin(t *testing.T) {
+	const (
+		curly    = "Vitamin D reduces falls and hip fractures in vascular Parkinsonism but not in Parkinson’s disease"
+		straight = "Vitamin D reduces falls and hip fractures in vascular Parkinsonism but not in Parkinson's disease"
+	)
+	a := func(year int) scWork { return scWork{ID: "A", Title: curly, Year: year} }
+	b := func(year int) scWork { return scWork{ID: "B", Title: straight, Year: year, IsRetracted: true} }
+
+	tests := []struct {
+		name         string
+		in           []scWork
+		wantKept     int
+		wantExcluded int
+		want         map[string]scengine.Retraction
+	}{
+		{
+			name:         "sato pair, unflagged copy first",
+			in:           []scWork{a(2013), b(2013)},
+			wantKept:     0,
+			wantExcluded: 2,
+			want:         map[string]scengine.Retraction{"A": scengine.RetractionTwin, "B": scengine.RetractionFlagged},
+		},
+		{
+			name:         "sato pair, reversed input order",
+			in:           []scWork{b(2013), a(2013)},
+			wantKept:     0,
+			wantExcluded: 2,
+			want:         map[string]scengine.Retraction{"A": scengine.RetractionTwin, "B": scengine.RetractionFlagged},
+		},
+		{
+			name:         "different year is not a twin",
+			in:           []scWork{a(2013), b(2014)},
+			wantKept:     1,
+			wantExcluded: 1,
+			want:         map[string]scengine.Retraction{"A": scengine.NotRetracted, "B": scengine.RetractionFlagged},
+		},
+		{
+			name:         "year 0 on both never gives or receives a twin mark",
+			in:           []scWork{a(0), b(0)},
+			wantKept:     1,
+			wantExcluded: 1,
+			want:         map[string]scengine.Retraction{"A": scengine.NotRetracted, "B": scengine.RetractionFlagged},
+		},
+		{
+			name: "unrelated title in the same year is kept",
+			in: []scWork{
+				{ID: "C", Title: "Calcium intake and bone density in postmenopausal women", Year: 2013},
+				b(2013),
+			},
+			wantKept:     1,
+			wantExcluded: 1,
+			want:         map[string]scengine.Retraction{"C": scengine.NotRetracted, "B": scengine.RetractionFlagged},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			in := append([]scWork(nil), tt.in...)
+			kept, excluded := filterRetracted(in)
+			if len(kept) != tt.wantKept || len(excluded) != tt.wantExcluded {
+				t.Fatalf("kept %d, excluded %d; want kept %d, excluded %d",
+					len(kept), len(excluded), tt.wantKept, tt.wantExcluded)
+			}
+			got := map[string]scengine.Retraction{}
+			for _, w := range append(append([]scWork{}, kept...), excluded...) {
+				got[w.ID] = w.Retraction
+			}
+			for id, want := range tt.want {
+				if got[id] != want {
+					t.Errorf("work %s: Retraction = %q, want %q", id, got[id], want)
+				}
+			}
+			for i := range in {
+				if in[i].Retraction != scengine.NotRetracted {
+					t.Errorf("input slice mutated: in[%d].Retraction = %q", i, in[i].Retraction)
+				}
+			}
+		})
+	}
+}
+
+// TestPropagateRetractionToTwinsKeepsExistingStatus calls the helper directly:
+// a twin mark is only ever given to a NotRetracted work, and the two source
+// tiers are never overwritten.
+func TestPropagateRetractionToTwinsKeepsExistingStatus(t *testing.T) {
+	works := []scWork{
+		{ID: "decl", Title: "Same Title", Year: 2020, Retraction: scengine.RetractionDeclared},
+		{ID: "flag", Title: "same  title!", Year: 2020, Retraction: scengine.RetractionFlagged},
+		{ID: "none", Title: "SAME title", Year: 2020},
+		{ID: "other", Title: "Same Title", Year: 2021},
+		{ID: "noyear", Title: "Same Title"},
+		{ID: "notitle", Title: "?!", Year: 2020},
+	}
+	propagateRetractionToTwins(works)
+	want := map[string]scengine.Retraction{
+		"decl":    scengine.RetractionDeclared,
+		"flag":    scengine.RetractionFlagged,
+		"none":    scengine.RetractionTwin,
+		"other":   scengine.NotRetracted,
+		"noyear":  scengine.NotRetracted,
+		"notitle": scengine.NotRetracted,
+	}
+	for _, w := range works {
+		if w.Retraction != want[w.ID] {
+			t.Errorf("work %s: Retraction = %q, want %q", w.ID, w.Retraction, want[w.ID])
+		}
+	}
+}
+
 // TestConsensusExcludesRetractedFromScoreAndApex is the end-to-end proof.
 // The retracted work is a meta-analysis (the apex tier) with far more
 // citations than anything else and a supporting finding, so if it reached the

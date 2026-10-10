@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -306,10 +307,53 @@ func filterRelevant(claim string, works []scWork) []scWork {
 	return kept
 }
 
+// nonAlnumRun matches a run of characters that are not a lowercase ASCII
+// letter or digit; normalizedTitle collapses each run to one space.
+var nonAlnumRun = regexp.MustCompile(`[^a-z0-9]+`)
+
+// normalizedTitle lowercases a title, replaces every run of non [a-z0-9]
+// characters with one space and trims the result, so a curly and a straight
+// apostrophe (or any other punctuation difference) compare equal.
+func normalizedTitle(title string) string {
+	return strings.TrimSpace(nonAlnumRun.ReplaceAllString(strings.ToLower(title), " "))
+}
+
+// propagateRetractionToTwins gives scengine.RetractionTwin, in place, to every
+// NotRetracted work that shares a normalized title and a publication year with
+// a work that already carries a retraction status. The same paper is often
+// indexed twice (one copy with a DOI and the index flag, one without), and
+// DetectRetraction sees one work at a time. Works with Year == 0 or an empty
+// normalized title never give or receive a mark, and RetractionDeclared and
+// RetractionFlagged are never overwritten. The outcome does not depend on the
+// order of works.
+func propagateRetractionToTwins(works []scWork) {
+	retracted := map[string]bool{}
+	keyOf := func(w scWork) (string, bool) {
+		t := normalizedTitle(w.Title)
+		if w.Year == 0 || t == "" {
+			return "", false
+		}
+		return t + "|" + strconv.Itoa(w.Year), true
+	}
+	for _, w := range works {
+		if key, ok := keyOf(w); ok && w.Retraction != scengine.NotRetracted {
+			retracted[key] = true
+		}
+	}
+	for i := range works {
+		if key, ok := keyOf(works[i]); ok && works[i].Retraction == scengine.NotRetracted && retracted[key] {
+			works[i].Retraction = scengine.RetractionTwin
+		}
+	}
+}
+
 // filterRetracted partitions works by retraction status, running
 // scengine.DetectRetraction on both available signals: the title alone (never
 // title+abstract joined — the marker pattern is start-anchored) and the source
-// index flag carried in IsRetracted.
+// index flag carried in IsRetracted. DetectRetraction sees one work at a time,
+// so a second pass (propagateRetractionToTwins) marks any still-unflagged copy
+// of a retracted work in the same result — same normalized title, same year —
+// as scengine.RetractionTwin before the partition.
 //
 // It follows filterRelevant: a pre-scoring gate that returns new slices and
 // does not mutate its input. It differs in also returning the excluded works,
@@ -321,8 +365,13 @@ func filterRelevant(claim string, works []scWork) []scWork {
 // works carry an explicit empty value and callers never re-run the detector.
 func filterRetracted(works []scWork) (kept, excluded []scWork) {
 	kept = make([]scWork, 0, len(works))
-	for _, w := range works {
+	detected := make([]scWork, len(works))
+	for i, w := range works {
 		w.Retraction = scengine.DetectRetraction(w.Title, w.IsRetracted)
+		detected[i] = w
+	}
+	propagateRetractionToTwins(detected)
+	for _, w := range detected {
 		if w.Retraction.ExcludeFromScore() {
 			excluded = append(excluded, w)
 			continue

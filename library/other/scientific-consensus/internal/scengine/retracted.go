@@ -38,6 +38,15 @@ const (
 	// correction. Reader-facing wording for this tier must therefore not claim
 	// the publisher retracted anything.
 	RetractionFlagged Retraction = "retracted-flagged"
+
+	// RetractionTwin means this work carries no retraction signal of its own,
+	// but another work in the same result with the same normalized title and
+	// the same year does. It is derived from that other work, never from this
+	// work's own title or index flag, so DetectRetraction never returns it: the
+	// same paper indexed twice (for example with and without a DOI) is split by
+	// the index, and the unflagged copy must not be scored as independent
+	// evidence.
+	RetractionTwin Retraction = "retracted-twin"
 )
 
 // retractionMarkerRe matches a publisher retraction marker at the START of a
@@ -86,7 +95,7 @@ func DetectRetraction(title string, indexFlag bool) Retraction {
 }
 
 // ExcludeFromScore reports whether a work carrying this signal must be kept out
-// of the scored corpus. Both tiers exclude: a work whose findings may have been
+// of the scored corpus. Every tier excludes: a work whose findings may have been
 // withdrawn is not evidence, and the cost measured on two live runs is 2 of 175
 // and 1 of 135 works. The asymmetry is the reason — presenting a retracted
 // paper as supporting evidence is far worse than dropping a correctly published
@@ -103,6 +112,8 @@ func (r Retraction) Label() string {
 		return "Retracted — excluded from the score"
 	case RetractionFlagged:
 		return "Flagged as retracted in the source index, not confirmed from the title — excluded from the score"
+	case RetractionTwin:
+		return "Same title and year as a work marked retracted in this result — excluded from the score"
 	default:
 		return ""
 	}

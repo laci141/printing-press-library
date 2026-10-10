@@ -167,6 +167,18 @@ func TestRetractionExcludedFromScoring(t *testing.T) {
 	}
 }
 
+// TestRetractionTwinLabelAndExclusion pins the reader-facing wording of the
+// derived tier and that it is kept out of the score like the other two.
+func TestRetractionTwinLabelAndExclusion(t *testing.T) {
+	const want = "Same title and year as a work marked retracted in this result — excluded from the score"
+	if got := RetractionTwin.Label(); got != want {
+		t.Errorf("RetractionTwin.Label() = %q, want %q", got, want)
+	}
+	if !RetractionTwin.ExcludeFromScore() {
+		t.Errorf("RetractionTwin.ExcludeFromScore() = false, want true")
+	}
+}
+
 // TestRetractionSignalIsNotAStance guards the trap measured in Consensus():
 // its stance switch ends in `default: res.Inconclusive++`, so a stance value
 // the switch does not know is silently tallied as inconclusive, while the
@@ -176,7 +188,7 @@ func TestRetractionExcludedFromScoring(t *testing.T) {
 // compiles; the guard is the runtime comparison, which fails if a retraction
 // value is ever made equal to one of the four stance values.
 func TestRetractionSignalIsNotAStance(t *testing.T) {
-	for _, r := range []Retraction{RetractionDeclared, RetractionFlagged} {
+	for _, r := range []Retraction{RetractionDeclared, RetractionFlagged, RetractionTwin} {
 		s := Stance(r)
 		if s == StanceSupporting || s == StanceRefuting ||
 			s == StanceMixed || s == StanceInconclusive {

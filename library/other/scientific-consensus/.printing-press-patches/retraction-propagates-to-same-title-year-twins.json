@@ -1,0 +1,16 @@
+{
+  "schema_version": 2,
+  "id": "retraction-propagates-to-same-title-year-twins",
+  "applied_at": "2026-10-10",
+  "base_run_id": "20260620-165352-e55cec69",
+  "base_printing_press_version": "4.24.0",
+  "summary": "A work that shares its normalized title and publication year with a retracted work in the same result is marked retracted-twin and excluded from the score.",
+  "reason": "DetectRetraction sees one work at a time, so a second copy of a retracted paper without a DOI or index flag was scored. Measured on 'vitamin D reduces fractures' --limit 25: a DOAJ copy of 10.2147/tcrm.s43811 (flagged retracted in OpenAlex) was counted as supporting at confidence 0.95.",
+  "files": [
+    "internal/scengine/retracted.go",
+    "internal/scengine/retracted_test.go",
+    "internal/cli/scwork.go",
+    "internal/cli/retraction_gate_test.go"
+  ],
+  "validated_outcome": "Same query after the fix: retracted_excluded 2 -> 3, study_count 23 -> 22, supporting 14 -> 13; the DOAJ copy carries retraction retracted-twin. Declared and flagged statuses are never overwritten; Year 0 and empty normalized titles never give or receive the mark."
+}
