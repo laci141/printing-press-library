@@ -2,6 +2,10 @@
 
 This file is maintained by printing-press-library release automation. Do not hand-edit release sections in normal PRs.
 
+## 2026.10.1 - 2026-10-10
+
+- fix(scientific-consensus): exclude same-title, same-year twins of retracted works from the score (#2297).
+
 ## 2026.9.4 - 2026-09-17
 
 - test(scientific-consensus): guard every retraction marker rule (#2008).

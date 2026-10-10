@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "slug": "fooda",
+  "cli_name": "fooda-pp-cli",
+  "version": "2026.10.1",
+  "released_at": "2026-10-10T08:56:54Z",
+  "source_commit": "fdb1e53e895a5839598dee6f836b13fe861c99ee",
+  "printing_press_version": "4.33.2",
+  "run_id": "20261009-112517-8bc179ae",
+  "changes": [
+    {
+      "title": "feat(fooda): add fooda",
+      "pr": 2296,
+      "url": "https://github.com/mvanhorn/printing-press-library/pull/2296",
+      "commit": "fdb1e53e895a5839598dee6f836b13fe861c99ee"
+    }
+  ]
+}

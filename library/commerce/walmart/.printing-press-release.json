@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "slug": "walmart",
+  "cli_name": "walmart-pp-cli",
+  "version": "2026.10.1",
+  "released_at": "2026-10-10T08:56:54Z",
+  "source_commit": "66488c5c1df9ac1d8250441baa7f6d05c39a38bb",
+  "printing_press_version": "4.31.7",
+  "run_id": "20261009-032035",
+  "changes": [
+    {
+      "title": "feat(walmart): add Walmart Pickup \u0026 Delivery CLI (link-only cart)",
+      "pr": 2295,
+      "url": "https://github.com/mvanhorn/printing-press-library/pull/2295",
+      "commit": "66488c5c1df9ac1d8250441baa7f6d05c39a38bb"
+    }
+  ]
+}
