@@ -10,7 +10,9 @@
     "internal/scengine/retracted.go",
     "internal/scengine/retracted_test.go",
     "internal/cli/scwork.go",
+    "internal/cli/consensus.go",
+    "internal/cli/compare.go",
     "internal/cli/retraction_gate_test.go"
   ],
-  "validated_outcome": "Same query after the fix: retracted_excluded 2 -> 3, study_count 23 -> 22, supporting 14 -> 13; the DOAJ copy carries retraction retracted-twin. Declared and flagged statuses are never overwritten; Year 0 and empty normalized titles never give or receive the mark."
+  "validated_outcome": "Same query after the fix: retracted_excluded 2 -> 3, study_count 23 -> 22, supporting 14 -> 13; the DOAJ copy carries retraction retracted-twin. Declared and flagged statuses are never overwritten; Year 0 and empty normalized titles never give or receive the mark. Detection runs on the fetched works before the relevance gate, so a twin the gate drops still marks its relevant copy."
 }

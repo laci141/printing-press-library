@@ -142,6 +142,9 @@ func newNovelConsensusCmd(flags *rootFlags) *cobra.Command {
 			// token with the claim, before enrichment so excluded works cost
 			// no PubMed lookups and never enter the score.
 			fetched := len(works)
+			// Detect retractions and twins first: a twin dropped by the
+			// relevance gate must still mark its relevant copy.
+			works = markRetractions(works)
 			works = filterRelevant(claim, works)
 			dropped := fetched - len(works)
 

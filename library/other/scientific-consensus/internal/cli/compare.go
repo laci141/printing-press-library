@@ -32,6 +32,9 @@ func computeConsensus(ctx context.Context, c apiGetter, claim string, limit, yea
 	// must cost no PubMed lookup and must not reach the score. Compare scores
 	// each claim independently, so an off-topic work on one side skews that
 	// side's verdict and the comparison built from it.
+	// Detect retractions and twins first: a twin dropped by the relevance
+	// gate must still mark its relevant copy.
+	works = markRetractions(works)
 	works = filterRelevant(claim, works)
 	// Same retraction gate the consensus command applies. computeConsensus is
 	// the scoring path for BOTH compare and batch, so leaving it out here

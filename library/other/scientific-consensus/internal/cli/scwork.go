@@ -347,6 +347,22 @@ func propagateRetractionToTwins(works []scWork) {
 	}
 }
 
+// markRetractions returns a copy of works with Retraction set on every work:
+// DetectRetraction on its title and index flag, then propagateRetractionToTwins
+// across the whole slice. Run it on the fetched works BEFORE filterRelevant, so
+// a copy the relevance gate drops (the gate reads the abstract, which two
+// copies of one paper may not share) still marks its surviving twin. Input is
+// not mutated. filterRetracted keeps the status it stamps.
+func markRetractions(works []scWork) []scWork {
+	marked := make([]scWork, len(works))
+	for i, w := range works {
+		w.Retraction = scengine.DetectRetraction(w.Title, w.IsRetracted)
+		marked[i] = w
+	}
+	propagateRetractionToTwins(marked)
+	return marked
+}
+
 // filterRetracted partitions works by retraction status, running
 // scengine.DetectRetraction on both available signals: the title alone (never
 // title+abstract joined — the marker pattern is start-anchored) and the source
@@ -367,7 +383,11 @@ func filterRetracted(works []scWork) (kept, excluded []scWork) {
 	kept = make([]scWork, 0, len(works))
 	detected := make([]scWork, len(works))
 	for i, w := range works {
-		w.Retraction = scengine.DetectRetraction(w.Title, w.IsRetracted)
+		// A status already stamped by markRetractions is kept, so a twin
+		// mark given before the relevance gate is not recomputed away.
+		if w.Retraction == scengine.NotRetracted {
+			w.Retraction = scengine.DetectRetraction(w.Title, w.IsRetracted)
+		}
 		detected[i] = w
 	}
 	propagateRetractionToTwins(detected)
