@@ -5387,6 +5387,45 @@
       }
     },
     {
+      "name": "coinlocker-navi",
+      "category": "travel",
+      "api": "Coin Locker Navi",
+      "description": "Walk-up coin lockers in Japan: size, price, IC card, hours, gate side, and live empties where published.",
+      "search_terms": [
+        "coinlocker-navi",
+        "Coin Locker Navi",
+        "coinlocker-navi-pp-cli",
+        "Walk-up coin lockers in Japan: size, price, IC card, hours, gate side, and live empties where published.",
+        "Live join on nearest lockers",
+        "near",
+        "See walk-up lockers near a station with live per-size empties attached where Multi Ekicube (nearest bank within 30 m, reservable counts) or the Maihama map publishes them; other lockers have no live field.",
+        "Hours-window filter",
+        "Keep only lockers open across your drop and pick-up times; unknown hours stay visible and flagged.",
+        "Gate side across both sources",
+        "Filter lockers by inside or outside the ticket gates using Multi Ekicube data (exactly one bank within 15 m); unknown gate side never matches, so areas without Multi Ekicube banks return no matches."
+      ],
+      "path": "library/travel/coinlocker-navi",
+      "printer": "zjsng",
+      "printer_name": "zjsng",
+      "creator": {
+        "handle": "zjsng",
+        "name": "zjsng"
+      },
+      "mcp": {
+        "binary": "coinlocker-navi-pp-mcp",
+        "transports": [
+          "stdio",
+          "http"
+        ],
+        "tool_count": 3,
+        "public_tool_count": 3,
+        "auth_type": "none",
+        "env_vars": [],
+        "mcp_ready": "full",
+        "spec_format": "internal"
+      }
+    },
+    {
       "name": "company-goat",
       "category": "developer-tools",
       "api": "Company GOAT",
@@ -5979,9 +6018,9 @@
       "path": "library/commerce/costco-sameday",
       "release": {
         "cli_name": "costco-sameday-pp-cli",
-        "version": "2026.10.1",
-        "released_at": "2026-10-08T08:51:28Z",
-        "source_commit": "75f7fcbe1d4094a289fa6a5feb5a9684dfe3a96d"
+        "version": "2026.10.2",
+        "released_at": "2026-10-10T08:55:24Z",
+        "source_commit": "7eaf6d03d9d88efbe36b44e113d300838bfa0424"
       },
       "printer": "DashLabsDev",
       "printer_name": "Dash Labs",
@@ -14694,6 +14733,89 @@
       },
       "mcp": {
         "binary": "japan-guide-pp-mcp",
+        "transports": [
+          "stdio",
+          "http"
+        ],
+        "tool_count": 1,
+        "public_tool_count": 1,
+        "auth_type": "none",
+        "env_vars": [],
+        "mcp_ready": "full",
+        "spec_format": "internal"
+      }
+    },
+    {
+      "name": "japan-theme-parks",
+      "category": "travel",
+      "api": "Japan Theme Parks",
+      "description": "Compare park dates and ride waits for Tokyo Disney Resort, Universal Studios Japan and Fuji-Q from source-backed data.",
+      "search_terms": [
+        "japan-theme-parks",
+        "Japan Theme Parks",
+        "japan-theme-parks-pp-cli",
+        "Compare park dates and ride waits for Tokyo Disney Resort, Universal Studios Japan and Fuji-Q from source-backed data.",
+        "Cross-park date planner",
+        "dates",
+        "See, for each date, whether Tokyo Disneyland and DisneySea tickets are on sale, few left, sold out or not yet on sale, what each ticket costs, and the hours: official for TDL/TDS (published months only), third-party ThemeParks.wiki for USJ and Fuji-Q (about one month ahead).",
+        "Typical waits from local history",
+        "typical",
+        "See median and p75 waits per ride by weekday and hour from your own recorded snapshots, with sample counts and date span.",
+        "Wait snapshot recorder",
+        "snapshot",
+        "Record the current waits for the Japan parks into a local history that later commands read.",
+        "Live waits against your typical",
+        "waits",
+        "On the park day, see live waits next to the usual wait for this weekday and hour from your own snapshots, with sample counts."
+      ],
+      "path": "library/travel/japan-theme-parks",
+      "printer": "zjsng",
+      "printer_name": "zjsng",
+      "creator": {
+        "handle": "zjsng",
+        "name": "zjsng"
+      },
+      "mcp": {
+        "binary": "japan-theme-parks-pp-mcp",
+        "transports": [
+          "stdio"
+        ],
+        "tool_count": 2,
+        "public_tool_count": 2,
+        "auth_type": "none",
+        "env_vars": [],
+        "mcp_ready": "full",
+        "spec_format": "internal"
+      }
+    },
+    {
+      "name": "japan-timed-tickets",
+      "category": "travel",
+      "api": "Japan Timed Tickets",
+      "description": "When Ghibli Museum, SHIBUYA SKY and teamLab tickets go on sale, and which dates and slots are still open.",
+      "search_terms": [
+        "japan-timed-tickets",
+        "Japan Timed Tickets",
+        "japan-timed-tickets-pp-cli",
+        "When Ghibli Museum, SHIBUYA SKY and teamLab tickets go on sale, and which dates and slots are still open.",
+        "Act-now trip state",
+        "onsale",
+        "For each sight and visit date in a trip, see whether to book now, wait for an exact JST sale moment, or drop the date. Ghibli Museum and SHIBUYA SKY show 'unknown' once their sale opens (stock needs a login or sits behind a waiting room).",
+        "SHIBUYA SKY sunset targeting",
+        "See the computed sunset time, the 20-minute SHIBUYA SKY slots to target (on an assumed :00/:20/:40 grid), their web price tier and the moment that date goes on sale. Slot stock is not read.",
+        "Party-size fit",
+        "availability",
+        "For teamLab venues, keep only time slots with enough stock for the whole party; for every sight, flag channel rules for children (for example SHIBUYA SKY child tickets at the counter only)."
+      ],
+      "path": "library/travel/japan-timed-tickets",
+      "printer": "zjsng",
+      "printer_name": "zjsng",
+      "creator": {
+        "handle": "zjsng",
+        "name": "zjsng"
+      },
+      "mcp": {
+        "binary": "japan-timed-tickets-pp-mcp",
         "transports": [
           "stdio",
           "http"
