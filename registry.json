@@ -9872,6 +9872,55 @@
       }
     },
     {
+      "name": "fooda",
+      "category": "food-and-dining",
+      "api": "Fooda",
+      "description": "Your Fooda office lunch history, subsidy and this week's popups in a terminal, with vendor and spend analytics the app does not offer.",
+      "search_terms": [
+        "fooda",
+        "fooda-pp-cli",
+        "Your Fooda office lunch history, subsidy and this week's popups in a terminal, with vendor and spend analytics the app does not offer.",
+        "Served history",
+        "served-history",
+        "See every lunch you were actually served, with date, vendor, items and price.",
+        "Venue rotation",
+        "venue-rotation",
+        "Rank vendors by how often and how recently you ordered from them.",
+        "Spend trends",
+        "spend-trends",
+        "Spend per month or week, split into subsidy-covered and out-of-pocket.",
+        "Week-ahead digest",
+        "week-ahead",
+        "One-line-per-day digest of upcoming events and restaurants at your building.",
+        "Subsidy status",
+        "subsidy-status",
+        "Remaining dollars of today's subsidy and when it is valid.",
+        "Menu search",
+        "menu-search",
+        "Search menu items across all of today's events."
+      ],
+      "path": "library/food-and-dining/fooda",
+      "printer": "enlewof",
+      "printer_name": "Allen Lew",
+      "creator": {
+        "handle": "enlewof",
+        "name": "Allen Lew"
+      },
+      "mcp": {
+        "binary": "fooda-pp-mcp",
+        "transports": [
+          "stdio",
+          "http"
+        ],
+        "tool_count": 6,
+        "public_tool_count": 0,
+        "auth_type": "cookie",
+        "env_vars": [],
+        "mcp_ready": "partial",
+        "spec_format": "internal"
+      }
+    },
+    {
       "name": "foodpanda",
       "category": "food-and-dining",
       "api": "foodpanda",
@@ -18001,9 +18050,9 @@
       "path": "library/developer-tools/namecheap",
       "release": {
         "cli_name": "namecheap-pp-cli",
-        "version": "2026.10.1",
-        "released_at": "2026-10-09T20:29:38Z",
-        "source_commit": "bc43bfb64809b98a7f44a1e1cee826cf11bc542c"
+        "version": "2026.10.2",
+        "released_at": "2026-10-09T20:30:33Z",
+        "source_commit": "f13addeb35c48ae23cf3a93304900c026f1ad04a"
       },
       "printer": "cathrynlavery",
       "printer_name": "Cathryn Lavery",
@@ -31444,6 +31493,58 @@
       "creator": {
         "handle": "tmchow",
         "name": "Trevin Chow"
+      }
+    },
+    {
+      "name": "walmart",
+      "category": "commerce",
+      "api": "Walmart",
+      "description": "Walmart Pickup & Delivery from the terminal — reads via orchestra, cart changes via affiliate link only.",
+      "search_terms": [
+        "walmart",
+        "walmart-pp-cli",
+        "Walmart Pickup & Delivery from the terminal — reads via orchestra, cart changes via affiliate link only.",
+        "Purchase history with filters",
+        "orders list",
+        "PurchaseHistoryV3 persisted query with --type in-store/online, --status completed/in-progress, --search and cursor paging; read-only.",
+        "Order detail with line items",
+        "orders get",
+        "getOrder line items (name, item id, quantity, line price) plus subtotal, tax, fees and total; customer, address and payment fields are never emitted.",
+        "Store-aware product search",
+        "search",
+        "Parses the server-rendered search page for price, unit price, aisle, availability and pickup/delivery fulfillment at the session's store.",
+        "Read-only guard and bot-challenge stop",
+        "Client refuses non-GET requests and denylisted cart/checkout/slot/order mutations, and stops (no retry) on PerimeterX 412/418/429/456 or /blocked.",
+        "Product availability at your store",
+        "product get",
+        "ItemById persisted query: price, unit price, stock, pickup/delivery/shipping status and seller; shopper location fields are never emitted.",
+        "Nearby pickup stores",
+        "store list",
+        "nearByNodes query for a ZIP: store id, distance, address, pickup types and hours; view only, never sets a store.",
+        "Cart view",
+        "getCart GET with a supplied cart id: items, mode, store and slot-reserved flag; MergeAndGetCart and every cart mutation stay blocked.",
+        "Search filters",
+        "--filter type:value (e.g. brand:Great Value), --sort and --list-filters from the page's sort/filter facets."
+      ],
+      "path": "library/commerce/walmart",
+      "printer": "DashLabsDev",
+      "printer_name": "Thomas McCormick",
+      "creator": {
+        "handle": "DashLabsDev",
+        "name": "DashLabsDev"
+      },
+      "mcp": {
+        "binary": "walmart-pp-mcp",
+        "transports": [
+          "stdio",
+          "http"
+        ],
+        "tool_count": 4,
+        "public_tool_count": 0,
+        "auth_type": "cookie",
+        "env_vars": [],
+        "mcp_ready": "partial",
+        "spec_format": "internal"
       }
     },
     {
