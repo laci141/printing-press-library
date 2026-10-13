@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 )
 
@@ -349,6 +350,9 @@ type WorkRow struct {
 	Acceleration                 *float64 `json:"acceleration"`
 	FWCI                         *float64 `json:"fwci"`
 	CitationNormalizedPercentile *float64 `json:"citation_normalized_percentile"`
+	// Authors are the work's author names in byline order (lancet_authorships.seq);
+	// always a non-nil slice in Curate output so JSON emits [] rather than null.
+	Authors []string `json:"authors"`
 }
 
 // minAgeYears floors a work's age so a paper published days ago does not get an
@@ -477,7 +481,7 @@ func Curate(ctx context.Context, db *sql.DB, topic, issn, sort string, openAcces
 			return nil, fmt.Errorf("--sort velocity needs yearly citation counts, which this local store does not have yet; run 'thelancet-pp-cli refresh' to fetch them, or sort by citations, date or per-year")
 		}
 	}
-	q := `SELECT title, doi, journal_name, pub_year, cited_count, COALESCE(topic,''),
+	q := `SELECT lancet_works.work_id, title, doi, journal_name, pub_year, cited_count, COALESCE(topic,''),
 	             COALESCE(` + validDateSQL + `,''), ` + cpySQL + ` AS cpy,
 	             ` + velocitySQL + `, ` + lastYearSQL + `, ` + accelSQL + `,
 	             fwci, citation_normalized_percentile
@@ -501,12 +505,14 @@ func Curate(ctx context.Context, db *sql.DB, topic, issn, sort string, openAcces
 	}
 	defer rows.Close()
 	var out []WorkRow
+	var ids []string // work_id of each out row, same order; not part of the JSON
 	for rows.Next() {
 		var w WorkRow
+		var id string
 		var title, doi, jn, tp, pd sql.NullString
 		var vel, accel, fw, pct sql.NullFloat64
 		var last sql.NullInt64
-		if err := rows.Scan(&title, &doi, &jn, &w.Year, &w.Cited, &tp, &pd, &w.CitationsPerYear, &vel, &last, &accel, &fw, &pct); err != nil {
+		if err := rows.Scan(&id, &title, &doi, &jn, &w.Year, &w.Cited, &tp, &pd, &w.CitationsPerYear, &vel, &last, &accel, &fw, &pct); err != nil {
 			continue
 		}
 		w.Title, w.DOI, w.Journal, w.Topic = title.String, doi.String, jn.String, tp.String
@@ -529,8 +535,83 @@ func Curate(ctx context.Context, db *sql.DB, topic, issn, sort string, openAcces
 			w.CitationNormalizedPercentile = &pct.Float64
 		}
 		out = append(out, w)
+		ids = append(ids, id)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return out, err
+	}
+	// Release the connection before the authors query (the CLI store allows one).
+	rows.Close()
+	if err := fillAuthors(ctx, db, out, ids); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// authorsChunk caps how many work ids one authors query binds, keeping each
+// statement under SQLite's variable limit. A var so tests can lower it.
+var authorsChunk = 500
+
+// authorsQueryHook, when set, is called once per authors query. Tests only.
+var authorsQueryHook func()
+
+// fillAuthors sets Authors on every row from lancet_authorships with one
+// query per chunk of authorsChunk ids, ordered by seq then name. Empty and
+// NULL names are skipped; works without authorship rows get an empty, non-nil
+// slice.
+func fillAuthors(ctx context.Context, db *sql.DB, out []WorkRow, ids []string) error {
+	if len(out) == 0 {
+		return nil
+	}
+	step := authorsChunk
+	if step < 1 {
+		step = 1
+	}
+	byWork := map[string][]string{}
+	for start := 0; start < len(ids); start += step {
+		end := start + step
+		if end > len(ids) {
+			end = len(ids)
+		}
+		if err := fillAuthorsChunk(ctx, db, ids[start:end], byWork); err != nil {
+			return err
+		}
+	}
+	for i := range out {
+		out[i].Authors = byWork[ids[i]]
+		if out[i].Authors == nil {
+			out[i].Authors = []string{}
+		}
+	}
+	return nil
+}
+
+// fillAuthorsChunk appends the author names of ids to byWork, ordered by seq
+// then name, with a single query.
+func fillAuthorsChunk(ctx context.Context, db *sql.DB, ids []string, byWork map[string][]string) error {
+	if authorsQueryHook != nil {
+		authorsQueryHook()
+	}
+	args := make([]any, len(ids))
+	marks := make([]string, len(ids))
+	for i, id := range ids {
+		args[i], marks[i] = id, "?"
+	}
+	arows, err := db.QueryContext(ctx, `SELECT work_id, author_name FROM lancet_authorships
+		WHERE work_id IN (`+strings.Join(marks, ",")+`) AND author_name IS NOT NULL AND author_name <> ''
+		ORDER BY work_id, seq ASC, author_name ASC`, args...)
+	if err != nil {
+		return err
+	}
+	defer arows.Close()
+	for arows.Next() {
+		var id, name string
+		if err := arows.Scan(&id, &name); err != nil {
+			return err
+		}
+		byWork[id] = append(byWork[id], name)
+	}
+	return arows.Err()
 }
 
 // VisibilityRow is one row of the visibility-gap output.

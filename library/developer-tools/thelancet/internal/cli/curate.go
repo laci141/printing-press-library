@@ -115,6 +115,13 @@ func newNovelCurateCmd(flags *rootFlags) *cobra.Command {
 			if rows == nil {
 				rows = []lancet.WorkRow{}
 			}
+			// Live rows carry no authors (CurateLive does not request them); emit
+			// [] rather than null.
+			for i := range rows {
+				if rows[i].Authors == nil {
+					rows[i].Authors = []string{}
+				}
+			}
 			// Explicit doc formats take priority over --json envelope.
 			switch output {
 			case "markdown":
@@ -224,6 +231,9 @@ func renderCurateBibtex(cmd *cobra.Command, rows []lancet.WorkRow) error {
 		key := bibKey(r, i)
 		fmt.Fprintf(w, "@article{%s,\n", key)
 		fmt.Fprintf(w, "  title   = {%s},\n", r.Title)
+		if len(r.Authors) > 0 {
+			fmt.Fprintf(w, "  author  = {%s},\n", strings.Join(r.Authors, " and "))
+		}
 		fmt.Fprintf(w, "  journal = {%s},\n", r.Journal)
 		fmt.Fprintf(w, "  year    = {%d},\n", r.Year)
 		if r.DOI != "" {
